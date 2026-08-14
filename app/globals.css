@@ -1,0 +1,45 @@
+@import "@fontsource/nunito/400.css";
+@import "@fontsource/nunito/600.css";
+@import "@fontsource/nunito/700.css";
+@import "@fontsource/nunito/800.css";
+@import "@fontsource/nunito/900.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  background-color: #f2faf5;
+}
+
+body {
+  color: #132a20;
+}
+
+.card {
+  @apply bg-white border border-line rounded-card shadow-soft;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-pill bg-pine px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-button transition hover:brightness-105 active:translate-y-px active:scale-[0.96] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
+}
+
+.btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-pill border-2 border-line bg-white px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-ink-soft transition hover:border-pine hover:text-pine active:scale-[0.96];
+}
+
+.btn-soft {
+  @apply inline-flex items-center justify-center gap-2 rounded-pill bg-pine-light px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-pine-dark transition hover:brightness-95 active:scale-[0.96];
+}
+
+.input {
+  @apply w-full rounded-2xl border-2 border-line bg-white px-3.5 py-2.5 text-ink placeholder:text-ink-soft/60 focus:border-pine focus:outline-none;
+}
+
+.label {
+  @apply mb-1.5 block text-xs font-bold uppercase tracking-wide text-ink-soft;
+}
+
+.pill-tab {
+  @apply inline-flex items-center gap-1.5 rounded-pill px-4 py-2 text-sm font-extrabold transition;
+}
