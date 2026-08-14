@@ -11,6 +11,8 @@ import {
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   const user = await getBearerUser(req);
   if (!user || user.role !== "STUDENT") {

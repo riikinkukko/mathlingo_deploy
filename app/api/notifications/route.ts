@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getBearerUser } from "@/lib/api-auth";
 import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: Request) {
   const user = await getBearerUser(req);
   if (!user) {

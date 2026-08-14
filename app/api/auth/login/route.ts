@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createSessionToken, verifyPassword } from "@/lib/auth";
 import { getUserByEmail } from "@/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   let body: { email?: string; password?: string };
   try {

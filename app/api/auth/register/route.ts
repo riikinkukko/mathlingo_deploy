@@ -5,6 +5,8 @@ import { createSessionToken, hashPassword } from "@/lib/auth";
 import { getUserByEmail, genId } from "@/lib/queries";
 import { Role } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(req: Request) {
   let body: { name?: string; email?: string; password?: string };
   try {
