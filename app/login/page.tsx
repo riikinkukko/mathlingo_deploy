@@ -23,13 +23,15 @@ export default function LoginPage() {
             Зарегистрироваться самостоятельно
           </a>
         </p>
-        <div className="mt-6 rounded-2xl border-2 border-line bg-white/60 p-4 text-xs leading-relaxed text-ink-soft">
-          <p className="mb-1.5 font-extrabold text-ink">Демо-доступы:</p>
-          <p>Учитель — teacher@demo.ru</p>
-          <p>Ученик — student@demo.ru</p>
-          <p>Родитель — parent@demo.ru</p>
-          <p className="mt-1">Пароль везде: demo1234</p>
-        </div>
+        {process.env.NODE_ENV !== "production" && (
+          <div className="mt-6 rounded-2xl border-2 border-line bg-white/60 p-4 text-xs leading-relaxed text-ink-soft">
+            <p className="mb-1.5 font-extrabold text-ink">Демо-доступы:</p>
+            <p>Учитель — teacher@demo.ru</p>
+            <p>Ученик — student@demo.ru</p>
+            <p>Родитель — parent@demo.ru</p>
+            <p className="mt-1">Пароль везде: demo1234</p>
+          </div>
+        )}
       </div>
     </div>
   );
