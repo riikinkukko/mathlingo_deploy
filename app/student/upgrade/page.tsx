@@ -2,11 +2,14 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
   isStandaloneStudent,
+  isEffectivelyPro,
   getEffectiveEnergy,
   minutesUntilNextEnergy,
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
 import { upgradeToProAction, downgradeToFreeAction } from "@/app/actions";
+import { startPaymentAction } from "@/app/actions-payments";
+import { isYooKassaConfigured } from "@/lib/yookassa";
 import AppHeader from "@/components/AppHeader";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
@@ -25,13 +28,20 @@ const FREE_FEATURES = [
   "Обычные задачи с подсказками и разбором",
 ];
 
-export default async function UpgradePage() {
+export default async function UpgradePage({
+  searchParams,
+}: {
+  searchParams: { paid?: string; error?: string };
+}) {
   const user = (await getSessionUser())!;
   if (!isStandaloneStudent(user)) redirect("/student");
 
-  const isPro = user.plan === "pro";
+  const isPro = isEffectivelyPro(user);
   const energy = Math.floor(getEffectiveEnergy(user));
   const minutesLeft = minutesUntilNextEnergy(user);
+  const realPayments = isYooKassaConfigured();
+  const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 399);
+  const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
   return (
     <div className="min-h-screen pb-16">
@@ -41,6 +51,19 @@ export default async function UpgradePage() {
           <Mascot mood={isPro ? "celebrating" : energy === 0 ? "worried" : "idle"} size={90} />
           <h1 className="mt-2 font-display text-2xl font-black text-ink">Твой тариф</h1>
         </div>
+
+        {searchParams.paid === "1" && !isPro && (
+          <div className="mb-6 rounded-2xl border-2 border-amber/30 bg-amber-light p-3.5 text-center text-sm font-bold text-amber">
+            Оплата обрабатывается — обычно это занимает несколько секунд.
+            Обновите страницу через минуту, если Pro ещё не появился.
+          </div>
+        )}
+        {searchParams.error === "payment_failed" && (
+          <div className="mb-6 rounded-2xl border-2 border-coral/30 bg-coral-light p-3.5 text-center text-sm font-bold text-coral">
+            Не удалось создать платёж. Попробуйте ещё раз через пару минут —
+            если не поможет, напишите в поддержку.
+          </div>
+        )}
 
         {!isPro && (
           <div className="card mb-6 p-5 text-center">
@@ -83,7 +106,7 @@ export default async function UpgradePage() {
               Pro
             </p>
             <p className="mb-3 font-display text-xl font-black text-ink">
-              для демонстрации — бесплатно
+              {realPayments ? `${priceRub} ₽ / ${periodDays} дн.` : "для демонстрации — бесплатно"}
             </p>
             <ul className="space-y-2 text-sm text-ink-soft">
               {PRO_FEATURES.map((f) => (
@@ -93,18 +116,27 @@ export default async function UpgradePage() {
                 </li>
               ))}
             </ul>
-            {!isPro && (
-              <form action={upgradeToProAction} className="mt-4">
-                <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
-                  Перейти на Pro
-                </button>
-              </form>
-            )}
+            {!isPro &&
+              (realPayments ? (
+                <form action={startPaymentAction} className="mt-4">
+                  <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
+                    Оплатить через ЮKassa
+                  </button>
+                </form>
+              ) : (
+                <form action={upgradeToProAction} className="mt-4">
+                  <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
+                    Перейти на Pro (демо)
+                  </button>
+                </form>
+              ))}
           </div>
         </div>
 
         <p className="mt-6 text-center text-xs text-ink-soft">
-          Это MVP-демонстрация: переключение тарифа мгновенное и бесплатное, реальной оплаты нет.
+          {realPayments
+            ? "Оплата через ЮKassa — разовый платёж за период, без автопродления."
+            : "Это MVP-демонстрация: переключение тарифа мгновенное и бесплатное, реальной оплаты нет."}
         </p>
       </main>
     </div>

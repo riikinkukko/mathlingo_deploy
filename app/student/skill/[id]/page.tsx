@@ -11,6 +11,7 @@ import {
   computeProblemStates,
   toPublicProblem,
   isStandaloneStudent,
+  isEffectivelyPro,
 } from "@/lib/queries";
 import AppHeader from "@/components/AppHeader";
 import LessonFlow from "@/components/LessonFlow";
@@ -24,7 +25,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   // Free-план самостоятельных пользователей видит только первую главу — та
   // же граница, что на дашборде, но проверенная и здесь (иначе достаточно
   // знать прямую ссылку на навык, чтобы обойти ограничение).
-  const isFreeStandalone = isStandaloneStudent(user) && user.plan !== "pro";
+  const isFreeStandalone = isStandaloneStudent(user) && !isEffectivelyPro(user);
   if (isFreeStandalone && chapter && chapter.order !== 1) {
     redirect("/student/upgrade");
   }

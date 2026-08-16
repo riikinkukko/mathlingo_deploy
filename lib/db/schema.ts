@@ -47,7 +47,32 @@ export const users = pgTable("users", {
   plan: planEnum("plan"),
   energy: integer("energy"),
   energyUpdatedAt: timestamp("energy_updated_at", { withTimezone: true }),
+  // Когда истекает текущий оплаченный период Pro (NULL — не оплачивалось
+  // никогда, либо план назначен вручную администратором бессрочно).
+  // Реальная оплата — разовая за период (месяц), не автосписание: ЮKassa
+  // требует отдельного согласования для рекуррентных платежей.
+  proUntil: timestamp("pro_until", { withTimezone: true }),
+  // Ручное управление подпиской из admin-панели, в обход оплаты — на случай
+  // проблем с платежами/поддержкой. НЕ то же самое, что plan='pro' сам по
+  // себе — просто отдельный, явный флаг "выдано вручную", виден в панели.
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// История платежей через ЮKassa — не только для сверки, но и источник
+// истины при обработке вебхука (идемпотентность: один и тот же вебхук,
+// доставленный повторно, не должен продлить подписку дважды).
+export const payments = pgTable("payments", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  yookassaPaymentId: text("yookassa_payment_id").notNull().unique(),
+  amountRub: integer("amount_rub").notNull(),
+  status: text("status").notNull(), // pending | succeeded | canceled
+  periodDays: integer("period_days").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
 });
 
 export const parentLinks = pgTable(

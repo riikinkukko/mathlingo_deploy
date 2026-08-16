@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and, inArray, desc, asc, sql } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, sql, isNull } from "drizzle-orm";
 import {
   Homework,
   Problem,
@@ -12,6 +12,7 @@ import {
   Notification,
   AssignmentSession,
   Attempt,
+  Payment,
 } from "./types";
 
 // ---------- Мапперы: строка Drizzle (null) -> тип приложения (undefined) ----------
@@ -30,6 +31,8 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     plan: row.plan ?? undefined,
     energy: row.energy ?? undefined,
     energyUpdatedAt: row.energyUpdatedAt ? row.energyUpdatedAt.toISOString() : undefined,
+    proUntil: row.proUntil ? row.proUntil.toISOString() : undefined,
+    isAdmin: row.isAdmin,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -637,11 +640,23 @@ export async function getOrCreateAssignmentSession(
 export const FREE_MAX_ENERGY = 5;
 export const ENERGY_RECHARGE_MINUTES = 30;
 
+/** true, если у пользователя РЕАЛЬНО активен Pro прямо сейчас — plan='pro'
+ * само по себе не гарантирует это: подписка могла истечь. proUntil=null
+ * означает "без срока" (выдано вручную из admin-панели навсегда, либо
+ * старые демо-аккаунты до появления этого поля) — в этом случае Pro активен,
+ * пока явно не понижен. Все проверки доступа должны идти через эту функцию,
+ * а не напрямую через user.plan === 'pro'. */
+export function isEffectivelyPro(user: User): boolean {
+  if (user.plan !== "pro") return false;
+  if (!user.proUntil) return true;
+  return new Date(user.proUntil).getTime() > Date.now();
+}
+
 /** Ученики репетитора (с teacherId) и все не-ученики — вне системы планов,
  * для них энергия всегда безлимитна. Ограничение касается только тех, кто
  * зарегистрировался сам и не находится на Pro-плане. */
 export function isUnlimitedEnergy(user: User): boolean {
-  return user.role !== "STUDENT" || !!user.teacherId || user.plan === "pro";
+  return user.role !== "STUDENT" || !!user.teacherId || isEffectivelyPro(user);
 }
 
 export function isStandaloneStudent(user: User): boolean {
@@ -696,12 +711,210 @@ export async function getHomeworksForStudent(studentId: string): Promise<Homewor
     await db.select().from(schema.homeworks).where(eq(schema.homeworks.studentId, studentId))
   ).map(mapHomework);
   let proExams: Homework[] = [];
-  if (user && isStandaloneStudent(user) && user.plan === "pro") {
+  if (user && isStandaloneStudent(user) && isEffectivelyPro(user)) {
     proExams = (
       await db.select().from(schema.homeworks).where(eq(schema.homeworks.audience, "pro_standalone"))
     ).map(mapHomework);
   }
   return [...own, ...proExams].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+}
+
+// ---------- Достижения (lib/achievements.ts определяет пороги/тиры) ----------
+
+export async function getAchievementStats(studentId: string): Promise<{
+  problems: number;
+  streak: number;
+  skills: number;
+  perfect: number;
+  detailed: number;
+  reviews: number;
+  chapters: number;
+}> {
+  const attempts = (
+    await db.select().from(schema.attempts).where(eq(schema.attempts.studentId, studentId))
+  ).map(mapAttempt);
+  const correct = attempts.filter((a) => a.isCorrect);
+  const problemsCount = new Set(correct.map((a) => a.problemId)).size;
+
+  const streak = await computeStreak(studentId);
+
+  const skillRows = await db.select().from(schema.skills);
+  const chapterRows = await db.select().from(schema.subtopics);
+  const problems = (await db.select().from(schema.problems)).map(mapProblem);
+  const lessonAttempts = attempts.filter((a) => a.source === "lesson");
+
+  let skillsDone = 0;
+  let perfectSkills = 0;
+  const skillDoneMap = new Map<string, boolean>();
+  for (const skill of skillRows) {
+    const coreIds = problems
+      .filter((p) => p.skillId === skill.id && (p.tier ?? "core") === "core")
+      .map((p) => p.id);
+    if (coreIds.length === 0) continue;
+    const attemptsHere = lessonAttempts.filter((a) => coreIds.includes(a.problemId));
+    const allSolved = coreIds.every((id) => attemptsHere.some((a) => a.problemId === id && a.isCorrect));
+    skillDoneMap.set(skill.id, allSolved);
+    if (allSolved) {
+      skillsDone++;
+      const noMistakes = attemptsHere.every((a) => a.isCorrect);
+      if (noMistakes) perfectSkills++;
+    }
+  }
+
+  let chaptersDone = 0;
+  for (const chapter of chapterRows) {
+    const skillsInChapter = skillRows.filter((s) => s.subtopicId === chapter.id);
+    if (skillsInChapter.length === 0) continue;
+    if (skillsInChapter.every((s) => skillDoneMap.get(s.id))) chaptersDone++;
+  }
+
+  const detailedAccepted = attempts.filter(
+    (a) => (a.reviewStatus === "approved" || a.reviewStatus === "self_checked")
+  ).length;
+
+  const reviewsDone = attempts.filter((a) => a.source === "review" && a.isCorrect).length;
+
+  return {
+    problems: problemsCount,
+    streak,
+    skills: skillsDone,
+    perfect: perfectSkills,
+    detailed: detailedAccepted,
+    reviews: reviewsDone,
+    chapters: chaptersDone,
+  };
+}
+
+// ---------- Admin-панель: ручное управление подписками ----------
+// Отдельная сфера ответственности от учителя/родителя — управляет ТОЛЬКО
+// самостоятельными пользователями (у которых есть Free/Pro), не трогает
+// учеников репетитора (у них план не используется в принципе).
+
+export function mapPayment(row: typeof schema.payments.$inferSelect): Payment {
+  return {
+    id: row.id,
+    userId: row.userId,
+    yookassaPaymentId: row.yookassaPaymentId,
+    amountRub: row.amountRub,
+    status: row.status as Payment["status"],
+    periodDays: row.periodDays,
+    createdAt: row.createdAt.toISOString(),
+    paidAt: row.paidAt ? row.paidAt.toISOString() : undefined,
+  };
+}
+
+/** Все самостоятельные пользователи (нет teacherId) — то есть все, для кого
+ * вообще имеет смысл понятие подписки Free/Pro. Сюда НЕ попадают ученики
+ * репетитора — им admin ничего не назначает, это вне его зоны ответственности. */
+export async function getAllStandaloneUsersForAdmin(): Promise<User[]> {
+  const rows = await db
+    .select()
+    .from(schema.users)
+    .where(and(eq(schema.users.role, "STUDENT"), isNull(schema.users.teacherId)))
+    .orderBy(desc(schema.users.createdAt));
+  return rows.map(mapUser);
+}
+
+/** Ручная выдача/отзыв Pro из admin-панели — в обход оплаты. days=null —
+ * выдать бессрочно (до явного отзыва), days=число — выдать на N дней от
+ * сегодняшнего момента (перезаписывает, не суммирует, если уже был Pro). */
+export async function setUserPlanManually(
+  userId: string,
+  plan: "free" | "pro",
+  days: number | null
+) {
+  if (plan === "free") {
+    await db
+      .update(schema.users)
+      .set({ plan: "free", proUntil: null, energy: FREE_MAX_ENERGY, energyUpdatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+    return;
+  }
+  const proUntil = days ? new Date(Date.now() + days * 86400 * 1000) : null;
+  await db.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, userId));
+}
+
+export async function getPaymentsForUser(userId: string): Promise<Payment[]> {
+  const rows = await db
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.userId, userId))
+    .orderBy(desc(schema.payments.createdAt));
+  return rows.map(mapPayment);
+}
+
+export async function getAllPaymentsForAdmin(limit = 100): Promise<(Payment & { userEmail: string })[]> {
+  const rows = await db
+    .select({ payment: schema.payments, userEmail: schema.users.email })
+    .from(schema.payments)
+    .innerJoin(schema.users, eq(schema.users.id, schema.payments.userId))
+    .orderBy(desc(schema.payments.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...mapPayment(r.payment), userEmail: r.userEmail }));
+}
+
+/** Создаёт запись о платеже в статусе pending — сразу после того, как мы
+ * попросили ЮKassa создать платёж и получили его id. Настоящее продление
+ * подписки происходит позже, отдельно, когда придёт вебхук об успехе
+ * (см. markPaymentSucceeded) — здесь только фиксируем факт "платёж начат". */
+export async function createPendingPayment(params: {
+  userId: string;
+  yookassaPaymentId: string;
+  amountRub: number;
+  periodDays: number;
+}): Promise<string> {
+  const id = genId("pay");
+  await db.insert(schema.payments).values({
+    id,
+    userId: params.userId,
+    yookassaPaymentId: params.yookassaPaymentId,
+    amountRub: params.amountRub,
+    periodDays: params.periodDays,
+    status: "pending",
+  });
+  return id;
+}
+
+/** Вызывается из обработчика вебхука ЮKassa. Идемпотентна: если платёж с
+ * таким yookassaPaymentId уже помечен succeeded — не продлевает подписку
+ * повторно (ЮKassa может доставить один и тот же вебхук больше одного раза,
+ * это ожидаемо по их же документации, а не баг с их стороны). */
+export async function markPaymentSucceeded(yookassaPaymentId: string): Promise<boolean> {
+  const rows = await db
+    .select()
+    .from(schema.payments)
+    .where(eq(schema.payments.yookassaPaymentId, yookassaPaymentId))
+    .limit(1);
+  const payment = rows[0];
+  if (!payment) return false;
+  if (payment.status === "succeeded") return true; // уже обработан — не продлеваем повторно
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(schema.payments)
+      .set({ status: "succeeded", paidAt: new Date() })
+      .where(eq(schema.payments.id, payment.id));
+
+    const userRows = await tx.select().from(schema.users).where(eq(schema.users.id, payment.userId)).limit(1);
+    const user = userRows[0] ? mapUser(userRows[0]) : undefined;
+    // Если у пользователя уже был активный Pro — продлеваем ОТ даты
+    // истечения, а не от "сейчас" (иначе повторная оплата ДО истечения
+    // текущего периода потеряла бы уже оплаченные дни).
+    const base =
+      user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()
+        ? new Date(user.proUntil)
+        : new Date();
+    const proUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
+    await tx.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, payment.userId));
+  });
+  return true;
+}
+
+export async function markPaymentCanceled(yookassaPaymentId: string) {
+  await db
+    .update(schema.payments)
+    .set({ status: "canceled" })
+    .where(eq(schema.payments.yookassaPaymentId, yookassaPaymentId));
 }
 
 // ---------- SRS (интервальное повторение, коробки Лейтнера) ----------

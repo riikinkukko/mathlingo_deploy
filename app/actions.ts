@@ -273,7 +273,7 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
       passwordHash: await hashPassword(password),
       role: "PARENT",
     });
-    parent = { id, name, email, passwordHash: "", role: "PARENT", createdAt: new Date().toISOString() };
+    parent = { id, name, email, passwordHash: "", role: "PARENT", isAdmin: false, createdAt: new Date().toISOString() };
   }
 
   const alreadyLinked = await db

@@ -8,6 +8,7 @@ import {
   computeProblemStates,
   getOrCreateAssignmentSession,
   isStandaloneStudent,
+  isEffectivelyPro,
   getHomeworkById,
 } from "@/lib/queries";
 import AppHeader from "@/components/AppHeader";
@@ -26,7 +27,7 @@ export default async function HomeworkPage({ params }: { params: { id: string } 
   const standalone = isStandaloneStudent(user);
   const isOwnAssignment = hw && hw.studentId === user.id;
   const isAccessiblePublicExam =
-    hw && hw.audience === "pro_standalone" && standalone && user.plan === "pro";
+    hw && hw.audience === "pro_standalone" && standalone && isEffectivelyPro(user);
   if (!hw || (!isOwnAssignment && !isAccessiblePublicExam)) notFound();
 
   const listHref = "/student/homework";

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { getUserById } from "./queries";
 import { Role, User } from "./types";
 
@@ -57,6 +58,18 @@ export async function getSessionUser(): Promise<User | null> {
   if (!session) return null;
   const user = await getUserById(session.userId);
   return user ?? null;
+}
+
+/** Единая точка проверки доступа к /admin/*. isAdmin не закодирован в JWT
+ * сессии (там только userId+role) — middleware.ts работает на Edge-рантайме
+ * без доступа к Postgres через 'pg', поэтому проверка идёт здесь, на уровне
+ * страницы (Server Component уже выполняется в Node.js-рантайме, БД доступна). */
+export async function requireAdmin(): Promise<User> {
+  const user = await getSessionUser();
+  if (!user || !user.isAdmin) {
+    redirect("/login");
+  }
+  return user!;
 }
 
 export { COOKIE_NAME };

@@ -5,6 +5,7 @@ import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
+import DiagramScratchpad from "./diagrams/DiagramScratchpad";
 import Mascot from "./Mascot";
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
@@ -46,6 +47,7 @@ export default function ProblemCard({
   const [justSolved, setJustSolved] = useState(false);
   const [shakeSeq, setShakeSeq] = useState(0);
   const [showFormula, setShowFormula] = useState(false);
+  const [scratchpadOpen, setScratchpadOpen] = useState(false);
   const [noEnergy, setNoEnergy] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -143,9 +145,22 @@ export default function ProblemCard({
       )}
 
       {problem.diagram && (
-        <div className="mb-4 h-44 rounded-2xl bg-pine-light/25 p-2">
-          <DiagramRenderer spec={problem.diagram} />
-        </div>
+        <>
+          <button
+            type="button"
+            aria-label="Открыть черновик для пометок на диаграмме"
+            onClick={() => setScratchpadOpen(true)}
+            className="group relative mb-4 block h-44 w-full rounded-2xl bg-pine-light/25 p-2 text-left"
+          >
+            <DiagramRenderer spec={problem.diagram} />
+            <span className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-sm shadow-soft transition group-active:scale-90">
+              ✏️
+            </span>
+          </button>
+          {scratchpadOpen && (
+            <DiagramScratchpad spec={problem.diagram} onClose={() => setScratchpadOpen(false)} />
+          )}
+        </>
       )}
 
       <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink">{problem.text}</p>

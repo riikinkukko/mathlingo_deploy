@@ -4,6 +4,7 @@ import {
   getNotificationsForUser,
   getUnreadNotificationCount,
   isStandaloneStudent,
+  isEffectivelyPro,
   getEffectiveEnergy,
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
@@ -25,7 +26,7 @@ export default async function AppHeader({
   const notifications = await getNotificationsForUser(user.id);
   const unread = await getUnreadNotificationCount(user.id);
   const standalone = isStandaloneStudent(user);
-  const isPro = standalone && user.plan === "pro";
+  const isPro = standalone && isEffectivelyPro(user);
   const energy = standalone && !isPro ? Math.floor(getEffectiveEnergy(user)) : null;
 
   return (
@@ -99,10 +100,27 @@ export default async function AppHeader({
               </a>
             )}
             <NotificationBell initialNotifications={notifications} initialUnread={unread} />
+            {user.isAdmin && (
+              <a
+                href="/admin"
+                className="rounded-full border-2 border-violet/30 px-2.5 py-1.5 text-xs font-extrabold uppercase text-violet transition hover:bg-violet/10"
+              >
+                Admin
+              </a>
+            )}
             <div className="flex items-center gap-2">
-              <span className="hidden text-sm font-bold text-ink sm:inline">
-                {user.name.split(" ")[0]}
-              </span>
+              {user.role === "STUDENT" ? (
+                <a
+                  href="/student/profile"
+                  className="text-sm font-bold text-ink hover:text-pine"
+                >
+                  {user.name.split(" ")[0]}
+                </a>
+              ) : (
+                <span className="hidden text-sm font-bold text-ink sm:inline">
+                  {user.name.split(" ")[0]}
+                </span>
+              )}
               <form action={logoutAction}>
                 <button
                   className="rounded-full border-2 border-line px-3 py-1.5 text-xs font-extrabold uppercase text-ink-soft transition hover:border-coral hover:text-coral"

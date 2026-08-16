@@ -5,6 +5,7 @@ import {
   computeXp,
   computeStreak,
   isStandaloneStudent,
+  isEffectivelyPro,
 } from "@/lib/queries";
 import AppHeader from "@/components/AppHeader";
 import FractionBadge from "@/components/FractionBadge";
@@ -26,7 +27,7 @@ export default async function HomeworkListPage() {
   const statusById = new Map(statusPairs);
 
   const standalone = isStandaloneStudent(user);
-  const isPro = standalone && user.plan === "pro";
+  const isPro = standalone && isEffectivelyPro(user);
   const tabLabel = standalone ? "Пробники" : "Домашнее задание";
 
   return (

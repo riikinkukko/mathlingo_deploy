@@ -17,6 +17,11 @@ export interface User {
   plan?: Plan; // по умолчанию "free" при регистрации
   energy?: number; // текущий запас энергии (Free-план)
   energyUpdatedAt?: string; // когда energy последний раз пересчитывалась/тратилась
+  // Когда истекает текущий оплаченный (или вручную выданный) период Pro.
+  proUntil?: string;
+  // Доступ к /admin — ручное управление подписками, если возникли проблемы
+  // с оплатой. Не путать с ролью TEACHER — это отдельная, ортогональная вещь.
+  isAdmin?: boolean;
   createdAt: string;
 }
 
@@ -190,6 +195,19 @@ export interface Notification {
   link: string; // куда вести по клику
   read: boolean;
   createdAt: string;
+}
+
+// Запись о платеже через ЮKassa — история + источник истины для
+// идемпотентной обработки вебхука (см. markPaymentSucceeded в queries.ts).
+export interface Payment {
+  id: string;
+  userId: string;
+  yookassaPaymentId: string;
+  amountRub: number;
+  status: "pending" | "succeeded" | "canceled";
+  periodDays: number;
+  createdAt: string;
+  paidAt?: string;
 }
 
 export interface DB {

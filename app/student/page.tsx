@@ -13,6 +13,7 @@ import {
   getDueReviewCount,
   getLevelInfo,
   LEVELS,
+  isEffectivelyPro,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import AppHeader from "@/components/AppHeader";
@@ -36,7 +37,7 @@ export default async function StudentDashboard() {
   // остальные показаны, но заблокированы отдельной причиной (не "пройдите
   // предыдущую тему", а "нужен Pro").
   const standalone = isStandaloneStudent(user);
-  const isFreeStandalone = standalone && user.plan !== "pro";
+  const isFreeStandalone = standalone && !isEffectivelyPro(user);
   const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : Infinity;
 
   const allSkills = curriculum.flatMap((t) => t.chapters.flatMap((c) => c.skills));

@@ -98,6 +98,9 @@ async function main() {
         email: "teacher@demo.ru",
         passwordHash: await hashPassword("demo1234"),
         role: "TEACHER",
+        // В этом продукте репетитор и владелец платформы — один и тот же
+        // человек, поэтому единственный учитель одновременно и admin.
+        isAdmin: true,
         createdAt: new Date().toISOString(),
       },
       {
@@ -3505,6 +3508,8 @@ async function commitToDatabase(built: DB, isFreshInstall: boolean) {
         plan: u.plan ?? null,
         energy: u.energy ?? null,
         energyUpdatedAt: u.energyUpdatedAt ? new Date(u.energyUpdatedAt) : null,
+        proUntil: u.proUntil ? new Date(u.proUntil) : null,
+        isAdmin: u.isAdmin ?? false,
         createdAt: new Date(u.createdAt),
       });
     }
