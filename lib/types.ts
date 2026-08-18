@@ -22,6 +22,8 @@ export interface User {
   // Доступ к /admin — ручное управление подписками, если возникли проблемы
   // с оплатой. Не путать с ролью TEACHER — это отдельная, ортогональная вещь.
   isAdmin?: boolean;
+  telegramChatId?: string;
+  telegramLinkCode?: string;
   createdAt: string;
 }
 

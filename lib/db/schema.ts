@@ -56,6 +56,13 @@ export const users = pgTable("users", {
   // проблем с платежами/поддержкой. НЕ то же самое, что plan='pro' сам по
   // себе — просто отдельный, явный флаг "выдано вручную", виден в панели.
   isAdmin: boolean("is_admin").notNull().default(false),
+  // Telegram-уведомления — необязательная привязка. chatId появляется
+  // после того, как пользователь перешёл по t.me-ссылке и нажал "Старт" у
+  // бота (боты не могут писать первыми — таковы правила Telegram).
+  // linkCode — одноразовый код на время самой привязки, обнуляется сразу
+  // после успешного связывания.
+  telegramChatId: text("telegram_chat_id"),
+  telegramLinkCode: text("telegram_link_code"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

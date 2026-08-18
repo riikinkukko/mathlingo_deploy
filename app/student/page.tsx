@@ -14,203 +14,278 @@ import {
   getLevelInfo,
   LEVELS,
   isEffectivelyPro,
+  computeDailyGoal,
+  computeWeekActivity,
+  getWeakSkillsForStudent,
+  FREE_MAX_ENERGY,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
-import AppHeader from "@/components/AppHeader";
+import StudentDashboardHeader from "@/components/StudentDashboardHeader";
+import StudentSidebar from "@/components/StudentSidebar";
+import StudentRightColumn from "@/components/StudentRightColumn";
+import BottomTabBar from "@/components/BottomTabBar";
 import Mascot from "@/components/Mascot";
-import SkillPath from "@/components/SkillPath";
-import { IconMap, IconClipboard, IconCrown } from "@/components/icons";
+import VerticalSkillPath from "@/components/VerticalSkillPath";
+import HorizontalSkillPath from "@/components/HorizontalSkillPath";
+import { IconCrown } from "@/components/icons";
+
+const GEO_TIPS = [
+  "Ещё немного — и цель дня закрыта. Серия не оборвётся!",
+  "Регулярность важнее длинных сессий — 10 минут каждый день лучше часа раз в неделю.",
+  "Если задача не поддаётся — открой формулу-подсказку, это не считается поражением.",
+  "Повторение без энергии — отличный способ занять свободную минуту.",
+];
 
 export default async function StudentDashboard() {
   const user = (await getSessionUser())!;
   const curriculum = await getCurriculum();
   const progress = await computeStudentProgress(user.id);
   const xp = await computeXp(user.id);
-  const level = getLevelInfo(xp);
   const streak = await computeStreak(user.id);
+  const level = getLevelInfo(xp);
+  const nextLevelTitle = LEVELS[level.index + 1]?.title ?? null;
+  const dailyGoal = await computeDailyGoal(user.id);
+  const weekActivity = await computeWeekActivity(user.id);
+  const weakSkills = await getWeakSkillsForStudent(user.id);
   const allHw = await getHomeworksForStudent(user.id);
   const hwStatuses = await Promise.all(allHw.map((h) => homeworkStatus(h, user.id)));
   const pendingHw = allHw.filter((_, i) => !hwStatuses[i].complete);
   const dueReviewCount = await getDueReviewCount(user.id);
 
-  // Free-план самостоятельных пользователей видит только первую главу —
-  // остальные показаны, но заблокированы отдельной причиной (не "пройдите
-  // предыдущую тему", а "нужен Pro").
   const standalone = isStandaloneStudent(user);
   const isFreeStandalone = standalone && !isEffectivelyPro(user);
-  const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : Infinity;
+  const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : null;
 
   const allSkills = curriculum.flatMap((t) => t.chapters.flatMap((c) => c.skills));
   const pathStates = getPathStates(allSkills, progress);
   const doneCount = allSkills.filter((s) => pathStates[s.id] === "done").length;
-  const modulePct = allSkills.length ? Math.round((doneCount / allSkills.length) * 100) : 0;
 
-  // Число задач на навык — считаем один раз заранее (нельзя await внутри JSX .map).
   const problemCountPairs = await Promise.all(
     allSkills.map(async (s) => [s.id, (await getProblemsForSkill(s.id)).length] as const)
   );
   const problemCountBySkill = new Map(problemCountPairs);
 
-  const mascotMood =
-    energy === 0
-      ? "worried"
-      : doneCount === allSkills.length && allSkills.length > 0
-        ? "celebrating"
-        : doneCount > 0
-          ? "happy"
-          : "idle";
+  // Текущая глава — та, что содержит навык в статусе "current" (либо первая
+  // не полностью пройденная). На ней сфокусирован главный экран — остальные
+  // главы получают только компактный тизер внизу (полный список — на
+  // отдельной странице программы).
+  let currentChapter: (typeof curriculum)[number]["chapters"][number] | null = null;
+  let currentChapterIdx = 0;
+  outer: for (const { chapters } of curriculum) {
+    for (let i = 0; i < chapters.length; i++) {
+      const allDone = chapters[i].skills.every((s) => pathStates[s.id] === "done");
+      if (!allDone) {
+        currentChapter = chapters[i];
+        currentChapterIdx = i;
+        break outer;
+      }
+    }
+  }
+  if (!currentChapter) {
+    currentChapter = curriculum[0]?.chapters[0] ?? null;
+  }
+  const chapterLockedByPlan = isFreeStandalone && currentChapterIdx > 0;
+
+  const currentSkill = currentChapter?.skills.find((s) => pathStates[s.id] === "current");
+  const currentSkillProblems = currentSkill ? problemCountBySkill.get(currentSkill.id) ?? 0 : 0;
+  const currentSkillSolved = currentSkill ? progress[currentSkill.id]?.solved ?? 0 : 0;
+  const remaining = Math.max(0, currentSkillProblems - currentSkillSolved);
+  const estMinutes = Math.max(2, remaining * 2);
+
+  const chapterDoneCount = currentChapter ? currentChapter.skills.filter((s) => pathStates[s.id] === "done").length : 0;
+
+  const tip = GEO_TIPS[new Date().getDate() % GEO_TIPS.length];
+  const todayLabel = new Date()
+    .toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })
+    .toUpperCase();
+  const firstName = user.name.split(" ")[0];
+
+  const heroCard = currentSkill && !chapterLockedByPlan ? (
+    <a
+      href={`/student/skill/${currentSkill.id}`}
+      className="block rounded-[22px] bg-pine-dark p-6 text-white transition hover:brightness-105"
+    >
+      <p className="text-[11px] font-black uppercase tracking-wide text-white/60">
+        Продолжить · {currentChapter?.chapter.title}
+      </p>
+      <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">{currentSkill.title}</h1>
+      <p className="mt-1.5 text-[14px] font-semibold text-white/75">
+        Осталось {remaining} {pluralRu(remaining, ["задача", "задачи", "задач"])} · ~{estMinutes} мин
+        {energy !== null && " · 1 энергия"}
+      </p>
+      <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
+        Решать дальше →
+      </span>
+    </a>
+  ) : chapterLockedByPlan ? (
+    <a
+      href="/student/upgrade"
+      className="block rounded-[22px] bg-gradient-to-br from-amber to-coral p-6 text-white"
+    >
+      <p className="text-[11px] font-black uppercase tracking-wide text-white/70">PRO</p>
+      <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">
+        Открой «{currentChapter?.chapter.title}» и весь курс
+      </h1>
+      <p className="mt-1.5 text-[14px] font-semibold text-white/85">
+        На бесплатном плане доступна только первая глава
+      </p>
+      <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-white px-8 text-[15px] font-black text-coral">
+        Узнать про Pro →
+      </span>
+    </a>
+  ) : (
+    <div className="rounded-[22px] bg-pine-dark p-6 text-center text-white">
+      <Mascot mood="celebrating" size={72} float={false} className="mx-auto" />
+      <p className="mt-2 font-display text-xl font-black">Вся программа пройдена!</p>
+      <p className="mt-1 text-sm text-white/75">Загляни в повторение — там всегда есть чем заняться.</p>
+    </div>
+  );
+
+  const tiles = (
+    <>
+      <a href="/student/review" className="flex-1 rounded-2xl bg-violet-light px-3.5 py-3 transition hover:brightness-95">
+        <p className="text-[11px] font-black uppercase tracking-wide text-violet-text">Повторение</p>
+        <p className="mt-1 font-display text-[17px] font-black text-ink">
+          {dueReviewCount} {pluralRu(dueReviewCount, ["задача", "задачи", "задач"])}
+        </p>
+        <p className="text-[12px] font-semibold text-ink-soft">без энергии</p>
+      </a>
+      <a href="/student/homework" className="flex-1 rounded-2xl bg-amber-light px-3.5 py-3 transition hover:brightness-95">
+        <p className="text-[11px] font-black uppercase tracking-wide text-amber-text">
+          {standalone ? "Пробники" : "Домашка"}
+        </p>
+        <p className="mt-1 font-display text-[17px] font-black text-ink">
+          {pendingHw.length} {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
+        </p>
+        <p className="text-[12px] font-semibold text-ink-soft">
+          {pendingHw.length > 0 ? "ждут выполнения" : "всё выполнено"}
+        </p>
+      </a>
+    </>
+  );
+
+  const programTeaser = (
+    <a href="/student/program" className="block rounded-2xl border border-dashed border-line bg-white px-4 py-3.5 transition hover:border-pine">
+      <p className="flex items-center gap-1.5 font-display text-sm font-black text-ink">
+        {isFreeStandalone && <IconCrown className="h-4 w-4 text-amber" />}
+        Программа курса
+      </p>
+      <p className="mt-1 text-[12px] text-ink-soft">
+        {curriculum[0]?.chapters.length ?? 0} глав ·{" "}
+        {allSkills.length} {pluralRu(allSkills.length, ["навык", "навыка", "навыков"])} · пройдено {doneCount}
+      </p>
+    </a>
+  );
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        gamification={{ xp, streak }}
-        subTabs={[
-          { label: "Путь обучения", href: "/student", active: true, icon: <IconMap className="h-4 w-4" /> },
-          { label: standalone ? "Пробники" : "Домашнее задание", href: "/student/homework", active: false, icon: <IconClipboard className="h-4 w-4" /> },
-        ]}
-      />
-
-      <main className="mx-auto max-w-3xl px-4 pt-6">
-        <div className="mb-5 flex items-center gap-4 rounded-card bg-white p-4 shadow-soft">
-          <Mascot mood={mascotMood} size={76} interactive />
-          <p className="text-sm font-bold text-ink-soft">
-            {energy === 0
-              ? "У Гео закончилась энергия для новых задач — но старые можно повторять!"
-              : doneCount > 0
-                ? "Гео гордится твоим прогрессом!"
-                : "Гео — твой спутник по планиметрии. Погнали?"}
-          </p>
-        </div>
-
-        <div className="mb-5 rounded-card bg-white p-4 shadow-soft">
-          <div className="flex items-center justify-between">
-            <p className="font-display text-base font-black text-ink">
-              {level.title}
-            </p>
-            <p className="text-xs font-bold text-ink-soft">
-              {level.nextLevelMinXp !== null
-                ? `${level.xp} / ${level.nextLevelMinXp} XP`
-                : `${level.xp} XP · максимум`}
-            </p>
-          </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-pill bg-grid">
-            <div
-              className="h-full origin-left animate-grow-x rounded-pill bg-gradient-to-r from-teal to-pine transition-all"
-              style={{ width: `${level.progressPct}%` }}
-            />
-          </div>
-          {level.nextLevelMinXp !== null && (
-            <p className="mt-1.5 text-[11px] text-ink-soft">
-              Ещё {level.nextLevelMinXp - level.xp} XP до звания «{LEVELS[level.index + 1].title}»
-            </p>
-          )}
-        </div>
-
-        {isFreeStandalone && energy === 0 && (
-          <a
-            href="/student/upgrade"
-            className="mb-5 flex items-center justify-between rounded-2xl border-2 border-teal/30 bg-teal-light px-4 py-3 text-sm font-bold text-teal transition hover:brightness-95"
-          >
-            <span>⚡ Энергия закончилась — восстановится со временем, или открой Pro прямо сейчас</span>
-            <span>→</span>
-          </a>
-        )}
-
-        {dueReviewCount > 0 && (
-          <a
-            href="/student/review"
-            className="mb-5 flex items-center justify-between rounded-2xl border-2 border-violet/30 bg-violet-light px-4 py-3 text-sm font-bold text-violet transition hover:brightness-95"
-          >
-            <span className="flex items-center gap-2">
-              🧠 {dueReviewCount} {pluralRu(dueReviewCount, ["задача готова", "задачи готовы", "задач готовы"])} к повторению
-            </span>
-            <span>→</span>
-          </a>
-        )}
-
-        {pendingHw.length > 0 && (
-          <a
-            href="/student/homework"
-            className="mb-5 flex items-center justify-between rounded-2xl border-2 border-amber/30 bg-amber-light px-4 py-3 text-sm font-bold text-amber transition hover:brightness-95"
-          >
-            <span className="flex items-center gap-2">
-              <IconClipboard className="h-4 w-4" />
-              У вас {pendingHw.length}{" "}
-              {pendingHw.length === 1 ? "невыполненное" : "невыполненных"}{" "}
-              {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
-            </span>
-            <span>→</span>
-          </a>
-        )}
-
-        {curriculum.map(({ topic, chapters }) => (
-          <div key={topic.id} className="mb-8">
-            <div className="relative overflow-hidden rounded-card bg-gradient-to-br from-pine to-pine-dark p-6 text-white shadow-soft">
-              <p className="text-xs font-extrabold uppercase tracking-widest text-white/70">Модуль</p>
-              <h1 className="mt-1 font-display text-2xl font-black">{topic.title}</h1>
-              <div className="mt-5 flex items-center justify-between text-xs font-bold text-white/80">
-                <span>Прогресс модуля</span>
-                <span>{doneCount}/{allSkills.length} навыков</span>
+    <div>
+      {/* ---------- МОБИЛЬНАЯ РАСКЛАДКА (< 1024px) ---------- */}
+      <div className="min-h-screen bg-paper pb-24 lg:hidden">
+        <StudentDashboardHeader
+          userId={user.id}
+          chapterTitle={currentChapter?.chapter.title ?? "Планиметрика"}
+          streak={streak}
+          energy={energy}
+          energyMax={FREE_MAX_ENERGY}
+          dailyGoal={dailyGoal}
+        />
+        <main className="space-y-4 px-[18px] py-4">
+          {heroCard}
+          <div className="flex gap-2.5">{tiles}</div>
+          {currentChapter && !chapterLockedByPlan && (
+            <div>
+              <div className="mb-3 flex items-center justify-between px-1">
+                <p className="text-[12px] font-black uppercase tracking-wide text-ink-soft">
+                  {currentChapter.chapter.title}
+                </p>
+                <p className="text-[12px] font-bold text-ink-soft">
+                  {chapterDoneCount}/{currentChapter.skills.length}
+                </p>
               </div>
-              <div className="mt-2 h-3 w-full overflow-hidden rounded-pill bg-white/20">
-                <div
-                  className="h-full origin-left animate-grow-x rounded-pill bg-amber transition-all"
-                  style={{ width: `${modulePct}%` }}
-                />
+              <VerticalSkillPath
+                skills={currentChapter.skills.map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  state: pathStates[s.id],
+                  problemsCount: problemCountBySkill.get(s.id) ?? 0,
+                  factsCount: s.theoryCards.length,
+                  solvedCount: progress[s.id]?.solved ?? 0,
+                }))}
+              />
+            </div>
+          )}
+          {programTeaser}
+        </main>
+        <BottomTabBar reviewCount={dueReviewCount} homeworkLabel={standalone ? "Пробники" : "Задания"} />
+      </div>
+
+      {/* ---------- ДЕСКТОПНАЯ РАСКЛАДКА (≥ 1024px) ---------- */}
+      <div className="hidden min-h-screen bg-paper lg:block">
+        <StudentSidebar
+          active="path"
+          reviewCount={dueReviewCount}
+          homeworkCount={pendingHw.length}
+          homeworkLabel={standalone ? "Пробники" : "Домашка"}
+          energy={energy}
+          energyMax={FREE_MAX_ENERGY}
+          isPro={!standalone || isEffectivelyPro(user)}
+        />
+        <div className="ml-[236px] flex gap-6 px-8 py-6">
+          <main className="min-w-0 flex-1 space-y-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[12px] font-black uppercase tracking-wide text-ink-soft">{todayLabel}</p>
+                <h1 className="mt-0.5 font-display text-2xl font-black text-ink">
+                  Привет, {firstName}. {dailyGoal.total - dailyGoal.done > 0
+                    ? `Осталось ${dailyGoal.total - dailyGoal.done} ${pluralRu(dailyGoal.total - dailyGoal.done, ["задача", "задачи", "задач"])} до цели дня.`
+                    : "Цель дня закрыта!"}
+                </h1>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-pill bg-amber-light px-3 py-1.5 text-[13px] font-black text-amber-text">
+                  ⚡ {xp} XP
+                </span>
+                <span className="rounded-pill bg-coral-light px-3 py-1.5 text-[13px] font-black text-coral-text">
+                  🔥 {streak}
+                </span>
               </div>
             </div>
 
-            {chapters.map(({ chapter, skills }, chapterIdx) => {
-              const chapterDone = skills.filter((s) => pathStates[s.id] === "done").length;
-              const chapterLockedByPlan = isFreeStandalone && chapterIdx > 0;
+            {heroCard}
+            <div className="flex gap-3">{tiles}</div>
 
-              return (
-                <div key={chapter.id} className="mt-8">
-                  <div className="mb-4 flex items-center justify-between px-2">
-                    <p className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-                      {chapter.title}
-                      {chapterLockedByPlan && <IconCrown className="h-3.5 w-3.5 text-amber" />}
-                    </p>
-                    <p className="text-xs font-bold text-ink-soft">
-                      {chapterDone}/{skills.length}
-                    </p>
-                  </div>
-
-                  {chapterLockedByPlan ? (
-                    <a
-                      href="/student/upgrade"
-                      className="card mx-2 flex items-center gap-4 p-4 opacity-90 transition hover:-translate-y-0.5 hover:shadow-lg"
-                    >
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber to-coral text-white">
-                        <IconCrown className="h-5 w-5" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-display text-base font-black text-ink">Открыть в Pro</p>
-                        <p className="mt-0.5 text-xs text-ink-soft">
-                          Вся глава «{chapter.title}» доступна на Pro-плане
-                        </p>
-                      </div>
-                    </a>
-                  ) : (
-                    <SkillPath
-                      colorIndex={chapterIdx}
-                      skills={skills.map((s) => ({
-                        id: s.id,
-                        title: s.title,
-                        state: pathStates[s.id],
-                        problemsCount: problemCountBySkill.get(s.id) ?? 0,
-                        factsCount: s.theoryCards.length,
-                        solvedCount: progress[s.id]?.solved ?? 0,
-                      }))}
-                    />
-                  )}
+            {currentChapter && !chapterLockedByPlan && (
+              <div className="card p-5">
+                <div className="mb-4 flex items-center justify-between">
+                  <h2 className="font-display text-lg font-black text-ink">{currentChapter.chapter.title}</h2>
+                  <p className="text-[13px] font-bold text-ink-soft">
+                    {chapterDoneCount} из {currentChapter.skills.length} навыков
+                  </p>
                 </div>
-              );
-            })}
-          </div>
-        ))}
-      </main>
+                <HorizontalSkillPath
+                  skills={currentChapter.skills.map((s) => ({
+                    id: s.id,
+                    title: s.title,
+                    state: pathStates[s.id],
+                    problemsCount: problemCountBySkill.get(s.id) ?? 0,
+                    solvedCount: progress[s.id]?.solved ?? 0,
+                  }))}
+                />
+              </div>
+            )}
+
+            {programTeaser}
+          </main>
+
+          <StudentRightColumn
+            level={level}
+            nextLevelTitle={nextLevelTitle}
+            weekActivity={weekActivity}
+            weakSkills={weakSkills}
+            tip={tip}
+          />
+        </div>
+      </div>
     </div>
   );
 }

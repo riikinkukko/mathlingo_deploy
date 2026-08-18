@@ -1,6 +1,7 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { eq, and, inArray, desc, asc, sql, isNull } from "drizzle-orm";
+import { sendTelegramMessage } from "./telegram";
 import {
   Homework,
   Problem,
@@ -33,6 +34,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     energyUpdatedAt: row.energyUpdatedAt ? row.energyUpdatedAt.toISOString() : undefined,
     proUntil: row.proUntil ? row.proUntil.toISOString() : undefined,
     isAdmin: row.isAdmin,
+    telegramChatId: row.telegramChatId ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -332,7 +334,55 @@ export async function computeStreak(studentId: string) {
   return streak;
 }
 
+/** Активность по дням текущей недели (Пн-Вс) — для визуализации серии в
+ * правой колонке дашборда. today=true отмечает сегодняшний день отдельно
+ * (даже если он ещё не "done" — цель дня могла не закрыться). */
+export async function computeWeekActivity(
+  studentId: string
+): Promise<{ label: string; done: boolean; isToday: boolean }[]> {
+  const attempts = await db
+    .select({ createdAt: schema.attempts.createdAt })
+    .from(schema.attempts)
+    .where(eq(schema.attempts.studentId, studentId));
+  const days = new Set(attempts.map((a) => a.createdAt.toISOString().slice(0, 10)));
+
+  const today = new Date();
+  const dow = (today.getDay() + 6) % 7; // 0=Пн..6=Вс
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - dow);
+
+  const labels = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
+  const result = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = d.toISOString().slice(0, 10);
+    result.push({ label: labels[i], done: days.has(key), isToday: i === dow });
+  }
+  return result;
+}
+
 export type PathState = "done" | "current" | "locked";
+
+// ---------- Цель дня — новая концепция из редизайна ----------
+// Фиксированное число задач в день для v1 (не настраивается пользователем) —
+// осознанно просто, чтобы не городить отдельную систему настроек ради
+// одной цифры. Считается по ВЕРНЫМ попыткам за сегодня, источник любой
+// (lesson/assignment/review) — в отличие от XP-прогресса пути, цель дня про
+// "позанимался сегодня", а не про конкретно прогресс по программе.
+export const DAILY_GOAL_TARGET = 3;
+
+export async function computeDailyGoal(studentId: string): Promise<{ done: number; total: number }> {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const rows = await db
+    .select({ problemId: schema.attempts.problemId, createdAt: schema.attempts.createdAt })
+    .from(schema.attempts)
+    .where(and(eq(schema.attempts.studentId, studentId), eq(schema.attempts.isCorrect, true)));
+  const solvedToday = new Set(
+    rows.filter((r) => r.createdAt.toISOString().slice(0, 10) === todayStr).map((r) => r.problemId)
+  );
+  return { done: Math.min(DAILY_GOAL_TARGET, solvedToday.size), total: DAILY_GOAL_TARGET };
+}
 
 /** Навык разблокирован, если он первый в общем списке, либо предыдущий пройден на 100%. */
 export function getPathStates(
@@ -458,6 +508,54 @@ export async function getMistakesForStudent(studentId: string): Promise<MistakeE
   return entries.sort((a, b) => b.lastAttemptAt.localeCompare(a.lastAttemptAt));
 }
 
+export interface WeakSkillEntry {
+  skillId: string;
+  skillTitle: string;
+  accuracy: number; // 0..100
+  wrongCount: number;
+  totalAttempts: number;
+}
+
+/** Навыки с наименьшей точностью — для блока "Требует внимания" на дашборде
+ * ученика. Гранулярность — навык целиком (не подтема внутри навыка, для
+ * этого понадобилось бы отдельное тегирование задач, которого пока нет).
+ * Требуем минимум 3 попытки в навыке, чтобы не выхватывать шум от 1 задачи. */
+export async function getWeakSkillsForStudent(studentId: string, limit = 2): Promise<WeakSkillEntry[]> {
+  const attempts = (
+    await db
+      .select()
+      .from(schema.attempts)
+      .where(and(eq(schema.attempts.studentId, studentId), eq(schema.attempts.source, "lesson")))
+  ).map(mapAttempt);
+  const problems = (await db.select().from(schema.problems)).map(mapProblem);
+  const skillRows = await db.select().from(schema.skills);
+
+  const bySkill = new Map<string, { correct: number; total: number }>();
+  for (const a of attempts) {
+    const problem = problems.find((p) => p.id === a.problemId);
+    if (!problem?.skillId) continue;
+    const cur = bySkill.get(problem.skillId) ?? { correct: 0, total: 0 };
+    cur.total += 1;
+    if (a.isCorrect) cur.correct += 1;
+    bySkill.set(problem.skillId, cur);
+  }
+
+  const entries: WeakSkillEntry[] = [];
+  for (const [skillId, stats] of bySkill) {
+    if (stats.total < 3) continue;
+    const skill = skillRows.find((s) => s.id === skillId);
+    if (!skill) continue;
+    entries.push({
+      skillId,
+      skillTitle: skill.title,
+      accuracy: Math.round((stats.correct / stats.total) * 100),
+      wrongCount: stats.total - stats.correct,
+      totalAttempts: stats.total,
+    });
+  }
+  return entries.sort((a, b) => a.accuracy - b.accuracy).slice(0, limit);
+}
+
 // ---------- Журнал занятий ----------
 
 export async function getLessonLogsForStudent(studentId: string) {
@@ -574,7 +672,11 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
 /** Кладёт уведомление. Принимает либо обычный db, либо активную транзакцию —
  * так вызывающий код может завернуть несколько связанных записей в одну
- * атомарную транзакцию (например, попытка + уведомление). */
+ * атомарную транзакцию (например, попытка + уведомление). Если у
+ * пользователя привязан Telegram — дублирует туда же. Ошибка отправки в
+ * Telegram НЕ прерывает основной поток (само уведомление в приложении уже
+ * записано) — сеть/недоступность Telegram не должны ронять остальную
+ * бизнес-логику. */
 export async function pushNotification(
   tx: Tx,
   params: { userId: string; type: Notification["type"]; title: string; body: string; link: string }
@@ -588,6 +690,27 @@ export async function pushNotification(
     link: params.link,
     read: false,
   });
+
+  const userRows = await tx
+    .select({ telegramChatId: schema.users.telegramChatId })
+    .from(schema.users)
+    .where(eq(schema.users.id, params.userId))
+    .limit(1);
+  const chatId = userRows[0]?.telegramChatId;
+  if (chatId) {
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
+    const text = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${
+      appUrl ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""
+    }`;
+    // Намеренно не await — не задерживаем транзакцию БД сетевым вызовом к
+    // внешнему API. Ошибка (в т.ч. таймаут) просто логируется внутри
+    // sendTelegramMessage и не всплывает наружу.
+    sendTelegramMessage(chatId, text).catch(() => {});
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export async function getNotificationsForUser(userId: string, limit = 20): Promise<Notification[]> {
@@ -661,6 +784,21 @@ export function isUnlimitedEnergy(user: User): boolean {
 
 export function isStandaloneStudent(user: User): boolean {
   return user.role === "STUDENT" && !user.teacherId;
+}
+
+/** true, если навык доступен на Free-плане: вся первая глава целиком, плюс
+ * первый навык (минимальный order) КАЖДОЙ следующей главы — "попробовать
+ * перед покупкой", а не наглухо закрытые главы 2-6. Единая точка правды —
+ * используется и на дашборде, и как серверная защита на самой странице
+ * навыка (иначе прямая ссылка обходила бы ограничение). */
+export function isSkillAccessibleOnFree(
+  skill: { id: string; order: number },
+  chapterOrder: number,
+  skillsInSameChapter: { id: string; order: number }[]
+): boolean {
+  if (chapterOrder === 1) return true;
+  const minOrder = Math.min(...skillsInSameChapter.map((s) => s.order));
+  return skill.order === minOrder;
 }
 
 /** Текущий эффективный запас энергии с учётом "ленивого" начисления —
@@ -783,6 +921,41 @@ export async function getAchievementStats(studentId: string): Promise<{
     reviews: reviewsDone,
     chapters: chaptersDone,
   };
+}
+
+// ---------- Привязка Telegram для уведомлений ----------
+
+function randomCode(): string {
+  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+}
+
+/** Генерирует одноразовый код привязки и сохраняет на пользователе — вызов
+ * со страницы профиля, перед показом t.me-ссылки. */
+export async function generateTelegramLinkCode(userId: string): Promise<string> {
+  const code = randomCode();
+  await db.update(schema.users).set({ telegramLinkCode: code }).where(eq(schema.users.id, userId));
+  return code;
+}
+
+/** Вызывается из вебхука Telegram при получении "/start код" — находит
+ * пользователя по коду, привязывает chatId, код обнуляет (одноразовый).
+ * Возвращает true, если код найден и привязка прошла. */
+export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
+  const rows = await db.select().from(schema.users).where(eq(schema.users.telegramLinkCode, code)).limit(1);
+  const user = rows[0];
+  if (!user) return false;
+  await db
+    .update(schema.users)
+    .set({ telegramChatId: chatId, telegramLinkCode: null })
+    .where(eq(schema.users.id, user.id));
+  return true;
+}
+
+export async function unlinkTelegramAccount(userId: string) {
+  await db
+    .update(schema.users)
+    .set({ telegramChatId: null, telegramLinkCode: null })
+    .where(eq(schema.users.id, userId));
 }
 
 // ---------- Admin-панель: ручное управление подписками ----------

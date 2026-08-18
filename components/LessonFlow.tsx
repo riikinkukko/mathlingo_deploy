@@ -7,7 +7,6 @@ import ProblemCard from "./ProblemCard";
 import TheoryCards from "./TheoryCards";
 import ComboBadge from "./ComboBadge";
 import CompletionCelebration from "./CompletionCelebration";
-import { IconBook } from "./icons";
 
 export default function LessonFlow({
   skillTitle,
@@ -27,9 +26,6 @@ export default function LessonFlow({
   isLastSkill: boolean;
 }) {
   const allSolvedInitially = problems.every((p) => initialStates[p.id]?.status === "solved");
-  const [phase, setPhase] = useState<"theory" | "problems">(
-    theoryCards.length > 0 && !allSolvedInitially ? "theory" : "problems"
-  );
   const [theoryOverlay, setTheoryOverlay] = useState(false);
   const [index, setIndex] = useState(0);
   const [states, setStates] = useState(initialStates);
@@ -56,21 +52,32 @@ export default function LessonFlow({
     setHadMistake(true);
   }
 
-  if (phase === "theory") {
-    return (
-      <TheoryCards
-        cards={theoryCards}
-        completeLabel="Начать задачи →"
-        onComplete={() => setPhase("problems")}
-      />
-    );
-  }
-
   const current = problems[index];
   const currentState = states[current.id] ?? { status: "unsolved" };
+  const stepPct = Math.round(((index + 1) / problems.length) * 100);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
+      <div className="mb-4 flex items-center gap-3">
+        <a
+          href="/student"
+          aria-label="Назад к пути обучения"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
+        >
+          ←
+        </a>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-display text-[17px] font-black text-ink">{skillTitle}</h1>
+          <p className="text-[12px] font-bold text-ink-soft">
+            Задача {index + 1} из {problems.length}
+            {current.egeTaskNumber ? ` · ЕГЭ №${current.egeTaskNumber}` : ""}
+          </p>
+        </div>
+      </div>
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-grid">
+        <div className="h-full rounded-pill bg-pine transition-all" style={{ width: `${stepPct}%` }} />
+      </div>
+
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           {problems.map((p, i) => {
@@ -93,20 +100,11 @@ export default function LessonFlow({
         </div>
         <div className="flex items-center gap-2">
           <ComboBadge combo={combo} />
-          {theoryCards.length > 0 && (
-            <button
-              onClick={() => setTheoryOverlay(true)}
-              className="flex items-center gap-1.5 rounded-pill border-2 border-line px-3 py-1.5 text-xs font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
-            >
-              <IconBook className="h-3.5 w-3.5" />
-              Теория
-            </button>
-          )}
         </div>
       </div>
 
       <p className="mb-3 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-        Задача {index + 1} из {problems.length} · решено {solvedCount}/{problems.length}
+        Решено {solvedCount}/{problems.length}
       </p>
 
       <ProblemCard
@@ -119,6 +117,7 @@ export default function LessonFlow({
         source="lesson"
         onSolved={() => handleSolved(current.id)}
         onWrong={handleWrong}
+        onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
       />
 
       <div className="mt-4 flex gap-2">

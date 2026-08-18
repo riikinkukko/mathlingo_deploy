@@ -12,8 +12,8 @@ import {
   toPublicProblem,
   isStandaloneStudent,
   isEffectivelyPro,
+  isSkillAccessibleOnFree,
 } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
 import LessonFlow from "@/components/LessonFlow";
 
 export default async function SkillPage({ params }: { params: { id: string } }) {
@@ -21,19 +21,29 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   const skill = await getSkill(params.id);
   if (!skill) notFound();
   const chapter = await getChapter(skill.subtopicId);
+  const allSkills = await getAllSkillsFlat();
 
-  // Free-план самостоятельных пользователей видит только первую главу — та
-  // же граница, что на дашборде, но проверенная и здесь (иначе достаточно
-  // знать прямую ссылку на навык, чтобы обойти ограничение).
+  // Free-план самостоятельных пользователей: вся первая глава + первый
+  // навык любой другой — та же граница, что на дашборде и на странице
+  // программы, но проверенная и здесь (иначе достаточно прямой ссылки на
+  // навык, чтобы обойти ограничение).
   const isFreeStandalone = isStandaloneStudent(user) && !isEffectivelyPro(user);
-  if (isFreeStandalone && chapter && chapter.order !== 1) {
-    redirect("/student/upgrade");
+  if (isFreeStandalone && chapter) {
+    const siblingSkills = allSkills.filter((s) => s.subtopicId === skill.subtopicId);
+    if (!isSkillAccessibleOnFree(skill, chapter.order, siblingSkills)) {
+      redirect("/student/upgrade");
+    }
   }
 
-  const allSkills = await getAllSkillsFlat();
   const progress = await computeStudentProgress(user.id);
   const pathStates = getPathStates(allSkills, progress);
-  if (pathStates[skill.id] === "locked") {
+  const siblingSkillsForTrial = allSkills.filter((s) => s.subtopicId === skill.subtopicId);
+  const isFreeTrialSkill =
+    isFreeStandalone && chapter && chapter.order !== 1 && isSkillAccessibleOnFree(skill, chapter.order, siblingSkillsForTrial);
+  // "Попробовать 1 навык" из следующей главы должен быть доступен сразу, а
+  // не только после того, как ученик пройдёт ВСЮ первую главу — иначе проба
+  // была бы недостижима до покупки, что бессмысленно как приём воронки.
+  if (!isFreeTrialSkill && pathStates[skill.id] === "locked") {
     redirect("/student");
   }
 
@@ -47,28 +57,16 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   const next = getNextSkill(allSkills, skill.id);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        crumbs={[
-          { label: "Путь обучения", href: "/student" },
-          { label: chapter?.title ?? "", href: "/student" },
-          { label: skill.title },
-        ]}
+    <div className="min-h-screen bg-paper px-4 py-4 pb-16">
+      <LessonFlow
+        skillTitle={skill.title}
+        theoryCards={skill.theoryCards}
+        problems={problems.map(toPublicProblem)}
+        initialStates={states}
+        nextHref={next ? `/student/skill/${next.id}` : "/student"}
+        nextLabel={next ? `Дальше: ${next.title}` : "К пути обучения"}
+        isLastSkill={!next}
       />
-      <main className="mx-auto max-w-2xl px-4">
-        <h1 className="mb-5 font-display text-2xl font-black text-ink">{skill.title}</h1>
-
-        <LessonFlow
-          skillTitle={skill.title}
-          theoryCards={skill.theoryCards}
-          problems={problems.map(toPublicProblem)}
-          initialStates={states}
-          nextHref={next ? `/student/skill/${next.id}` : "/student"}
-          nextLabel={next ? `Дальше: ${next.title}` : "К пути обучения"}
-          isLastSkill={!next}
-        />
-      </main>
     </div>
   );
 }

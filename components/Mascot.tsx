@@ -81,8 +81,10 @@ function Eye({ cx, state, size = 1 }: { cx: number; state: MoodConfig["eyes"]; s
   return (
     <g className="mascot-blink" style={{ transformOrigin: `${cx}px 52px` }}>
       <circle cx={cx} cy={52} r={rr + 2.5} fill={C.white} />
-      <circle cx={cx} cy={52} r={rr} fill={C.dark} />
-      <circle cx={cx - rr * 0.35} cy={52 - rr * 0.35} r={rr * 0.32} fill={C.white} />
+      <g className="geo-pupil">
+        <circle cx={cx} cy={52} r={rr} fill={C.dark} />
+        <circle cx={cx - rr * 0.35} cy={52 - rr * 0.35} r={rr * 0.32} fill={C.white} />
+      </g>
     </g>
   );
 }
@@ -159,6 +161,8 @@ export default function Mascot({
         @keyframes geo-wave { 0%,100% { transform: rotate(-8deg); } 50% { transform: rotate(22deg); } }
         @keyframes geo-armsup { 0%,100% { transform: translateY(0) rotate(0deg); } 50% { transform: translateY(-2px) rotate(4deg); } }
         @keyframes geo-sparkle { 0%,100% { opacity: 0.25; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.15); } }
+        @keyframes geo-pupil { 0%,100% { transform: translate(0,0); } 38% { transform: translate(2px,1px); } 70% { transform: translate(-2px,-1px); } }
+        @keyframes geo-bulb { 0%,100% { opacity: 0.55; transform: scale(0.92); } 50% { opacity: 1; transform: scale(1.08); } }
         @keyframes geo-pop { 0% { transform: scale(0.7) rotate(-4deg); opacity: 0; } 60% { transform: scale(1.08) rotate(2deg); opacity: 1; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
         .geo-pop { animation: geo-pop 0.5s cubic-bezier(.34,1.56,.64,1); }
         .geo-float { animation: geo-bob 2.8s ease-in-out infinite; }
@@ -169,6 +173,11 @@ export default function Mascot({
         .geo-up-arm-l { animation: geo-armsup 0.8s ease-in-out infinite; transform-origin: 22px 82px; }
         .geo-up-arm-r { animation: geo-armsup 0.8s ease-in-out infinite 0.15s; transform-origin: 98px 82px; }
         .geo-sparkle { animation: geo-sparkle 1.3s ease-in-out infinite; }
+        .geo-pupil { animation: geo-pupil 4s ease-in-out infinite; }
+        .geo-bulb { animation: geo-bulb 1.5s ease-in-out infinite; transform-origin: 90px 14px; }
+        @media (prefers-reduced-motion: reduce) {
+          .geo-float, .geo-breathe, .geo-orbit-group, .geo-pupil { animation: none !important; }
+        }
       `}</style>
 
       {phrase && (
@@ -273,7 +282,7 @@ export default function Mascot({
             </text>
           )}
           {cfg.extra === "bulb" && (
-            <g transform="translate(90,14)">
+            <g className="geo-bulb" transform="translate(90,14)">
               <circle cx="0" cy="0" r="9" fill="#FDE68A" stroke="#F59E0B" strokeWidth="1.5" />
               <rect x="-3" y="8" width="6" height="4" rx="1" fill="#9CA3AF" />
             </g>

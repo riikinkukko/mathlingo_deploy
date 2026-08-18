@@ -12,20 +12,35 @@ const config: Config = {
         pine: "#1CAE6B",
         "pine-light": "#E1F6EA",
         "pine-dark": "#12583A",
+        // самый тёмный зелёный — только для градиента Pro-блока (редизайн)
+        "pine-darker": "#0C3D28",
         // второй акцентный цвет пути (иконки чётных тем)
         teal: "#16B3A6",
         "teal-light": "#DDF6F3",
+        "teal-border": "#BFE9E4",
+        "teal-text": "#0E7A72",
+        "teal-dark": "#0B5C56",
         // золото — прогресс-бар, XP-молния, "стрик"
         amber: "#F0A93C",
         "amber-light": "#FCEFD8",
+        "amber-text": "#B4761F",
+        "amber-dark": "#7A4E12",
         // сердца/ошибки
         coral: "#F0555A",
         "coral-light": "#FCE4E4",
-        // фиолетовый — третий акцент пути
+        "coral-text": "#C93B40",
+        // фиолетовый — третий акцент пути / повторение
         violet: "#8B6BE0",
         "violet-light": "#EEE8FC",
+        "violet-border": "#DCD0F7",
+        "violet-text": "#6C4FC4",
+        "violet-dark": "#3D2A73",
         grid: "#DCEEE3",
         line: "#D7EAE0",
+        // более лёгкий разделитель для мобильных экранов (редизайн)
+        "line-soft": "#E4F0E9",
+        // столбик "сегодня, цель ещё не закрыта" в недельной серии (редизайн)
+        "pine-mint": "#8FD9B4",
       },
       fontFamily: {
         display: ["Nunito", "system-ui", "sans-serif"],

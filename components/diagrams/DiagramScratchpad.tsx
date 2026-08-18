@@ -19,9 +19,15 @@ const COLORS = [
 export default function DiagramScratchpad({
   spec,
   onClose,
+  onDirty,
 }: {
   spec: DiagramSpec;
   onClose: () => void;
+  /** Вызывается один раз при первом добавленном штрихе — родитель может
+   * показать индикатор "есть пометки" на превью диаграммы. Черновик
+   * остаётся эфемерным (см. README) — это просто UI-подсказка для текущей
+   * сессии, не персистентное состояние. */
+  onDirty?: () => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -132,6 +138,7 @@ export default function DiagramScratchpad({
     // уже пустой массив по ссылке, а не те точки, что реально были нарисованы.
     if (points.length >= 2) {
       setStrokes((prev) => [...prev, { tool, points, color, width }]);
+      onDirty?.();
     }
     drawing.current = { active: false, points: [] };
   }

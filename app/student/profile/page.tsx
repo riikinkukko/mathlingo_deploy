@@ -9,11 +9,17 @@ import {
   isEffectivelyPro,
 } from "@/lib/queries";
 import { computeAchievementProgress } from "@/lib/achievements";
+import { isTelegramConfigured } from "@/lib/telegram";
+import { connectTelegramAction, disconnectTelegramAction } from "@/app/actions-telegram";
 import AppHeader from "@/components/AppHeader";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: { telegram?: string; error?: string };
+}) {
   const user = (await getSessionUser())!;
   const xp = await computeXp(user.id);
   const streak = await computeStreak(user.id);
@@ -97,6 +103,47 @@ export default async function ProfilePage() {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-6 card p-5">
+          <h2 className="mb-1 font-display text-base font-black text-ink">Уведомления в Telegram</h2>
+          {searchParams.telegram === "disconnected" && (
+            <p className="mb-2 text-xs font-bold text-coral">Telegram отключён.</p>
+          )}
+          {searchParams.error === "telegram_not_configured" && (
+            <p className="mb-2 text-xs font-bold text-coral">
+              Telegram-уведомления пока не настроены на сервере.
+            </p>
+          )}
+          {user.telegramChatId ? (
+            <>
+              <p className="mb-3 text-sm text-ink-soft">
+                ✅ Подключено — новые задания, пробники и результаты проверки
+                будут приходить и сюда, и в приложение.
+              </p>
+              <form action={disconnectTelegramAction}>
+                <button type="submit" className="btn-secondary !text-xs !text-coral">
+                  Отключить
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-ink-soft">
+                Получай уведомления о новых заданиях, пробниках и проверке решений
+                прямо в Telegram — не нужно заходить в приложение, чтобы не пропустить.
+              </p>
+              {isTelegramConfigured() ? (
+                <form action={connectTelegramAction}>
+                  <button type="submit" className="btn-primary !text-xs">
+                    Подключить Telegram
+                  </button>
+                </form>
+              ) : (
+                <p className="text-xs text-ink-soft/70">Пока недоступно.</p>
+              )}
+            </>
+          )}
         </div>
       </main>
     </div>

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
 import DiagramScratchpad from "./diagrams/DiagramScratchpad";
+import MathKeyboard from "./MathKeyboard";
 import Mascot from "./Mascot";
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
@@ -22,6 +23,7 @@ export default function ProblemCard({
   locked = false,
   onSolved,
   onWrong,
+  onOpenTheory,
 }: {
   problem: PublicProblem;
   status: ProblemCardStatus;
@@ -33,6 +35,9 @@ export default function ProblemCard({
   locked?: boolean;
   onSolved?: () => void;
   onWrong?: () => void;
+  /** Кнопка "Теория" в панели инструментов — опциональна: есть только там,
+   * где родитель (LessonFlow) реально владеет карточками теории навыка. */
+  onOpenTheory?: () => void;
 }) {
   const isDetailed = problem.answerType === "DETAILED";
   const [answer, setAnswer] = useState(previousAnswer ?? "");
@@ -46,11 +51,13 @@ export default function ProblemCard({
   const [needsRevision, setNeedsRevision] = useState(status === "needs_revision");
   const [justSolved, setJustSolved] = useState(false);
   const [shakeSeq, setShakeSeq] = useState(0);
-  const [showFormula, setShowFormula] = useState(false);
+  const [formulaOpen, setFormulaOpen] = useState(false);
   const [scratchpadOpen, setScratchpadOpen] = useState(false);
+  const [hasSketch, setHasSketch] = useState(false);
   const [noEnergy, setNoEnergy] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
   const [pending, startTransition] = useTransition();
+  const answerInputRef = useRef<HTMLInputElement>(null);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,71 +106,118 @@ export default function ProblemCard({
 
   return (
     <div className={`card p-5 sm:p-6 ${solved ? "border-pine-light bg-pine-light/30" : ""}`}>
-      <div className="mb-4 flex items-start justify-between gap-3">
+      {/* Панель инструментов: ЕГЭ-чип слева, Формула/Теория справа —
+          обе открывают шпаргалку оверлеем, не уводя со задачи. */}
+      <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {problem.egeTaskNumber && (
-            <span className="rounded-pill bg-amber-light px-2.5 py-1 text-[11px] font-extrabold text-amber">
+            <span className="rounded-pill bg-amber-light px-2.5 py-1 text-[11px] font-extrabold text-amber-text">
               ЕГЭ №{problem.egeTaskNumber}
             </span>
           )}
           {isDetailed && (
-            <span className="flex items-center gap-1 rounded-pill bg-violet-light px-2.5 py-1 text-[11px] font-extrabold text-violet">
+            <span className="flex items-center gap-1 rounded-pill bg-violet-light px-2.5 py-1 text-[11px] font-extrabold text-violet-text">
               <IconClipboard className="h-3 w-3" />
               Развёрнутое решение
             </span>
           )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           {problem.keyFormula && (
             <button
               type="button"
-              onClick={() => setShowFormula((v) => !v)}
-              className="flex items-center gap-1 rounded-pill border-2 border-line px-2.5 py-1 text-[11px] font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
+              onClick={() => setFormulaOpen(true)}
+              className="rounded-pill border-2 border-line px-3 py-1.5 text-xs font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
             >
-              📐 {showFormula ? "Скрыть формулу" : "Формула"}
+              Формула
+            </button>
+          )}
+          {onOpenTheory && (
+            <button
+              type="button"
+              onClick={onOpenTheory}
+              className="rounded-pill border-2 border-line px-3 py-1.5 text-xs font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
+            >
+              Теория
             </button>
           )}
         </div>
-        {solved && (
-          <span className="rounded-pill bg-pine px-2.5 py-1 text-[11px] font-extrabold text-white">
-            Решено ✓
-          </span>
-        )}
-        {pendingReview && (
-          <span className="rounded-pill bg-amber px-2.5 py-1 text-[11px] font-extrabold text-white">
-            На проверке
-          </span>
-        )}
-        {showForm && (
-          <Mascot mood="idle" size={40} interactive float={false} className="shrink-0" />
-        )}
       </div>
 
-      {showFormula && problem.keyFormula && (
-        <div className="mb-4 flex animate-slide-up-fade items-center gap-2.5 rounded-xl bg-pine-light px-4 py-2.5">
-          <Mascot mood="hint" size={36} float={false} className="shrink-0" />
-          <span className="font-mono text-sm font-bold text-pine-dark">{problem.keyFormula}</span>
+      {(solved || pendingReview) && (
+        <div className="mb-3">
+          {solved && (
+            <span className="rounded-pill bg-pine px-2.5 py-1 text-[11px] font-extrabold text-white">
+              Решено ✓
+            </span>
+          )}
+          {pendingReview && (
+            <span className="rounded-pill bg-amber px-2.5 py-1 text-[11px] font-extrabold text-white">
+              На проверке
+            </span>
+          )}
         </div>
       )}
 
+      {/* Формула — оверлей поверх задачи, а не разворачивание внутри карточки */}
+      {formulaOpen && problem.keyFormula && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-ink/40 backdrop-blur-sm sm:items-center"
+          onClick={() => setFormulaOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-t-3xl bg-white p-6 shadow-soft sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center gap-3">
+              <Mascot mood="hint" size={48} float={false} />
+              <p className="font-display text-lg font-black text-ink">Формула-подсказка</p>
+            </div>
+            <p className="rounded-2xl bg-pine-light px-4 py-3 font-mono text-base font-bold text-pine-dark">
+              {problem.keyFormula}
+            </p>
+            <button onClick={() => setFormulaOpen(false)} className="btn-primary mt-5 w-full">
+              Понятно
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Диаграмма — тап открывает черновик для пометок */}
       {problem.diagram && (
         <>
           <button
             type="button"
             aria-label="Открыть черновик для пометок на диаграмме"
             onClick={() => setScratchpadOpen(true)}
-            className="group relative mb-4 block h-44 w-full rounded-2xl bg-pine-light/25 p-2 text-left"
+            className="group relative mb-1.5 block h-44 w-full rounded-2xl border border-line-soft bg-paper p-2 text-left transition hover:border-pine"
           >
             <DiagramRenderer spec={problem.diagram} />
-            <span className="absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-sm shadow-soft transition group-active:scale-90">
+            <span className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-sm shadow-soft transition group-active:scale-90">
               ✏️
             </span>
+            {hasSketch && (
+              <span className="absolute left-2.5 top-2.5 rounded-pill bg-pine px-2 py-0.5 text-[10px] font-extrabold text-white">
+                есть пометки
+              </span>
+            )}
           </button>
+          <p className="mb-4 text-[11px] font-bold text-ink-soft">
+            Нажми на чертёж, чтобы чертить и помечать
+          </p>
           {scratchpadOpen && (
-            <DiagramScratchpad spec={problem.diagram} onClose={() => setScratchpadOpen(false)} />
+            <DiagramScratchpad
+              spec={problem.diagram}
+              onClose={() => setScratchpadOpen(false)}
+              onDirty={() => setHasSketch(true)}
+            />
           )}
         </>
       )}
 
-      <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink">{problem.text}</p>
+      <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink" style={{ textWrap: "pretty" as any }}>
+        {problem.text}
+      </p>
 
       {needsRevision && feedback && !pendingReview && (
         <div className="mb-4 rounded-2xl border-2 border-coral-light bg-coral-light p-3.5 text-sm">
@@ -180,7 +234,7 @@ export default function ProblemCard({
       )}
 
       {showForm && (
-        <form onSubmit={handleSubmit} className="space-y-2.5">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {isDetailed ? (
             <textarea
               className="input min-h-[140px] resize-y font-sans text-[15px]"
@@ -190,21 +244,31 @@ export default function ProblemCard({
               disabled={pending}
             />
           ) : (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
+            <>
+              <div
+                className={`flex items-center justify-between rounded-2xl border-2 bg-white px-4 py-3 transition ${
+                  wrongState ? "border-coral" : "border-pine"
+                } ${shakeSeq > 0 ? "animate-shake" : ""}`}
                 key={shakeSeq}
-                className={`input !w-40 font-mono font-bold ${
-                  shakeSeq > 0 ? "animate-shake" : ""
-                } ${wrongState ? "border-coral" : ""}`}
-                placeholder="Ответ"
-                defaultValue={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                disabled={pending}
-                autoFocus={shakeSeq > 0}
-              />
-            </div>
+              >
+                <input
+                  ref={answerInputRef}
+                  className="w-full bg-transparent font-mono text-[20px] font-black text-ink outline-none placeholder:text-ink-soft/50"
+                  placeholder="Ответ"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  disabled={pending}
+                  autoFocus={shakeSeq > 0}
+                />
+              </div>
+              <MathKeyboard inputRef={answerInputRef} onInsert={setAnswer} />
+            </>
           )}
-          <button className="btn-primary" type="submit" disabled={pending}>
+          <button
+            className="btn-primary !h-14 w-full !text-base"
+            type="submit"
+            disabled={pending}
+          >
             {pending ? "Отправляем…" : isDetailed ? "Отправить на проверку" : "Проверить"}
           </button>
         </form>
