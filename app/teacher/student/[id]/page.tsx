@@ -36,17 +36,20 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const curriculum = await getCurriculum();
-  const progress = await computeStudentProgress(student.id);
-  const stats = await computeOverallStats(student.id);
-  const homeworks = await getHomeworksForStudent(student.id);
+  const [curriculum, progress, stats, homeworks, mistakesRaw, lessonLogs, pendingReviewsRaw, parents] =
+    await Promise.all([
+      getCurriculum(),
+      computeStudentProgress(student.id),
+      computeOverallStats(student.id),
+      getHomeworksForStudent(student.id),
+      getMistakesForStudent(student.id),
+      getLessonLogsForStudent(student.id),
+      getPendingReviewsForTeacher(teacher.id),
+      getParentsOfStudent(student.id),
+    ]);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
-  const mistakes = (await getMistakesForStudent(student.id)).slice(0, 8);
-  const lessonLogs = await getLessonLogsForStudent(student.id);
-  const pendingReviews = (await getPendingReviewsForTeacher(teacher.id)).filter(
-    (r) => r.student.id === student.id
-  );
-  const parents = await getParentsOfStudent(student.id);
+  const mistakes = mistakesRaw.slice(0, 8);
+  const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
 
   return (
     <div className="min-h-screen pb-16">

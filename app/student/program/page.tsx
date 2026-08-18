@@ -16,8 +16,7 @@ import { IconCheck, IconLock } from "@/components/icons";
 
 export default async function ProgramPage() {
   const user = (await getSessionUser())!;
-  const curriculum = await getCurriculum();
-  const progress = await computeStudentProgress(user.id);
+  const [curriculum, progress] = await Promise.all([getCurriculum(), computeStudentProgress(user.id)]);
   const allSkills = curriculum.flatMap((t) => t.chapters.flatMap((c) => c.skills));
   const pathStates = getPathStates(allSkills, progress);
 

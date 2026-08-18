@@ -9,8 +9,10 @@ export default async function TeacherDashboard() {
 
   const cards = await Promise.all(
     students.map(async (s) => {
-      const stats = await computeOverallStats(s.id);
-      const homeworks = await getHomeworksForStudent(s.id);
+      const [stats, homeworks] = await Promise.all([
+        computeOverallStats(s.id),
+        getHomeworksForStudent(s.id),
+      ]);
       const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, s.id)));
       const pendingCount = statuses.filter((st) => !st.complete).length;
       const overdue = statuses.some((st) => !st.complete && st.overdue);

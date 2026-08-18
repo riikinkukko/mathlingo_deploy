@@ -20,8 +20,17 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   const user = (await getSessionUser())!;
   const skill = await getSkill(params.id);
   if (!skill) notFound();
-  const chapter = await getChapter(skill.subtopicId);
-  const allSkills = await getAllSkillsFlat();
+
+  // Все четыре запроса ниже зависят только от skill.id/user.id, уже
+  // известных — независимы друг от друга, распараллеливаем вместо
+  // последовательного await (главная причина "долгой загрузки" — водопад
+  // из нескольких круговых задержек до сети Neon подряд).
+  const [chapter, allSkills, progress, problemsRaw] = await Promise.all([
+    getChapter(skill.subtopicId),
+    getAllSkillsFlat(),
+    computeStudentProgress(user.id),
+    getProblemsForSkill(skill.id),
+  ]);
 
   // Free-план самостоятельных пользователей: вся первая глава + первый
   // навык любой другой — та же граница, что на дашборде и на странице
@@ -35,7 +44,6 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
     }
   }
 
-  const progress = await computeStudentProgress(user.id);
   const pathStates = getPathStates(allSkills, progress);
   const siblingSkillsForTrial = allSkills.filter((s) => s.subtopicId === skill.subtopicId);
   const isFreeTrialSkill =
@@ -49,7 +57,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
 
   // DETAILED (развёрнутые) задачи — для самостоятельных на Free их прячем:
   // без учителя и без Pro-самопроверки они были бы недоступны/бессмысленны.
-  let problems = await getProblemsForSkill(skill.id);
+  let problems = problemsRaw;
   if (isFreeStandalone) {
     problems = problems.filter((p) => p.answerType !== "DETAILED");
   }

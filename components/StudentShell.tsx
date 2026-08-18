@@ -33,13 +33,17 @@ export default async function StudentShell({
   children: React.ReactNode;
 }) {
   const user = (await getSessionUser())!;
-  const notifications = await getNotificationsForUser(user.id);
-  const unreadCount = await getUnreadNotificationCount(user.id);
-  const dueReviewCount = await getDueReviewCount(user.id);
-  const allHw = await getHomeworksForStudent(user.id);
+  // Та же логика, что и на дашборде — все запросы независимы друг от
+  // друга, распараллеливаем вместо последовательного await.
+  const [notifications, unreadCount, dueReviewCount, allHw, mistakes] = await Promise.all([
+    getNotificationsForUser(user.id),
+    getUnreadNotificationCount(user.id),
+    getDueReviewCount(user.id),
+    getHomeworksForStudent(user.id),
+    getMistakesForStudent(user.id),
+  ]);
   const hwStatuses = await Promise.all(allHw.map((h) => homeworkStatus(h, user.id)));
   const pendingHwCount = allHw.filter((_, i) => !hwStatuses[i].complete).length;
-  const mistakes = await getMistakesForStudent(user.id);
   const unresolvedMistakesCount = mistakes.filter((m) => !m.resolved).length;
 
   const standalone = isStandaloneStudent(user);

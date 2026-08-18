@@ -42,23 +42,46 @@ const GEO_TIPS = [
 
 export default async function StudentDashboard() {
   const user = (await getSessionUser())!;
-  const curriculum = await getCurriculum();
-  const progress = await computeStudentProgress(user.id);
-  const xp = await computeXp(user.id);
-  const streak = await computeStreak(user.id);
+
+  // Все 12 запросов ниже зависят только от user.id, известного уже сейчас —
+  // никакой из них не нуждается в результате другого. Раньше шли строго
+  // последовательно (await X; await Y; ...) — 12 круговых задержек до сети
+  // Neon подряд. Теперь — один Promise.all, то есть по факту одна задержка
+  // вместо двенадцати. Это оказалось главной причиной "долгой загрузки" —
+  // не хостинг, а водопад запросов на самом тяжёлом экране приложения.
+  const [
+    curriculum,
+    progress,
+    xp,
+    streak,
+    dailyGoal,
+    weekActivity,
+    weakSkills,
+    notifications,
+    unreadCount,
+    mistakes,
+    allHw,
+    dueReviewCount,
+  ] = await Promise.all([
+    getCurriculum(),
+    computeStudentProgress(user.id),
+    computeXp(user.id),
+    computeStreak(user.id),
+    computeDailyGoal(user.id),
+    computeWeekActivity(user.id),
+    getWeakSkillsForStudent(user.id),
+    getNotificationsForUser(user.id),
+    getUnreadNotificationCount(user.id),
+    getMistakesForStudent(user.id),
+    getHomeworksForStudent(user.id),
+    getDueReviewCount(user.id),
+  ]);
+
   const level = getLevelInfo(xp);
   const nextLevelTitle = LEVELS[level.index + 1]?.title ?? null;
-  const dailyGoal = await computeDailyGoal(user.id);
-  const weekActivity = await computeWeekActivity(user.id);
-  const weakSkills = await getWeakSkillsForStudent(user.id);
-  const notifications = await getNotificationsForUser(user.id);
-  const unreadCount = await getUnreadNotificationCount(user.id);
-  const mistakes = await getMistakesForStudent(user.id);
   const unresolvedMistakesCount = mistakes.filter((m) => !m.resolved).length;
-  const allHw = await getHomeworksForStudent(user.id);
   const hwStatuses = await Promise.all(allHw.map((h) => homeworkStatus(h, user.id)));
   const pendingHw = allHw.filter((_, i) => !hwStatuses[i].complete);
-  const dueReviewCount = await getDueReviewCount(user.id);
 
   const standalone = isStandaloneStudent(user);
   const isFreeStandalone = standalone && !isEffectivelyPro(user);

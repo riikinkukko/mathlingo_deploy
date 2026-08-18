@@ -13,8 +13,10 @@ export default async function ParentDashboard() {
 
   const cards = await Promise.all(
     children.map(async (child) => {
-      const stats = await computeOverallStats(child.id);
-      const homeworks = await getHomeworksForStudent(child.id);
+      const [stats, homeworks] = await Promise.all([
+        computeOverallStats(child.id),
+        getHomeworksForStudent(child.id),
+      ]);
       const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, child.id)));
       const pendingCount = statuses.filter((s) => !s.complete).length;
       const overdue = statuses.some((s) => !s.complete && s.overdue);
