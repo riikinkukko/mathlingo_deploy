@@ -13,7 +13,7 @@ import {
   getParentsOfStudent,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 import FractionBadge from "@/components/FractionBadge";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
@@ -52,11 +52,7 @@ export default async function StudentDetailPage({
   const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={teacher}
-        crumbs={[{ label: "Мои ученики", href: "/teacher" }, { label: student.name }]}
-      />
+    <TeacherShell active="students" title={student.name}>
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -209,7 +205,7 @@ export default async function StudentDetailPage({
           </div>
         </section>
       </main>
-    </div>
+    </TeacherShell>
   );
 }
 

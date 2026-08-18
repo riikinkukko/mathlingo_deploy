@@ -1,7 +1,7 @@
 import { getSessionUser } from "@/lib/auth";
 import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 
 export default async function TeacherDashboard() {
   const user = (await getSessionUser())!;
@@ -21,9 +21,8 @@ export default async function TeacherDashboard() {
   );
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader user={user} />
-      <main className="mx-auto max-w-3xl px-4">
+    <TeacherShell active="students" title="Мои ученики">
+      <main className="mx-auto max-w-3xl px-4 pt-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-black text-ink">Мои ученики</h1>
@@ -83,6 +82,6 @@ export default async function TeacherDashboard() {
           )}
         </div>
       </main>
-    </div>
+    </TeacherShell>
   );
 }

@@ -10,7 +10,7 @@ import {
   getLessonLogsForStudent,
   isParentOf,
 } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import ParentShell from "@/components/ParentShell";
 import FractionBadge from "@/components/FractionBadge";
 
 const KIND_LABEL: Record<string, string> = {
@@ -41,11 +41,7 @@ export default async function ChildDetailPage({
   const statusById = new Map(homeworkStatuses);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={parent}
-        crumbs={[{ label: "Дети", href: "/parent" }, { label: child.name }]}
-      />
+    <ParentShell title={child.name}>
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6">
           <h1 className="font-display text-2xl font-black text-ink">{child.name}</h1>
@@ -132,7 +128,7 @@ export default async function ChildDetailPage({
           )}
         </section>
       </main>
-    </div>
+    </ParentShell>
   );
 }
 

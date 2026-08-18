@@ -1,6 +1,6 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
-import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser } from "./icons";
+import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser, IconGrid } from "./icons";
 import { Notification } from "@/lib/types";
 
 export default function StudentSidebar({
@@ -15,7 +15,7 @@ export default function StudentSidebar({
   notifications,
   unreadCount,
 }: {
-  active: "path" | "review" | "homework" | "mistakes" | "profile";
+  active: "subjects" | "path" | "review" | "homework" | "mistakes" | "profile";
   reviewCount: number;
   homeworkCount: number;
   homeworkLabel: string;
@@ -27,6 +27,7 @@ export default function StudentSidebar({
   unreadCount: number;
 }) {
   const items = [
+    { key: "subjects", label: "Предметы", href: "/student/subjects", icon: IconGrid, badge: 0 },
     { key: "path", label: "Путь обучения", href: "/student", icon: IconMap, badge: 0 },
     { key: "review", label: "Повторение", href: "/student/review", icon: IconRepeat, badge: reviewCount },
     { key: "homework", label: homeworkLabel, href: "/student/homework", icon: IconClipboard, badge: homeworkCount },

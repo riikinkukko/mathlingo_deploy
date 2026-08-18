@@ -1,5 +1,6 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
+import { IconGrid } from "./icons";
 import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queries";
 
 export default async function StudentDashboardHeader({
@@ -40,6 +41,13 @@ export default async function StudentDashboardHeader({
               ⚡ {energy}/{energyMax}
             </a>
           )}
+          <a
+            href="/student/subjects"
+            aria-label="Все предметы"
+            className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
+          >
+            <IconGrid className="h-4 w-4" />
+          </a>
           <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
         </div>
       </div>

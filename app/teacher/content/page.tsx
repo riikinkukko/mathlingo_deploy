@@ -1,6 +1,6 @@
 import { getSessionUser } from "@/lib/auth";
 import { getCurriculum, getProblemsForSkill } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 import { createChapterAction } from "@/app/actions-content";
 import { IconClipboard } from "@/components/icons";
 
@@ -18,9 +18,8 @@ export default async function ContentOverviewPage({
   const countBySkill = new Map(countPairs);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader user={teacher} crumbs={[{ label: "Мои ученики", href: "/teacher" }, { label: "Контент программы" }]} />
-      <main className="mx-auto max-w-3xl px-4">
+    <TeacherShell active="content" title="Контент программы">
+      <main className="mx-auto max-w-3xl px-4 pt-6">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-black text-ink">Контент программы</h1>
@@ -101,6 +100,6 @@ export default async function ContentOverviewPage({
           </form>
         </details>
       </main>
-    </div>
+    </TeacherShell>
   );
 }

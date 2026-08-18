@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getCurriculum, getProblemsForSkill, getUserById } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 import { createHomeworkAction } from "@/app/actions";
 import AssignmentKindPicker from "./AssignmentKindPicker";
 import CustomProblemBuilder from "./CustomProblemBuilder";
@@ -30,16 +30,8 @@ export default async function NewHomeworkPage({
   const defaultDueStr = defaultDue.toISOString().slice(0, 10);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={teacher}
-        crumbs={[
-          { label: "Мои ученики", href: "/teacher" },
-          { label: student.name, href: `/teacher/student/${student.id}` },
-          { label: "Новое задание" },
-        ]}
-      />
-      <main className="mx-auto max-w-3xl px-4">
+    <TeacherShell active="students" title={`Задание для ${student.name}`}>
+      <main className="mx-auto max-w-3xl px-4 pt-6">
         <h1 className="mb-1 font-display text-2xl font-black text-ink">
           Задание для {student.name}
         </h1>
@@ -127,6 +119,6 @@ export default async function NewHomeworkPage({
           </button>
         </form>
       </main>
-    </div>
+    </TeacherShell>
   );
 }

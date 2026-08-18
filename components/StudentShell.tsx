@@ -28,7 +28,7 @@ export default async function StudentShell({
   title,
   children,
 }: {
-  active: "path" | "review" | "homework" | "mistakes" | "profile";
+  active: "subjects" | "path" | "review" | "homework" | "mistakes" | "profile";
   title: string;
   children: React.ReactNode;
 }) {
@@ -54,10 +54,10 @@ export default async function StudentShell({
   return (
     <div className="min-h-screen bg-paper">
       <header className="flex items-center justify-between border-b border-line-soft bg-paper px-[18px] py-3 lg:hidden">
-        <div className="flex items-center gap-2.5">
+        <a href="/student/subjects" className="flex items-center gap-2.5">
           <Mascot mood="idle" size={32} float={false} />
           <span className="font-display text-[16px] font-black text-ink">{title}</span>
-        </div>
+        </a>
         <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
       </header>
 

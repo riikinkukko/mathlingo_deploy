@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getSkill, getChapter, getProblemsForSkill, countAttemptsForProblem } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
 import { updateSkillAction, deleteProblemAction } from "@/app/actions-content";
 
@@ -20,16 +20,8 @@ export default async function SkillEditPage({
   const attemptCounts = await Promise.all(problems.map((p) => countAttemptsForProblem(p.id)));
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={teacher}
-        crumbs={[
-          { label: "Мои ученики", href: "/teacher" },
-          { label: "Контент программы", href: "/teacher/content" },
-          { label: skill.title },
-        ]}
-      />
-      <main className="mx-auto max-w-2xl px-4">
+    <TeacherShell active="content" title={skill.title}>
+      <main className="mx-auto max-w-2xl px-4 pt-6">
         <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
           {chapter?.title ?? "—"}
         </p>
@@ -112,6 +104,6 @@ export default async function SkillEditPage({
           )}
         </div>
       </main>
-    </div>
+    </TeacherShell>
   );
 }

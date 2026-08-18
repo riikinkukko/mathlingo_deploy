@@ -5,7 +5,7 @@ import {
   getHomeworksForStudent,
   homeworkStatus,
 } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import ParentShell from "@/components/ParentShell";
 
 export default async function ParentDashboard() {
   const user = (await getSessionUser())!;
@@ -25,8 +25,7 @@ export default async function ParentDashboard() {
   );
 
   return (
-    <div className="min-h-screen">
-      <AppHeader user={user} />
+    <ParentShell title="Прогресс детей">
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6">
           <h1 className="font-display text-2xl font-black text-ink">Прогресс детей</h1>
@@ -73,6 +72,6 @@ export default async function ParentDashboard() {
           )}
         </div>
       </main>
-    </div>
+    </ParentShell>
   );
 }

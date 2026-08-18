@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getChapter } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
 import { createSkillAction } from "@/app/actions-content";
 
@@ -16,16 +16,8 @@ export default async function NewSkillPage({
   if (!subtopicId || !chapter) notFound();
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={teacher}
-        crumbs={[
-          { label: "Мои ученики", href: "/teacher" },
-          { label: "Контент программы", href: "/teacher/content" },
-          { label: "Новый навык" },
-        ]}
-      />
-      <main className="mx-auto max-w-2xl px-4">
+    <TeacherShell active="content" title="Новый навык">
+      <main className="mx-auto max-w-2xl px-4 pt-6">
         <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">{chapter.title}</p>
         <h1 className="mb-6 font-display text-2xl font-black text-ink">Новый навык</h1>
 
@@ -53,6 +45,6 @@ export default async function NewSkillPage({
           </button>
         </form>
       </main>
-    </div>
+    </TeacherShell>
   );
 }
