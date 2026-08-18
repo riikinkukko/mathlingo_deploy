@@ -17,6 +17,9 @@ import {
   computeDailyGoal,
   computeWeekActivity,
   getWeakSkillsForStudent,
+  getMistakesForStudent,
+  getNotificationsForUser,
+  getUnreadNotificationCount,
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
@@ -24,6 +27,7 @@ import StudentDashboardHeader from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
 import BottomTabBar from "@/components/BottomTabBar";
+import NotificationBell from "@/components/NotificationBell";
 import Mascot from "@/components/Mascot";
 import VerticalSkillPath from "@/components/VerticalSkillPath";
 import HorizontalSkillPath from "@/components/HorizontalSkillPath";
@@ -47,6 +51,10 @@ export default async function StudentDashboard() {
   const dailyGoal = await computeDailyGoal(user.id);
   const weekActivity = await computeWeekActivity(user.id);
   const weakSkills = await getWeakSkillsForStudent(user.id);
+  const notifications = await getNotificationsForUser(user.id);
+  const unreadCount = await getUnreadNotificationCount(user.id);
+  const mistakes = await getMistakesForStudent(user.id);
+  const unresolvedMistakesCount = mistakes.filter((m) => !m.resolved).length;
   const allHw = await getHomeworksForStudent(user.id);
   const hwStatuses = await Promise.all(allHw.map((h) => homeworkStatus(h, user.id)));
   const pendingHw = allHw.filter((_, i) => !hwStatuses[i].complete);
@@ -216,7 +224,7 @@ export default async function StudentDashboard() {
           )}
           {programTeaser}
         </main>
-        <BottomTabBar reviewCount={dueReviewCount} homeworkLabel={standalone ? "Пробники" : "Задания"} />
+        <BottomTabBar reviewCount={dueReviewCount} mistakesCount={unresolvedMistakesCount} homeworkLabel={standalone ? "Пробники" : "Задания"} />
       </div>
 
       {/* ---------- ДЕСКТОПНАЯ РАСКЛАДКА (≥ 1024px) ---------- */}
@@ -226,9 +234,12 @@ export default async function StudentDashboard() {
           reviewCount={dueReviewCount}
           homeworkCount={pendingHw.length}
           homeworkLabel={standalone ? "Пробники" : "Домашка"}
+          mistakesCount={unresolvedMistakesCount}
           energy={energy}
           energyMax={FREE_MAX_ENERGY}
           isPro={!standalone || isEffectivelyPro(user)}
+          notifications={notifications}
+          unreadCount={unreadCount}
         />
         <div className="ml-[236px] flex gap-6 px-8 py-6">
           <main className="min-w-0 flex-1 space-y-5">
@@ -248,6 +259,7 @@ export default async function StudentDashboard() {
                 <span className="rounded-pill bg-coral-light px-3 py-1.5 text-[13px] font-black text-coral-text">
                   🔥 {streak}
                 </span>
+                <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
               </div>
             </div>
 

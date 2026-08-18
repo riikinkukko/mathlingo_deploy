@@ -2,15 +2,13 @@ import { getSessionUser } from "@/lib/auth";
 import {
   getHomeworksForStudent,
   homeworkStatus,
-  computeXp,
-  computeStreak,
   isStandaloneStudent,
   isEffectivelyPro,
 } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
+import StudentShell from "@/components/StudentShell";
 import FractionBadge from "@/components/FractionBadge";
 import Mascot from "@/components/Mascot";
-import { IconMap, IconClipboard, IconCheck, IconCrown } from "@/components/icons";
+import { IconClipboard, IconCheck, IconCrown } from "@/components/icons";
 
 const KIND_META: Record<string, { label: string; bg: string }> = {
   homework: { label: "Домашнее задание", bg: "bg-amber" },
@@ -20,8 +18,6 @@ const KIND_META: Record<string, { label: string; bg: string }> = {
 
 export default async function HomeworkListPage() {
   const user = (await getSessionUser())!;
-  const xp = await computeXp(user.id);
-  const streak = await computeStreak(user.id);
   const homeworks = await getHomeworksForStudent(user.id);
   const statusPairs = await Promise.all(homeworks.map(async (hw) => [hw.id, await homeworkStatus(hw, user.id)] as const));
   const statusById = new Map(statusPairs);
@@ -31,17 +27,9 @@ export default async function HomeworkListPage() {
   const tabLabel = standalone ? "Пробники" : "Домашнее задание";
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        gamification={{ xp, streak }}
-        subTabs={[
-          { label: "Путь обучения", href: "/student", active: false, icon: <IconMap className="h-4 w-4" /> },
-          { label: tabLabel, href: "/student/homework", active: true, icon: <IconClipboard className="h-4 w-4" /> },
-        ]}
-      />
-
-      <main className="mx-auto max-w-3xl px-4 pt-6">
+    <StudentShell active="homework" title={tabLabel}>
+      <div className="px-4 py-6 lg:px-8">
+      <div className="mx-auto max-w-3xl">
         {standalone && !isPro ? (
           // Free-самостоятельный: своей домашки нет и авторские пробники
           // не открыты — вместо пустого списка честный апсейл на Pro.
@@ -119,7 +107,8 @@ export default async function HomeworkListPage() {
             })}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+      </div>
+    </StudentShell>
   );
 }

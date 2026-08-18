@@ -1,13 +1,11 @@
 import { getSessionUser } from "@/lib/auth";
-import { getAchievementStats, computeXp, computeStreak } from "@/lib/queries";
+import { getAchievementStats } from "@/lib/queries";
 import { computeAchievementProgress } from "@/lib/achievements";
-import AppHeader from "@/components/AppHeader";
+import StudentShell from "@/components/StudentShell";
 import { pluralRu } from "@/lib/pluralize";
 
 export default async function AchievementsPage() {
   const user = (await getSessionUser())!;
-  const xp = await computeXp(user.id);
-  const streak = await computeStreak(user.id);
   const stats = await getAchievementStats(user.id);
   const progress = computeAchievementProgress(stats);
 
@@ -15,13 +13,9 @@ export default async function AchievementsPage() {
   const earnedTiers = progress.reduce((sum, p) => sum + (p.tierIndex + 1), 0);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        gamification={{ xp, streak }}
-        crumbs={[{ label: "Путь обучения", href: "/student" }, { label: "Достижения" }]}
-      />
-      <main className="mx-auto max-w-2xl px-4">
+    <StudentShell active="profile" title="Достижения">
+      <div className="px-4 py-6 lg:px-8">
+      <div className="mx-auto max-w-2xl">
         <h1 className="mb-1 font-display text-2xl font-black text-ink">Достижения</h1>
         <p className="mb-6 text-sm text-ink-soft">
           Получено {earnedTiers} из {totalTiers} {pluralRu(totalTiers, ["уровня", "уровней", "уровней"])}
@@ -68,7 +62,8 @@ export default async function AchievementsPage() {
             );
           })}
         </div>
-      </main>
-    </div>
+      </div>
+      </div>
+    </StudentShell>
   );
 }

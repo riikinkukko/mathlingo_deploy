@@ -1,39 +1,51 @@
 import Mascot from "./Mascot";
-import { IconMap, IconRepeat, IconClipboard, IconBook } from "./icons";
+import NotificationBell from "./NotificationBell";
+import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser } from "./icons";
+import { Notification } from "@/lib/types";
 
 export default function StudentSidebar({
   active,
   reviewCount,
   homeworkCount,
   homeworkLabel,
+  mistakesCount,
   energy,
   energyMax,
   isPro,
+  notifications,
+  unreadCount,
 }: {
-  active: "path" | "review" | "homework" | "mistakes";
+  active: "path" | "review" | "homework" | "mistakes" | "profile";
   reviewCount: number;
   homeworkCount: number;
   homeworkLabel: string;
+  mistakesCount: number;
   energy: number | null;
   energyMax: number;
   isPro: boolean;
+  notifications: Notification[];
+  unreadCount: number;
 }) {
   const items = [
     { key: "path", label: "Путь обучения", href: "/student", icon: IconMap, badge: 0 },
     { key: "review", label: "Повторение", href: "/student/review", icon: IconRepeat, badge: reviewCount },
     { key: "homework", label: homeworkLabel, href: "/student/homework", icon: IconClipboard, badge: homeworkCount },
-    { key: "mistakes", label: "Мои ошибки", href: "/student/homework", icon: IconBook, badge: 0 },
+    { key: "mistakes", label: "Мои ошибки", href: "/student/mistakes", icon: IconBook, badge: mistakesCount },
+    { key: "profile", label: "Профиль", href: "/student/profile", icon: IconUser, badge: 0 },
   ] as const;
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[236px] flex-col bg-pine-dark px-4 py-5 lg:flex">
-      <a href="/student" className="mb-6 flex items-center gap-2.5 px-1">
-        <Mascot mood="happy" size={36} float={false} />
-        <div>
-          <p className="font-display text-[15px] font-black leading-tight text-white">Планиметрика</p>
-          <p className="text-[10px] font-bold uppercase tracking-wide text-white/50">ЕГЭ · Профиль</p>
-        </div>
-      </a>
+      <div className="mb-6 flex items-center justify-between px-1">
+        <a href="/student" className="flex items-center gap-2.5">
+          <Mascot mood="happy" size={36} float={false} />
+          <div>
+            <p className="font-display text-[15px] font-black leading-tight text-white">Планиметрика</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide text-white/50">ЕГЭ · Профиль</p>
+          </div>
+        </a>
+        <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} variant="dark" />
+      </div>
 
       <nav className="flex flex-col gap-1">
         {items.map((item) => {

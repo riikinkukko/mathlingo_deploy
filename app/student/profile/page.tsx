@@ -11,7 +11,8 @@ import {
 import { computeAchievementProgress } from "@/lib/achievements";
 import { isTelegramConfigured } from "@/lib/telegram";
 import { connectTelegramAction, disconnectTelegramAction } from "@/app/actions-telegram";
-import AppHeader from "@/components/AppHeader";
+import { logoutAction } from "@/app/actions";
+import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
 
@@ -38,24 +39,30 @@ export default async function ProfilePage({
   });
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        gamification={{ xp, streak }}
-        crumbs={[{ label: "Путь обучения", href: "/student" }, { label: "Профиль" }]}
-      />
-      <main className="mx-auto max-w-2xl px-4">
-        <div className="mb-6 flex items-center gap-4">
-          <Mascot mood="happy" size={84} float={false} />
-          <div>
-            <h1 className="font-display text-2xl font-black text-ink">{user.name}</h1>
-            <p className="text-xs text-ink-soft">С нами с {memberSince}</p>
-            {pro && (
-              <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-gradient-to-r from-amber to-coral px-2.5 py-1 text-[11px] font-extrabold text-white">
-                <IconCrown className="h-3 w-3" /> PRO
-              </span>
-            )}
+    <StudentShell active="profile" title="Профиль">
+      <div className="px-4 py-6 lg:px-8">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-6 flex items-start justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <Mascot mood="happy" size={84} float={false} />
+            <div>
+              <h1 className="font-display text-2xl font-black text-ink">{user.name}</h1>
+              <p className="text-xs text-ink-soft">С нами с {memberSince}</p>
+              {pro && (
+                <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-gradient-to-r from-amber to-coral px-2.5 py-1 text-[11px] font-extrabold text-white">
+                  <IconCrown className="h-3 w-3" /> PRO
+                </span>
+              )}
+            </div>
           </div>
+          <form action={logoutAction}>
+            <button
+              type="submit"
+              className="shrink-0 rounded-full border-2 border-line px-3 py-1.5 text-xs font-extrabold uppercase text-ink-soft transition hover:border-coral hover:text-coral"
+            >
+              Выйти
+            </button>
+          </form>
         </div>
 
         <div className="card mb-6 p-5">
@@ -145,8 +152,9 @@ export default async function ProfilePage({
             </>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+      </div>
+    </StudentShell>
   );
 }
 

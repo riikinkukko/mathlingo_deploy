@@ -10,7 +10,7 @@ import {
 import { upgradeToProAction, downgradeToFreeAction } from "@/app/actions";
 import { startPaymentAction } from "@/app/actions-payments";
 import { isYooKassaConfigured } from "@/lib/yookassa";
-import AppHeader from "@/components/AppHeader";
+import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
 
@@ -44,9 +44,9 @@ export default async function UpgradePage({
   const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader user={user} crumbs={[{ label: "Путь обучения", href: "/student" }, { label: "Тариф" }]} />
-      <main className="mx-auto max-w-2xl px-4">
+    <StudentShell active="profile" title="Тариф">
+      <div className="px-4 py-6 lg:px-8">
+      <div className="mx-auto max-w-2xl">
         <div className="mb-6 text-center">
           <Mascot mood={isPro ? "celebrating" : energy === 0 ? "worried" : "idle"} size={90} />
           <h1 className="mt-2 font-display text-2xl font-black text-ink">Твой тариф</h1>
@@ -138,7 +138,8 @@ export default async function UpgradePage({
             ? "Оплата через ЮKassa — разовый платёж за период, без автопродления."
             : "Это MVP-демонстрация: переключение тарифа мгновенное и бесплатное, реальной оплаты нет."}
         </p>
-      </main>
-    </div>
+      </div>
+      </div>
+    </StudentShell>
   );
 }

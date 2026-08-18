@@ -29,9 +29,29 @@ export default function ReviewFlow({
 
   const current = items[index];
   const solved = solvedIds.has(current.problem.id);
+  const stepPct = Math.round(((index + 1) / items.length) * 100);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
+      <div className="mb-4 flex items-center gap-3">
+        <a
+          href="/student"
+          aria-label="Назад к пути обучения"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
+        >
+          ←
+        </a>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-display text-[17px] font-black text-ink">Повторение</h1>
+          <p className="text-[12px] font-bold text-ink-soft">
+            Задача {index + 1} из {items.length} · решено {solvedIds.size}/{items.length}
+          </p>
+        </div>
+      </div>
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-grid">
+        <div className="h-full rounded-pill bg-violet transition-all" style={{ width: `${stepPct}%` }} />
+      </div>
+
       <div className="mb-4 flex items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {items.map((it, i) => {
@@ -51,11 +71,8 @@ export default function ReviewFlow({
         <ComboBadge combo={combo} />
       </div>
 
-      <p className="mb-1.5 text-[11px] font-bold text-ink-soft">
+      <p className="mb-4 text-[11px] font-bold text-ink-soft">
         Из навыка «{current.skillTitle}» · встречалась вам {current.box > 1 ? "уже несколько раз" : "недавно"}
-      </p>
-      <p className="mb-3 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-        Повторение {index + 1} из {items.length} · решено {solvedIds.size}/{items.length}
       </p>
 
       <ProblemCard

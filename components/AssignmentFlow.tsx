@@ -53,9 +53,29 @@ export default function AssignmentFlow({
 
   const current = items[index];
   const currentState = states[current.problem.id] ?? { status: "unsolved" };
+  const stepPct = Math.round(((index + 1) / items.length) * 100);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
+      <div className="mb-4 flex items-center gap-3">
+        <a
+          href="/student/homework"
+          aria-label="Назад к списку заданий"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
+        >
+          ←
+        </a>
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate font-display text-[17px] font-black text-ink">{title}</h1>
+          <p className="text-[12px] font-bold text-ink-soft">
+            Задача {index + 1} из {items.length} · решено {solvedCount}/{items.length}
+          </p>
+        </div>
+      </div>
+      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-grid">
+        <div className="h-full rounded-pill bg-amber transition-all" style={{ width: `${stepPct}%` }} />
+      </div>
+
       {deadlineAt && !expired && (
         <div className="mb-4 flex justify-end">
           <CountdownTimer deadlineAt={deadlineAt} onExpire={() => setExpired(true)} />
@@ -86,10 +106,7 @@ export default function AssignmentFlow({
         <ComboBadge combo={combo} />
       </div>
 
-      <p className="mb-1.5 text-[11px] font-bold text-ink-soft">Из навыка «{current.skillTitle}»</p>
-      <p className="mb-3 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-        Задача {index + 1} из {items.length} · решено {solvedCount}/{items.length}
-      </p>
+      <p className="mb-4 text-[11px] font-bold text-ink-soft">Из навыка «{current.skillTitle}»</p>
 
       <ProblemCard
         key={current.problem.id}

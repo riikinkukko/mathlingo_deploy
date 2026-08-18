@@ -19,9 +19,13 @@ function timeAgo(iso: string) {
 export default function NotificationBell({
   initialNotifications,
   initialUnread,
+  variant = "light",
 }: {
   initialNotifications: Notification[];
   initialUnread: number;
+  /** "dark" — для использования на тёмном фоне (сайдбар); меняется только
+   * стиль кнопки-триггера, само выпадающее меню всегда светлое. */
+  variant?: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(initialNotifications);
@@ -60,7 +64,11 @@ export default function NotificationBell({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-full border-2 border-line text-ink-soft transition hover:border-pine hover:text-pine"
+        className={`relative flex h-9 w-9 items-center justify-center rounded-full border-2 transition ${
+          variant === "dark"
+            ? "border-white/20 text-white hover:border-white/40"
+            : "border-line text-ink-soft hover:border-pine hover:text-pine"
+        }`}
         aria-label="Уведомления"
       >
         <IconBell className="h-4 w-4" />

@@ -1,0 +1,82 @@
+import { getSessionUser } from "@/lib/auth";
+import {
+  getNotificationsForUser,
+  getUnreadNotificationCount,
+  getDueReviewCount,
+  getHomeworksForStudent,
+  homeworkStatus,
+  getMistakesForStudent,
+  isStandaloneStudent,
+  isEffectivelyPro,
+  getEffectiveEnergy,
+  FREE_MAX_ENERGY,
+} from "@/lib/queries";
+import StudentSidebar from "./StudentSidebar";
+import BottomTabBar from "./BottomTabBar";
+import NotificationBell from "./NotificationBell";
+import Mascot from "./Mascot";
+
+/**
+ * Общая обёртка для всех "навигационных" экранов ученика (не для экрана
+ * самой задачи — там своя, специально упрощённая шапка без сайдбара/таб-бара,
+ * см. components/LessonFlow.tsx). Сама получает все данные для сайдбара и
+ * таб-бара — страницы просто оборачивают в это свой контент, не повторяя
+ * один и тот же набор запросов на каждой странице.
+ */
+export default async function StudentShell({
+  active,
+  title,
+  children,
+}: {
+  active: "path" | "review" | "homework" | "mistakes" | "profile";
+  title: string;
+  children: React.ReactNode;
+}) {
+  const user = (await getSessionUser())!;
+  const notifications = await getNotificationsForUser(user.id);
+  const unreadCount = await getUnreadNotificationCount(user.id);
+  const dueReviewCount = await getDueReviewCount(user.id);
+  const allHw = await getHomeworksForStudent(user.id);
+  const hwStatuses = await Promise.all(allHw.map((h) => homeworkStatus(h, user.id)));
+  const pendingHwCount = allHw.filter((_, i) => !hwStatuses[i].complete).length;
+  const mistakes = await getMistakesForStudent(user.id);
+  const unresolvedMistakesCount = mistakes.filter((m) => !m.resolved).length;
+
+  const standalone = isStandaloneStudent(user);
+  const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : null;
+  const isPro = !standalone || isEffectivelyPro(user);
+  const homeworkLabel = standalone ? "Пробники" : "Домашка";
+
+  return (
+    <div className="min-h-screen bg-paper">
+      <header className="flex items-center justify-between border-b border-line-soft bg-paper px-[18px] py-3 lg:hidden">
+        <div className="flex items-center gap-2.5">
+          <Mascot mood="idle" size={32} float={false} />
+          <span className="font-display text-[16px] font-black text-ink">{title}</span>
+        </div>
+        <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
+      </header>
+
+      <StudentSidebar
+        active={active}
+        reviewCount={dueReviewCount}
+        homeworkCount={pendingHwCount}
+        homeworkLabel={homeworkLabel}
+        mistakesCount={unresolvedMistakesCount}
+        energy={energy}
+        energyMax={FREE_MAX_ENERGY}
+        isPro={isPro}
+        notifications={notifications}
+        unreadCount={unreadCount}
+      />
+
+      <div className="pb-24 lg:ml-[236px] lg:pb-8">{children}</div>
+
+      <BottomTabBar
+        reviewCount={dueReviewCount}
+        mistakesCount={unresolvedMistakesCount}
+        homeworkLabel={homeworkLabel}
+      />
+    </div>
+  );
+}

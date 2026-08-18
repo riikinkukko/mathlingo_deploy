@@ -11,14 +11,7 @@ import {
   isEffectivelyPro,
   getHomeworkById,
 } from "@/lib/queries";
-import AppHeader from "@/components/AppHeader";
 import AssignmentFlow from "@/components/AssignmentFlow";
-
-const KIND_LABEL: Record<string, string> = {
-  homework: "Домашнее задание",
-  test: "Контрольная работа",
-  exam: "Пробный экзамен",
-};
 
 export default async function HomeworkPage({ params }: { params: { id: string } }) {
   const user = (await getSessionUser())!;
@@ -30,11 +23,7 @@ export default async function HomeworkPage({ params }: { params: { id: string } 
     hw && hw.audience === "pro_standalone" && standalone && isEffectivelyPro(user);
   if (!hw || (!isOwnAssignment && !isAccessiblePublicExam)) notFound();
 
-  const listHref = "/student/homework";
-  const listLabel = standalone ? "Пробники" : "Домашнее задание";
-
   const status = await homeworkStatus(hw, user.id);
-  const due = new Date(hw.dueDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 
   const fullProblems = (await Promise.all(hw.problemIds.map((pid) => getProblem(pid)))).filter(
     (p): p is NonNullable<typeof p> => !!p
@@ -59,38 +48,15 @@ export default async function HomeworkPage({ params }: { params: { id: string } 
   }
 
   return (
-    <div className="min-h-screen pb-16">
-      <AppHeader
-        user={user}
-        crumbs={[
-          { label: listLabel, href: listHref },
-          { label: hw.title },
-        ]}
+    <div className="min-h-screen bg-paper px-4 py-4 pb-16">
+      <AssignmentFlow
+        title={hw.title}
+        kind={hw.kind}
+        allowHints={hw.allowHints}
+        items={items}
+        initialStates={states}
+        deadlineAt={deadlineAt}
       />
-      <main className="mx-auto max-w-2xl px-4">
-        <div className="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-              {KIND_LABEL[hw.kind] ?? "Задание"}
-              {!hw.allowHints && " · без подсказок"}
-            </p>
-            <h1 className="font-display text-2xl font-black text-ink">{hw.title}</h1>
-            <p className={`mt-1 text-sm font-semibold ${status.overdue ? "text-coral" : "text-ink-soft"}`}>
-              {status.overdue ? "Просрочено, срок был " : "Сдать до "}
-              {due}
-            </p>
-          </div>
-        </div>
-
-        <AssignmentFlow
-          title={hw.title}
-          kind={hw.kind}
-          allowHints={hw.allowHints}
-          items={items}
-          initialStates={states}
-          deadlineAt={deadlineAt}
-        />
-      </main>
     </div>
   );
 }
