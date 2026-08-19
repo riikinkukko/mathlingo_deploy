@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown, angleArcPath } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, angleArcPath, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -21,6 +21,10 @@ export default function Parallelogram({
   d1,
   d2,
   equalSides = false,
+  labelA = "A",
+  labelB = "B",
+  labelC = "C",
+  labelD = "D",
 }: {
   a?: string;
   h?: string;
@@ -29,6 +33,10 @@ export default function Parallelogram({
   d1?: string;
   d2?: string;
   equalSides?: boolean;
+  labelA?: string; // нижний левый
+  labelB?: string; // нижний правый
+  labelC?: string; // верхний правый
+  labelD?: string; // верхний левый
 }) {
   return (
     <svg viewBox="0 0 300 200" className="h-full w-full">
@@ -117,6 +125,18 @@ export default function Parallelogram({
         })}
 
       {a && <Lbl x={(BR.x + BL.x) / 2} y={BL.y + 22} value={a} />}
+      <VertexLabel x={BL.x} y={BL.y} dx={-10} dy={14}>
+        {labelA}
+      </VertexLabel>
+      <VertexLabel x={BR.x} y={BR.y} dx={10} dy={14}>
+        {labelB}
+      </VertexLabel>
+      <VertexLabel x={TR.x} y={TR.y} dx={10} dy={-8}>
+        {labelC}
+      </VertexLabel>
+      <VertexLabel x={TL.x} y={TL.y} dx={-10} dy={-8}>
+        {labelD}
+      </VertexLabel>
     </svg>
   );
 }

@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -12,10 +12,16 @@ export default function TriangleExteriorAngle({
   inner1 = "?",
   inner2,
   exterior = "?",
+  labelA = "A",
+  labelB = "B",
+  labelC = "C",
 }: {
   inner1?: string; // угол при левой вершине (A)
   inner2?: string; // угол при верхней вершине (B), необязателен
   exterior?: string; // внешний угол при правой вершине (C)
+  labelA?: string;
+  labelB?: string;
+  labelC?: string;
 }) {
   const apex = { x: 110, y: 30 };
   const left = { x: 50, y: 170 };
@@ -43,6 +49,15 @@ export default function TriangleExteriorAngle({
       >
         {exterior}
       </text>
+      <VertexLabel x={apex.x} y={apex.y} dy={-10}>
+        {labelB}
+      </VertexLabel>
+      <VertexLabel x={left.x} y={left.y} dx={-14} dy={14}>
+        {labelA}
+      </VertexLabel>
+      <VertexLabel x={right.x} y={right.y} dx={-6} dy={16}>
+        {labelC}
+      </VertexLabel>
     </svg>
   );
 }

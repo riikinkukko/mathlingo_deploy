@@ -5,14 +5,16 @@ import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queri
 
 export default async function StudentDashboardHeader({
   userId,
-  chapterTitle,
+  levelTitle,
+  xp,
   streak,
   energy,
   energyMax,
   dailyGoal,
 }: {
   userId: string;
-  chapterTitle: string;
+  levelTitle: string;
+  xp: number;
   streak: number;
   energy: number | null; // null — безлимит (ученик репетитора / Pro)
   energyMax: number;
@@ -25,11 +27,16 @@ export default async function StudentDashboardHeader({
   return (
     <header className="border-b border-line-soft bg-paper px-[18px] pb-3 pt-[14px]">
       <div className="flex items-center justify-between">
-        <a href="/student" className="flex items-center gap-2.5">
+        <a href="/student/profile" className="flex items-center gap-2.5">
           <Mascot mood="idle" size={40} float={false} />
-          <span className="font-display text-[15px] font-black text-pine-dark">{chapterTitle}</span>
+          {/* Звание вместо названия текущей главы — мотивирует прогрессом
+              самого ученика, а не нейтрально называет тему урока. */}
+          <span className="font-display text-[15px] font-black text-pine-dark">{levelTitle}</span>
         </a>
         <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1 rounded-pill bg-amber-light px-2.5 py-[5px] text-[12.5px] font-black text-amber-text">
+            ⚡ {xp}
+          </span>
           <span className="flex items-center gap-1 rounded-pill bg-coral-light px-2.5 py-[5px] text-[12.5px] font-black text-coral-text">
             🔥 {streak}
           </span>

@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -27,6 +27,18 @@ export default function TriangleSimilarPair({
         strokeLinejoin="round"
       />
       <Lbl x={45} y={175} value={small} />
+      {/* Штрихованная нотация (A'B'C') — стандартное обозначение подобной
+          пары в школьной программе, ученику сразу ясно, что это два разных
+          треугольника, а не продолжение одной фигуры. */}
+      <VertexLabel x={50} y={100} dx={-8} dy={-6}>
+        A
+      </VertexLabel>
+      <VertexLabel x={50} y={150} dx={-10} dy={12}>
+        B
+      </VertexLabel>
+      <VertexLabel x={100} y={150} dx={10} dy={12}>
+        C
+      </VertexLabel>
 
       <path
         d="M 120 125 L 165 125"
@@ -47,6 +59,15 @@ export default function TriangleSimilarPair({
         strokeLinejoin="round"
       />
       <Lbl x={220} y={175} value={large} />
+      <VertexLabel x={180} y={70} dx={-10} dy={-6}>
+        A'
+      </VertexLabel>
+      <VertexLabel x={180} y={150} dx={-12} dy={12}>
+        B'
+      </VertexLabel>
+      <VertexLabel x={260} y={150} dx={12} dy={12}>
+        C'
+      </VertexLabel>
 
       <defs>
         <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">

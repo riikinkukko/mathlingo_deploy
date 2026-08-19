@@ -20,6 +20,41 @@ export const labelStyle = {
 export const givenStyle = { ...labelStyle, fill: D.pine };
 export const unknownStyle = { ...labelStyle, fill: D.amber };
 
+/** Подпись вершины (A, B, C...) — не значение угла/стороны, а имя самой
+ * точки. Раньше на диаграммах были только числа/"?", и ученику было
+ * непонятно, что называется "точкой A", если в тексте задачи используются
+ * буквы. Рисуется мельче и бледнее основных значений — не должна
+ * перетягивать внимание, только служить якорем для текста задачи.
+ * dx/dy — смещение от самой вершины наружу фигуры (чтобы не наезжать на
+ * стороны и не путаться со значением угла в той же вершине). */
+export const vertexLabelStyle = {
+  fontSize: 12,
+  fontWeight: 700,
+  fill: D.inkSoft,
+  fontFamily: "inherit",
+  fontStyle: "italic" as const,
+};
+
+export function VertexLabel({
+  x,
+  y,
+  dx = 0,
+  dy = 0,
+  children,
+}: {
+  x: number;
+  y: number;
+  dx?: number;
+  dy?: number;
+  children: string;
+}) {
+  return (
+    <text x={x + dx} y={y + dy} textAnchor="middle" style={vertexLabelStyle}>
+      {children}
+    </text>
+  );
+}
+
 /** '?' или отмеченное "x" значение красим отдельным цветом — так на схеме сразу видно, что известно, а что нужно найти. */
 export function isUnknown(v: string) {
   return v.trim() === "?" || v.trim().toLowerCase() === "x";

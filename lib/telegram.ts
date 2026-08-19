@@ -4,16 +4,33 @@
  * которого у меня нет и быть не может. Реализовано аккуратно по
  * документации Telegram Bot API, финальная проверка на живых сообщениях —
  * со стороны того, у кого есть токен.
+ *
+ * Все переменные окружения ниже читаются с .trim() — при копировании из
+ * Telegram/личного кабинета Vercel очень легко случайно захватить пробел
+ * или перенос строки, и тогда сравнение/URL молча не совпадёт без единой
+ * ошибки в логах. Дешёвая защита, которая экономит часы отладки "почему-то
+ * не работает".
  */
 
 const API_BASE = "https://api.telegram.org";
 
-export function isTelegramConfigured(): boolean {
-  return !!process.env.TELEGRAM_BOT_TOKEN;
+function getBotToken(): string | null {
+  const raw = process.env.TELEGRAM_BOT_TOKEN;
+  return raw ? raw.trim() : null;
 }
 
+export function isTelegramConfigured(): boolean {
+  return !!getBotToken();
+}
+
+/** Возвращает имя бота БЕЗ ведущего "@" — Telegram сам показывает имя бота
+ * именно с "@" (например, в самом чате или в @BotFather), и легко случайно
+ * скопировать его вместе с символом в переменную окружения. Ссылка вида
+ * t.me/@имя_бота не работает — t.me ожидает имя без "@". */
 export function getTelegramBotUsername(): string | null {
-  return process.env.TELEGRAM_BOT_USERNAME || null;
+  const raw = process.env.TELEGRAM_BOT_USERNAME;
+  if (!raw) return null;
+  return raw.trim().replace(/^@/, "");
 }
 
 /** Ссылка вида t.me/бот?start=код — единственный способ дать боту написать
@@ -29,7 +46,7 @@ export function buildTelegramLinkUrl(code: string): string | null {
  * бота) — уведомление в самом приложении важнее, чем падение всего запроса
  * из-за недоступности Telegram. Ошибка просто логируется. */
 export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const token = getBotToken();
   if (!token) return false;
   try {
     const res = await fetch(`${API_BASE}/bot${token}/sendMessage`, {
@@ -55,8 +72,11 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
 
 /** Регистрирует вебхук в Telegram — вызывается ОДИН РАЗ вручную после
  * деплоя (не на каждый запрос), см. инструкцию в README. */
-export async function setTelegramWebhook(webhookUrl: string, secretToken: string): Promise<{ ok: boolean; description?: string }> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+export async function setTelegramWebhook(
+  webhookUrl: string,
+  secretToken: string
+): Promise<{ ok: boolean; description?: string }> {
+  const token = getBotToken();
   if (!token) throw new Error("TELEGRAM_BOT_TOKEN не задан");
   const res = await fetch(`${API_BASE}/bot${token}/setWebhook`, {
     method: "POST",
@@ -72,7 +92,7 @@ export async function setTelegramWebhook(webhookUrl: string, secretToken: string
  * выше). Это их рекомендованный способ убедиться, что запрос реально от
  * Telegram, а не от кого угодно, кто узнал URL вебхука. */
 export function isValidTelegramSecret(headerValue: string | null): boolean {
-  const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (!expected) return false;
-  return headerValue === expected;
+  const expected = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
+  if (!expected || !headerValue) return false;
+  return headerValue.trim() === expected;
 }

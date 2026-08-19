@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -33,12 +33,20 @@ export default function CircleDiagram({
   return (
     <svg viewBox="0 0 300 220" className="h-full w-full">
       <circle cx={O.x} cy={O.y} r={R} fill={D.pineLight} stroke={D.ink} strokeWidth="2.5" />
+      {/* Центр окружности — стандартное обозначение "O" в школьной
+          программе, всегда полезно, независимо от режима диаграммы. */}
+      <VertexLabel x={O.x} y={O.y} dx={-12} dy={-8}>
+        O
+      </VertexLabel>
 
       {mode === "radius" && (
         <>
           <line x1={O.x} y1={O.y} x2={O.x + 50} y2={O.y - 49} stroke={D.ink} strokeWidth="2" />
           <circle cx={O.x} cy={O.y} r="3" fill={D.ink} />
           <Lbl x={O.x + 34} y={O.y - 16} value={r ?? "?"} />
+          <VertexLabel x={O.x + 50} y={O.y - 49} dx={10} dy={-6}>
+            A
+          </VertexLabel>
         </>
       )}
 
@@ -56,6 +64,15 @@ export default function CircleDiagram({
               {inscribed}
             </text>
           )}
+          <VertexLabel x={215.8} y={86.1} dx={12} dy={-4}>
+            A
+          </VertexLabel>
+          <VertexLabel x={84.2} y={86.1} dx={-12} dy={-4}>
+            B
+          </VertexLabel>
+          <VertexLabel x={150} y={180} dy={16}>
+            C
+          </VertexLabel>
         </>
       )}
 
@@ -80,6 +97,15 @@ export default function CircleDiagram({
               <circle cx={T2.x} cy={T2.y} r="2.5" fill={D.ink} />
               {t1 && <Lbl x={mid1.x + 16} y={mid1.y + 4} value={t1} />}
               {t2 && <Lbl x={mid2.x - 4} y={mid2.y - 12} value={t2} />}
+              <VertexLabel x={P.x} y={P.y} dx={10} dy={12}>
+                P
+              </VertexLabel>
+              <VertexLabel x={T1.x} y={T1.y} dx={10} dy={-4}>
+                A
+              </VertexLabel>
+              <VertexLabel x={T2.x} y={T2.y} dx={-10} dy={-4}>
+                B
+              </VertexLabel>
             </>
           );
         })()}
@@ -97,6 +123,12 @@ export default function CircleDiagram({
               {half}
             </text>
           )}
+          <VertexLabel x={93} y={150} dx={-10} dy={14}>
+            A
+          </VertexLabel>
+          <VertexLabel x={207} y={150} dx={10} dy={14}>
+            B
+          </VertexLabel>
         </>
       )}
     </svg>

@@ -13,6 +13,49 @@ import {
 import { User } from "./types";
 
 /**
+ * Сравнение ответа ученика с эталоном. Раньше это была наивная строковая
+ * сверка после тривиальной нормализации — ломалась, как только на
+ * математической клавиатуре (§ добавлена вместе с ответами вида "60°" —
+ * см. components/MathKeyboard.tsx) ученик вставлял символ градуса: "60°"
+ * не совпадало строкой с эталонным "60", хотя это тот же ответ. Проверено
+ * напрямую в БД — ни одна текущая задача не использует °, √, π, ² как
+ * значащий символ внутри correctAnswer (все это — не единицы измерения,
+ * а часть самого числа лишь гипотетически, для будущего контента), поэтому
+ * безопасно убирать именно ° везде. √/π/² НЕ трогаем — если их случайно
+ * добавить к простому числу, это осмысленно другое значение, и пометить
+ * как неверное — правильное поведение, не баг.
+ */
+function normalizeAnswerString(s: string): string {
+  return s.trim().replace(/,/g, ".").replace(/\s+/g, "").replace(/°+$/g, "");
+}
+
+/** Простое вычисление вида "a/b" (дробь) или обычного числа — резервный
+ * путь, если строковое совпадение не сработало напрямую. Ловит случаи вроде
+ * "1/2" против эталонного "0.5". */
+function evalSimpleNumeric(s: string): number | null {
+  const fractionMatch = /^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/.exec(s);
+  if (fractionMatch) {
+    const den = Number(fractionMatch[2]);
+    if (den !== 0) return Number(fractionMatch[1]) / den;
+    return null;
+  }
+  const n = Number(s);
+  return Number.isFinite(n) && s !== "" ? n : null;
+}
+
+export function answersMatch(userAnswer: string, correctAnswer: string): boolean {
+  const a = normalizeAnswerString(userAnswer);
+  const b = normalizeAnswerString(correctAnswer);
+  if (a === b) return true;
+  const numA = evalSimpleNumeric(a);
+  const numB = evalSimpleNumeric(b);
+  if (numA !== null && numB !== null) {
+    return Math.abs(numA - numB) < 1e-9;
+  }
+  return false;
+}
+
+/**
  * Вся бизнес-логика отправки попытки решения — без ничего специфичного для
  * транспорта (никаких revalidatePath/redirect/NextResponse). Server Action
  * в app/actions.ts и API-роут /api/attempts вызывают ЭТУ функцию и просто
@@ -82,8 +125,7 @@ export async function performSubmitAttempt(
     };
   }
 
-  const normalize = (s: string) => s.trim().replace(",", ".").replace(/\s+/g, "");
-  const isCorrect = normalize(answer) === normalize(problem.correctAnswer);
+  const isCorrect = answersMatch(answer, problem.correctAnswer);
 
   await db.insert(schema.attempts).values({
     id: genId("a"),

@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -12,10 +12,16 @@ export default function TriangleSides({
   a = "?",
   b = "?",
   c = "?",
+  labelA = "A",
+  labelB = "B",
+  labelC = "C",
 }: {
   a?: string; // левая сторона
   b?: string; // нижняя (основание)
   c?: string; // правая сторона
+  labelA?: string; // вершина слева внизу
+  labelB?: string; // вершина справа внизу
+  labelC?: string; // верхняя вершина
 }) {
   const apex = { x: 130, y: 28 };
   const left = { x: 55, y: 172 };
@@ -33,6 +39,15 @@ export default function TriangleSides({
       <Lbl x={(apex.x + left.x) / 2 - 18} y={(apex.y + left.y) / 2} value={a} />
       <Lbl x={150} y={190} value={b} />
       <Lbl x={(apex.x + right.x) / 2 + 18} y={(apex.y + right.y) / 2} value={c} />
+      <VertexLabel x={apex.x} y={apex.y} dy={-10}>
+        {labelC}
+      </VertexLabel>
+      <VertexLabel x={left.x} y={left.y} dx={-14} dy={14}>
+        {labelA}
+      </VertexLabel>
+      <VertexLabel x={right.x} y={right.y} dx={14} dy={14}>
+        {labelB}
+      </VertexLabel>
     </svg>
   );
 }

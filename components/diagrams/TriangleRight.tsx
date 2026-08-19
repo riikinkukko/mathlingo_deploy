@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -12,10 +12,16 @@ export default function TriangleRight({
   a = "?",
   b = "?",
   c = "?",
+  labelTop = "A",
+  labelRight = "B",
+  labelCorner = "C",
 }: {
   a?: string; // вертикальный катет
   b?: string; // горизонтальный катет
   c?: string; // гипотенуза
+  labelTop?: string;
+  labelRight?: string;
+  labelCorner?: string; // вершина прямого угла
 }) {
   const bottomLeft = { x: 60, y: 170 };
   const bottomRight = { x: 240, y: 170 };
@@ -40,6 +46,15 @@ export default function TriangleRight({
       <Lbl x={bottomLeft.x - 22} y={100} value={a} />
       <Lbl x={150} y={188} value={b} />
       <Lbl x={165} y={92} value={c} />
+      <VertexLabel x={top.x} y={top.y} dx={-4} dy={-10}>
+        {labelTop}
+      </VertexLabel>
+      <VertexLabel x={bottomLeft.x} y={bottomLeft.y} dx={-14} dy={16}>
+        {labelCorner}
+      </VertexLabel>
+      <VertexLabel x={bottomRight.x} y={bottomRight.y} dx={14} dy={16}>
+        {labelRight}
+      </VertexLabel>
     </svg>
   );
 }

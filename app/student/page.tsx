@@ -214,7 +214,8 @@ export default async function StudentDashboard() {
       <div className="min-h-screen bg-paper pb-24 lg:hidden">
         <StudentDashboardHeader
           userId={user.id}
-          chapterTitle={currentChapter?.chapter.title ?? "Планиметрика"}
+          levelTitle={level.title}
+          xp={xp}
           streak={streak}
           energy={energy}
           energyMax={FREE_MAX_ENERGY}

@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown, angleArcPath } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, angleArcPath, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -12,10 +12,18 @@ export default function TriangleCevian({
   base = "?",
   height,
   variant = "height",
+  labelA = "A",
+  labelB = "B",
+  labelC = "C",
+  labelFoot = "D",
 }: {
   base?: string;
   height?: string;
   variant?: "height" | "median" | "bisector";
+  labelA?: string; // вершина, из которой проведена чевиана
+  labelB?: string; // левый конец основания
+  labelC?: string; // правый конец основания
+  labelFoot?: string; // точка на основании
 }) {
   const apex = { x: 140, y: 30 };
   const left = { x: 50, y: 170 };
@@ -82,6 +90,18 @@ export default function TriangleCevian({
       )}
       {variant === "height" && height && <Lbl x={foot.x + 26} y={100} value={height} />}
       <Lbl x={150} y={190} value={base} />
+      <VertexLabel x={apex.x} y={apex.y} dy={-10}>
+        {labelA}
+      </VertexLabel>
+      <VertexLabel x={left.x} y={left.y} dx={-14} dy={14}>
+        {labelB}
+      </VertexLabel>
+      <VertexLabel x={right.x} y={right.y} dx={14} dy={14}>
+        {labelC}
+      </VertexLabel>
+      <VertexLabel x={foot.x} y={foot.y} dy={16}>
+        {labelFoot}
+      </VertexLabel>
     </svg>
   );
 }

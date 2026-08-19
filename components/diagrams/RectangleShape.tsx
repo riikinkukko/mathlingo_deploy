@@ -1,4 +1,4 @@
-import { D, givenStyle, unknownStyle, isUnknown } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
@@ -15,6 +15,10 @@ export default function RectangleShape({
   diagonal,
   circumscribed = false,
   radius,
+  labelA = "A",
+  labelB = "B",
+  labelC = "C",
+  labelD = "D",
 }: {
   a?: string;
   b?: string;
@@ -22,6 +26,10 @@ export default function RectangleShape({
   diagonal?: string;
   circumscribed?: boolean;
   radius?: string;
+  labelA?: string; // левый верхний
+  labelB?: string; // правый верхний
+  labelC?: string; // правый нижний
+  labelD?: string; // левый нижний
 }) {
   const x0 = isSquare ? 90 : 65;
   const x1 = isSquare ? 210 : 235;
@@ -76,6 +84,18 @@ export default function RectangleShape({
       )}
       <Lbl x={cx} y={y1 + 18} value={b} />
       <Lbl x={x0 - 14} y={cy + 5} value={a} />
+      <VertexLabel x={x0} y={y0} dx={-8} dy={-6}>
+        {labelA}
+      </VertexLabel>
+      <VertexLabel x={x1} y={y0} dx={8} dy={-6}>
+        {labelB}
+      </VertexLabel>
+      <VertexLabel x={x1} y={y1} dx={8} dy={14}>
+        {labelC}
+      </VertexLabel>
+      <VertexLabel x={x0} y={y1} dx={-8} dy={14}>
+        {labelD}
+      </VertexLabel>
     </svg>
   );
 }

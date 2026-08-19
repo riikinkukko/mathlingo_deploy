@@ -543,12 +543,17 @@ export async function getWeakSkillsForStudent(studentId: string, limit = 2): Pro
   const entries: WeakSkillEntry[] = [];
   for (const [skillId, stats] of bySkill) {
     if (stats.total < 3) continue;
+    const accuracy = Math.round((stats.correct / stats.total) * 100);
+    // Порог, а не просто "N худших из имеющихся" — иначе при реально
+    // хорошей успеваемости (все навыки на 90-100%) блок всё равно показал
+    // бы 2 "самых слабых" из них, хотя объективно беспокоиться не о чем.
+    if (accuracy >= 85) continue;
     const skill = skillRows.find((s) => s.id === skillId);
     if (!skill) continue;
     entries.push({
       skillId,
       skillTitle: skill.title,
-      accuracy: Math.round((stats.correct / stats.total) * 100),
+      accuracy,
       wrongCount: stats.total - stats.correct,
       totalAttempts: stats.total,
     });

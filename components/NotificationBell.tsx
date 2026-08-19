@@ -80,7 +80,11 @@ export default function NotificationBell({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-12 z-30 w-80 max-w-[90vw] animate-scale-in rounded-2xl border border-line bg-white p-2 shadow-soft">
+        <div
+          className={`absolute top-12 z-30 w-80 max-w-[90vw] animate-scale-in rounded-2xl border border-line bg-white p-2 shadow-soft ${
+            variant === "dark" ? "left-0" : "right-0"
+          }`}
+        >
           <div className="mb-1 flex items-center justify-between px-2 py-1.5">
             <p className="text-xs font-extrabold uppercase tracking-wide text-ink-soft">Уведомления</p>
             {unread > 0 && (
