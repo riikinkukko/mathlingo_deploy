@@ -136,10 +136,19 @@ export async function getCurriculum() {
 }
 
 export async function getAllSkillsFlat(): Promise<Skill[]> {
+  // ВАЖНО: order у subtopics уникален только В ПРЕДЕЛАХ одной темы (topic),
+  // не глобально — у "Треугольников" (Планиметрия) и "Теория вероятности"
+  // (отдельная тема) обе order=1. Сортировка только по subtopics.order без
+  // учёта topics.order даёт произвольный порядок глав между темами — из-за
+  // этого весь путь обучения "путался": первым current-навыком мог стать
+  // навык из совершенно другой темы. Сортируем по паре (topic.order,
+  // subtopic.order).
+  const topicRows = await db.select().from(schema.topics).orderBy(asc(schema.topics.order));
   const chapters = await db.select().from(schema.subtopics).orderBy(asc(schema.subtopics.order));
   const skillRows = await db.select().from(schema.skills).orderBy(asc(schema.skills.order));
   const skills = skillRows.map(mapSkill);
-  return chapters.flatMap((c) => skills.filter((sk) => sk.subtopicId === c.id));
+  const orderedChapters = topicRows.flatMap((t) => chapters.filter((c) => c.topicId === t.id));
+  return orderedChapters.flatMap((c) => skills.filter((sk) => sk.subtopicId === c.id));
 }
 
 export async function getSkill(skillId: string): Promise<Skill | undefined> {

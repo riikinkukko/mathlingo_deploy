@@ -40,7 +40,11 @@ const GEO_TIPS = [
   "Повторение без энергии — отличный способ занять свободную минуту.",
 ];
 
-export default async function StudentDashboard() {
+export default async function StudentDashboard({
+  searchParams,
+}: {
+  searchParams: { topic?: string };
+}) {
   const user = (await getSessionUser())!;
 
   // Все 12 запросов ниже зависят только от user.id, известного уже сейчас —
@@ -77,6 +81,16 @@ export default async function StudentDashboard() {
     getDueReviewCount(user.id),
   ]);
 
+  // Дашборд теперь может обслуживать несколько предметов (тем) — без этого
+  // фильтра curriculum.flatMap ниже слил бы навыки Планиметрии и Теории
+  // вероятности в одну общую последовательность. По умолчанию (без ?topic=
+  // в URL) — первая тема, чтобы все существующие ссылки на /student
+  // продолжали работать как раньше.
+  const selectedTopic =
+    curriculum.find((t) => t.topic.id === searchParams.topic) ?? curriculum[0];
+  const curriculumFull = curriculum;
+  const curriculumFiltered = selectedTopic ? [selectedTopic] : [];
+
   const level = getLevelInfo(xp);
   const nextLevelTitle = LEVELS[level.index + 1]?.title ?? null;
   const unresolvedMistakesCount = mistakes.filter((m) => !m.resolved).length;
@@ -87,7 +101,7 @@ export default async function StudentDashboard() {
   const isFreeStandalone = standalone && !isEffectivelyPro(user);
   const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : null;
 
-  const allSkills = curriculum.flatMap((t) => t.chapters.flatMap((c) => c.skills));
+  const allSkills = curriculumFiltered.flatMap((t) => t.chapters.flatMap((c) => c.skills));
   const pathStates = getPathStates(allSkills, progress);
   const doneCount = allSkills.filter((s) => pathStates[s.id] === "done").length;
 
@@ -102,7 +116,7 @@ export default async function StudentDashboard() {
   // отдельной странице программы).
   let currentChapter: (typeof curriculum)[number]["chapters"][number] | null = null;
   let currentChapterIdx = 0;
-  outer: for (const { chapters } of curriculum) {
+  outer: for (const { chapters } of curriculumFiltered) {
     for (let i = 0; i < chapters.length; i++) {
       const allDone = chapters[i].skills.every((s) => pathStates[s.id] === "done");
       if (!allDone) {
@@ -113,7 +127,7 @@ export default async function StudentDashboard() {
     }
   }
   if (!currentChapter) {
-    currentChapter = curriculum[0]?.chapters[0] ?? null;
+    currentChapter = curriculumFiltered[0]?.chapters[0] ?? null;
   }
   const chapterLockedByPlan = isFreeStandalone && currentChapterIdx > 0;
 
@@ -202,7 +216,7 @@ export default async function StudentDashboard() {
         Программа курса
       </p>
       <p className="mt-1 text-[12px] text-ink-soft">
-        {curriculum[0]?.chapters.length ?? 0} глав ·{" "}
+        {curriculumFiltered[0]?.chapters.length ?? 0} глав ·{" "}
         {allSkills.length} {pluralRu(allSkills.length, ["навык", "навыка", "навыков"])} · пройдено {doneCount}
       </p>
     </a>

@@ -4,7 +4,7 @@ import {
   getSkill,
   getChapter,
   getProblemsForSkill,
-  getAllSkillsFlat,
+  getCurriculum,
   computeStudentProgress,
   getPathStates,
   getNextSkill,
@@ -25,12 +25,23 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   // известных — независимы друг от друга, распараллеливаем вместо
   // последовательного await (главная причина "долгой загрузки" — водопад
   // из нескольких круговых задержек до сети Neon подряд).
-  const [chapter, allSkills, progress, problemsRaw] = await Promise.all([
+  const [chapter, curriculum, progress, problemsRaw] = await Promise.all([
     getChapter(skill.subtopicId),
-    getAllSkillsFlat(),
+    getCurriculum(),
     computeStudentProgress(user.id),
     getProblemsForSkill(skill.id),
   ]);
+
+  // Прогресс/блокировка навыка считается ТОЛЬКО в рамках его собственной
+  // темы (Планиметрия, Теория вероятности и т.д.) — раньше здесь брался
+  // общий плоский список навыков по ВСЕМ темам разом, и первый навык
+  // второй темы наследовал "заблокированность" от непройденной первой
+  // (getPathStates трактует любой переданный список как одну непрерывную
+  // цепочку). Берём только навыки той темы, куда входит открываемая глава.
+  const topicEntry = chapter
+    ? curriculum.find((t) => t.chapters.some((c) => c.chapter.id === chapter.id))
+    : curriculum[0];
+  const allSkills = (topicEntry ?? curriculum[0])?.chapters.flatMap((c) => c.skills) ?? [];
 
   // Free-план самостоятельных пользователей: вся первая глава + первый
   // навык любой другой — та же граница, что на дашборде и на странице

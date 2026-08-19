@@ -10,7 +10,6 @@ const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] =
   { title: "Текстовые и прикладные задачи", icon: "📝", colorClass: "bg-amber-light text-amber-text" },
   { title: "Тригонометрия", icon: "🌊", colorClass: "bg-coral-light text-coral-text" },
   { title: "Показательные и логарифмические", icon: "📈", colorClass: "bg-pine-light text-pine-dark" },
-  { title: "Теория вероятности", icon: "🎲", colorClass: "bg-teal-light text-teal-text" },
   { title: "Графики функций", icon: "📉", colorClass: "bg-violet-light text-violet-text" },
   { title: "Производная", icon: "∂", colorClass: "bg-amber-light text-amber-text" },
   { title: "Экономическая задача", icon: "💰", colorClass: "bg-coral-light text-coral-text" },
@@ -42,7 +41,7 @@ export default async function SubjectsPage() {
               return (
                 <a
                   key={topic.id}
-                  href="/student"
+                  href={`/student?topic=${topic.id}`}
                   className="rounded-2xl bg-pine-dark p-5 text-white transition hover:brightness-105"
                 >
                   <p className="text-[11px] font-black uppercase tracking-wide text-white/60">
