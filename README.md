@@ -223,18 +223,22 @@ SDK, `app/api/webhooks/telegram/route.ts` — обработчик.
    TELEGRAM_WEBHOOK_SECRET="любая длинная случайная строка"
    ```
 3. **После деплоя**, один раз зарегистрируйте вебхук — Telegram должен знать,
-   куда слать обновления. Проще всего — прямым запросом к Bot API (замените
-   плейсхолдеры):
+   куда слать обновления:
    ```bash
-   curl -X POST "https://api.telegram.org/bot<ТОКЕН>/setWebhook" \
-     -H "Content-Type: application/json" \
-     -d '{"url":"https://ваш-домен/api/webhooks/telegram","secret_token":"<TELEGRAM_WEBHOOK_SECRET>"}'
+   npx tsx scripts/dev/register-telegram-webhook.ts ваш-домен.vercel.app
    ```
-   (в `lib/telegram.ts` есть готовая функция `setTelegramWebhook()`, если
-   удобнее вызвать её из своего скрипта, а не curl'ом).
+   (без `https://` и без слэша на конце — только сам домен). Скрипт
+   использует готовую функцию `setTelegramWebhook()` из `lib/telegram.ts` —
+   не нужно вручную собирать curl-запрос с JSON внутри, на Windows/PowerShell
+   там легко напутать с экранированием кавычек.
 4. Готово — ученики смогут подключить уведомления сами, через профиль.
 
-**Проверка после настройки:**
+**Проверка после настройки** — сначала статус (покажет, зарегистрирован ли
+вебхук и была ли последняя ошибка доставки от самого Telegram):
+```bash
+npx tsx scripts/dev/diagnose-telegram.ts
+```
+Затем реальная отправка:
 ```bash
 npx tsx scripts/dev/test-telegram-send.ts <ваш_chat_id>
 ```

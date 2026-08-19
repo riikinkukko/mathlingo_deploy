@@ -83,7 +83,16 @@ export async function setTelegramWebhook(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url: webhookUrl, secret_token: secretToken }),
   });
-  const data = await res.json();
+  // res.json() падает некрасиво (голый стектрейс), если ответ вдруг не
+  // JSON — например, при сетевых проблемах на полпути отдаётся HTML-страница
+  // ошибки прокси/файрвола вместо ответа самого Telegram.
+  let data: any;
+  try {
+    data = await res.json();
+  } catch {
+    const text = await res.text().catch(() => "");
+    return { ok: false, description: `Telegram вернул не-JSON ответ (HTTP ${res.status}): ${text.slice(0, 200)}` };
+  }
   return { ok: !!data.ok, description: data.description };
 }
 
