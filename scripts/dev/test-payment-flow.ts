@@ -5,8 +5,12 @@
  * истечения, а не от "сейчас"). Полезно прогнать после получения реальных
  * ключей ЮKassa как sanity-check перед первым реальным платежом.
  *
- * Запуск: npx tsx --env-file=.env.local scripts/dev/test-payment-flow.ts
+ * Запуск: npx tsx scripts/dev/test-payment-flow.ts
  */
+import { config } from "dotenv";
+import path from "path";
+config({ path: path.resolve(__dirname, "../../.env.local") });
+
 import { db } from "../../lib/db/client";
 import * as schema from "../../lib/db/schema";
 import { eq } from "drizzle-orm";

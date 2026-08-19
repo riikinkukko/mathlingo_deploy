@@ -5,9 +5,13 @@
  * Telegram-клиент), но быстро подтверждает, что sendMessage в принципе
  * достучался до Bot API с вашим токеном.
  *
- * Запуск: npx tsx --env-file=.env.local scripts/dev/test-telegram-send.ts <chat_id>
+ * Запуск: npx tsx scripts/dev/test-telegram-send.ts <chat_id>
  * chat_id можно узнать, написав боту @userinfobot в Telegram.
  */
+import { config } from "dotenv";
+import path from "path";
+config({ path: path.resolve(__dirname, "../../.env.local") });
+
 import { sendTelegramMessage, isTelegramConfigured } from "../../lib/telegram";
 
 async function main() {

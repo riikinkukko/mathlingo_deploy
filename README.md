@@ -236,7 +236,7 @@ SDK, `app/api/webhooks/telegram/route.ts` — обработчик.
 
 **Проверка после настройки:**
 ```bash
-npx tsx --env-file=.env.local scripts/dev/test-telegram-send.ts <ваш_chat_id>
+npx tsx scripts/dev/test-telegram-send.ts <ваш_chat_id>
 ```
 (свой `chat_id` можно узнать, написав `@userinfobot` в Telegram).
 
@@ -299,7 +299,7 @@ end-to-end сам: нужен реальный токен бота, которо
 корректное продление) проверена отдельным скриптом, симулирующим вебхук:
 
 ```bash
-npx tsx --env-file=.env.local scripts/dev/test-payment-flow.ts
+npx tsx scripts/dev/test-payment-flow.ts
 ```
 
 ## Мультипредметность и подготовка к сторам (в процессе)
@@ -370,7 +370,13 @@ Capacitor, и распространение нового дизайна на р
 обрезает `@` и пробелы при чтении всех трёх переменных окружения.
 Добавлен `scripts/dev/diagnose-telegram.ts` — полная диагностика через
 `getWebhookInfo`, показывает последнюю реальную ошибку доставки от
-самого Telegram, а не только локальные предположения.
+самого Telegram, а не только локальные предположения:
+```bash
+npx tsx scripts/dev/diagnose-telegram.ts
+```
+(все dev-скрипты в `scripts/dev/` сами грузят `.env.local` изнутри —
+через `dotenv`, не через флаг `--env-file`, которого нет в Node.js
+младше 20.6 и который на части версий падает с `bad option`).
 
 **Диаграммы без подписей вершин.** Все 10 компонентов
 (`components/diagrams/*.tsx`) получили подписи вершин (A, B, C, D, O...) —

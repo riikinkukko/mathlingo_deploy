@@ -3,8 +3,16 @@
  * причинам "почему-то не работает" и печатает понятный вердикт по каждой.
  * Не требует уже привязанного пользователя — только переменные окружения.
  *
- * Запуск: npx tsx --env-file=.env.local scripts/dev/diagnose-telegram.ts
+ * Запуск: npx tsx scripts/dev/diagnose-telegram.ts
+ *
+ * .env.local грузится изнутри скрипта (тот же приём, что в scripts/seed.ts) —
+ * без флага --env-file, который есть только в Node.js 20.6+ и на некоторых
+ * версиях падает с "bad option".
  */
+import { config } from "dotenv";
+import path from "path";
+config({ path: path.resolve(__dirname, "../../.env.local") });
+
 import { isTelegramConfigured, getTelegramBotUsername } from "../../lib/telegram";
 
 async function main() {
