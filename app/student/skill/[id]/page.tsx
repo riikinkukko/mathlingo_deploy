@@ -75,6 +75,15 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   const states = await computeProblemStates(user.id, problems);
   const next = getNextSkill(allSkills, skill.id);
 
+  // Обязательный первый показ теории — только если ученик ещё НИ РАЗУ не
+  // решал задачи во всей ЭТОЙ теме (не навыке — теме целиком). Первое
+  // знакомство с совсем новым предметом (например, теория вероятности
+  // после привычной планиметрии) без единой подсказки контекста — слишком
+  // резко. А внутри уже знакомой темы прыгать сразу к задачам, как раньше,
+  // по-прежнему правильно — контекст уже есть.
+  const hasAnyProgressInTopic = allSkills.some((s) => (progress[s.id]?.solved ?? 0) > 0);
+  const forceTheoryFirst = !hasAnyProgressInTopic;
+
   return (
     <div className="min-h-screen bg-paper px-4 py-4 pb-16">
       <LessonFlow
@@ -85,6 +94,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
         nextHref={next ? `/student/skill/${next.id}` : "/student"}
         nextLabel={next ? `Дальше: ${next.title}` : "К пути обучения"}
         isLastSkill={!next}
+        forceTheoryFirst={forceTheoryFirst}
       />
     </div>
   );
