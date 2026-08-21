@@ -11,6 +11,11 @@ import Trapezoid from "./Trapezoid";
 import CircleDiagram from "./CircleDiagram";
 import UnitCircleDiagram from "./UnitCircleDiagram";
 import VectorPlaneDiagram from "./VectorPlaneDiagram";
+import BoxDiagram from "./BoxDiagram";
+import PyramidDiagram from "./PyramidDiagram";
+import CylinderDiagram from "./CylinderDiagram";
+import ConeDiagram from "./ConeDiagram";
+import TriangularPrismDiagram from "./TriangularPrismDiagram";
 
 export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
   const { kind, ...props } = spec;
@@ -39,6 +44,16 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
       return <UnitCircleDiagram />;
     case "vectorPlane":
       return <VectorPlaneDiagram {...(props as any)} />;
+    case "box":
+      return <BoxDiagram {...(props as any)} />;
+    case "pyramid":
+      return <PyramidDiagram {...(props as any)} />;
+    case "cylinder":
+      return <CylinderDiagram />;
+    case "cone":
+      return <ConeDiagram {...(props as any)} />;
+    case "triangularPrism":
+      return <TriangularPrismDiagram {...(props as any)} />;
     default:
       return null;
   }

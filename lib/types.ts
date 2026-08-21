@@ -92,7 +92,12 @@ export interface DiagramSpec {
     | "trapezoid"
     | "circle"
     | "unitCircle"
-    | "vectorPlane";
+    | "vectorPlane"
+    | "box"
+    | "pyramid"
+    | "cylinder"
+    | "cone"
+    | "triangularPrism";
   [key: string]: unknown;
 }
 
