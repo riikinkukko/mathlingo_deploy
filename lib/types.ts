@@ -91,7 +91,8 @@ export interface DiagramSpec {
     | "parallelogram"
     | "trapezoid"
     | "circle"
-    | "unitCircle";
+    | "unitCircle"
+    | "vectorPlane";
   [key: string]: unknown;
 }
 

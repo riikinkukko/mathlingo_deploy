@@ -6,8 +6,6 @@ import StudentShell from "@/components/StudentShell";
 // нет, это витрина того, что впереди по программе профильного ЕГЭ.
 const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] = [
   { title: "Стереометрия", icon: "📐", colorClass: "bg-teal-light text-teal-text" },
-  { title: "Векторная геометрия", icon: "➡️", colorClass: "bg-violet-light text-violet-text" },
-  { title: "Текстовые и прикладные задачи", icon: "📝", colorClass: "bg-amber-light text-amber-text" },
   { title: "Графики функций", icon: "📉", colorClass: "bg-violet-light text-violet-text" },
   { title: "Производная", icon: "∂", colorClass: "bg-amber-light text-amber-text" },
   { title: "Экономическая задача", icon: "💰", colorClass: "bg-coral-light text-coral-text" },

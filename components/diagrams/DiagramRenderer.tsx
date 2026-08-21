@@ -10,6 +10,7 @@ import Parallelogram from "./Parallelogram";
 import Trapezoid from "./Trapezoid";
 import CircleDiagram from "./CircleDiagram";
 import UnitCircleDiagram from "./UnitCircleDiagram";
+import VectorPlaneDiagram from "./VectorPlaneDiagram";
 
 export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
   const { kind, ...props } = spec;
@@ -36,6 +37,8 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
       return <CircleDiagram {...(props as any)} />;
     case "unitCircle":
       return <UnitCircleDiagram />;
+    case "vectorPlane":
+      return <VectorPlaneDiagram {...(props as any)} />;
     default:
       return null;
   }
