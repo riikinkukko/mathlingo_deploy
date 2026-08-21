@@ -8,8 +8,6 @@ const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] =
   { title: "Стереометрия", icon: "📐", colorClass: "bg-teal-light text-teal-text" },
   { title: "Векторная геометрия", icon: "➡️", colorClass: "bg-violet-light text-violet-text" },
   { title: "Текстовые и прикладные задачи", icon: "📝", colorClass: "bg-amber-light text-amber-text" },
-  { title: "Тригонометрия", icon: "🌊", colorClass: "bg-coral-light text-coral-text" },
-  { title: "Показательные и логарифмические", icon: "📈", colorClass: "bg-pine-light text-pine-dark" },
   { title: "Графики функций", icon: "📉", colorClass: "bg-violet-light text-violet-text" },
   { title: "Производная", icon: "∂", colorClass: "bg-amber-light text-amber-text" },
   { title: "Экономическая задача", icon: "💰", colorClass: "bg-coral-light text-coral-text" },

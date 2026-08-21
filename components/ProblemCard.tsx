@@ -141,6 +141,20 @@ export default function ProblemCard({
               Теория
             </button>
           )}
+          {/* Для задач без готовой диаграммы — отдельная кнопка открытия
+              пустого холста (например, тригонометрия: ученик рисует
+              единичную окружность сам). Если диаграмма ЕСТЬ, холст уже
+              открывается по тапу на неё ниже — вторая кнопка была бы
+              дублирующим способом попасть туда же. */}
+          {!problem.diagram && (
+            <button
+              type="button"
+              onClick={() => setScratchpadOpen(true)}
+              className="rounded-pill border-2 border-line px-3 py-1.5 text-xs font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
+            >
+              ✏️ Черновик
+            </button>
+          )}
         </div>
       </div>
 
@@ -213,6 +227,10 @@ export default function ProblemCard({
             />
           )}
         </>
+      )}
+
+      {!problem.diagram && scratchpadOpen && (
+        <DiagramScratchpad onClose={() => setScratchpadOpen(false)} onDirty={() => setHasSketch(true)} />
       )}
 
       <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink" style={{ textWrap: "pretty" as any }}>

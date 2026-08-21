@@ -90,7 +90,8 @@ export interface DiagramSpec {
     | "rectangle"
     | "parallelogram"
     | "trapezoid"
-    | "circle";
+    | "circle"
+    | "unitCircle";
   [key: string]: unknown;
 }
 

@@ -9,6 +9,7 @@ import RectangleShape from "./RectangleShape";
 import Parallelogram from "./Parallelogram";
 import Trapezoid from "./Trapezoid";
 import CircleDiagram from "./CircleDiagram";
+import UnitCircleDiagram from "./UnitCircleDiagram";
 
 export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
   const { kind, ...props } = spec;
@@ -33,6 +34,8 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
       return <Trapezoid {...(props as any)} />;
     case "circle":
       return <CircleDiagram {...(props as any)} />;
+    case "unitCircle":
+      return <UnitCircleDiagram />;
     default:
       return null;
   }

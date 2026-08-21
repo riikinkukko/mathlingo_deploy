@@ -21,7 +21,9 @@ export default function DiagramScratchpad({
   onClose,
   onDirty,
 }: {
-  spec: DiagramSpec;
+  /** Необязателен — если не передан, холст открывается пустым (для задач
+   * без готовой диаграммы, где ученик рисует с нуля, например тригонометрия). */
+  spec?: DiagramSpec;
   onClose: () => void;
   /** Вызывается один раз при первом добавленном штрихе — родитель может
    * показать индикатор "есть пометки" на превью диаграммы. Черновик
@@ -166,7 +168,7 @@ export default function DiagramScratchpad({
       <div className="relative mx-auto w-full max-w-lg flex-1 px-4">
         <div ref={containerRef} className="relative h-full w-full rounded-2xl bg-white">
           <div className="absolute inset-0 p-4">
-            <DiagramRenderer spec={spec} />
+            {spec && <DiagramRenderer spec={spec} />}
           </div>
           <canvas
             ref={canvasRef}
