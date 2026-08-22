@@ -6907,6 +6907,465 @@ async function main() {
     }
   );
 
+  // ---------------- Модуль: Графики функций (номер 11 ЕГЭ) ----------------
+  const graphsTopicId = stableId("t");
+  db.topics.push({ id: graphsTopicId, order: 9, title: "Графики функций" });
+
+  const chGraphsMain = stableId("s");
+  db.subtopics.push({ id: chGraphsMain, topicId: graphsTopicId, order: 1, title: "Графики функций" });
+
+  const skLinearQuadratic = stableId("sk");
+  const skExpLog = stableId("sk");
+  const skHyperbolaSqrt = stableId("sk");
+
+  db.skills.push({
+    id: skLinearQuadratic,
+    subtopicId: chGraphsMain,
+    order: 1,
+    title: "Прямая и парабола",
+    theoryCards: [
+      {
+        title: "Метод подстановки",
+        body: "Любую задачу №11 можно решить, найдя на графике 2-3 точки с ЦЕЛЫМИ координатами (клетки сетки, где линия проходит точно через пересечение) и подставив их в формулу функции — получится система уравнений на неизвестные коэффициенты.",
+      },
+      {
+        title: "Прямая: y = kx + b",
+        body: "k — угловой коэффициент (наклон), b — значение y при x=0 (точка пересечения с осью Oy). Найдя по графику 2 точки (x₁;y₁) и (x₁;y₁), подставьте обе в y=kx+b — получится система из двух линейных уравнений.",
+      },
+      {
+        title: "Парабола: y = a(x−h)²+v",
+        formula: "вершина параболы — точка (h; v)",
+        body: "Эта форма удобнее общей y=ax²+bx+c, потому что вершина видна на рисунке напрямую — это самая нижняя (или верхняя) точка параболы. Если на графике видна вершина (h;v) и ещё одна целочисленная точка, подставьте вершину сразу, а вторую точку — чтобы найти a.",
+      },
+    ],
+  });
+
+  db.problems.push(
+    {
+      id: stableId("p"),
+      skillId: skLinearQuadratic,
+      text: "На рисунке изображён график функции f(x)=kx+b, проходящий через точки (3;4) и (−1;−3). Найдите значение x, при котором выполнено f(x)=−13,5.",
+      answerType: "NUMBER",
+      correctAnswer: "-7",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "linear",
+        params: { k: 1.75, b: -1.25 },
+        markedPoints: [{ x: 3, y: 4 }, { x: -1, y: -3 }],
+        range: 8,
+      },
+      keyFormula: "y = kx + b",
+      hints: [
+        "Подставьте обе целочисленные точки в уравнение прямой — получится система из двух уравнений на k и b.",
+        "Найдя k и b, подставьте −13,5 вместо f(x) и решите относительно x.",
+      ],
+      explanation: "Система из точек (3;4) и (−1;−3): k=1,75, b=−1,25. Уравнение: −13,5=1,75x−1,25 ⟹ x=−7.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skLinearQuadratic,
+      text: "На рисунке изображён график функции f(x)=ax²+bx+c, где числа a, b и c — целые, с вершиной в точке (−2;−1), проходящий также через точку (0;3). Найдите значение f(11).",
+      answerType: "NUMBER",
+      correctAnswer: "168",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "quadratic",
+        params: { a: 1, h: -2, v: -1 },
+        markedPoints: [{ x: -2, y: -1 }, { x: 0, y: 3 }],
+        range: 14,
+      },
+      keyFormula: "y = a(x−h)²+v",
+      hints: [
+        "Подставьте координаты вершины в форму y=a(x+2)²−1, затем вторую точку — найдите a.",
+        "Подставьте x=11 в получившееся уравнение параболы.",
+      ],
+      explanation: "Вершина (−2;−1): y=a(x+2)²−1. Точка (0;3): 3=4a−1 ⟹ a=1. f(11)=(11+2)²−1=168.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skLinearQuadratic,
+      text: "На рисунке изображён график функции f(x)=ax²+bx+c, где числа a, b и c — целые, с вершиной в точке (4;1), проходящий также через точку (3;4). Найдите значение f(−1).",
+      answerType: "NUMBER",
+      correctAnswer: "76",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "quadratic",
+        params: { a: 3, h: 4, v: 1 },
+        markedPoints: [{ x: 4, y: 1 }, { x: 3, y: 4 }],
+        range: 10,
+      },
+      hints: ["Вершина (4;1): y=a(x−4)²+1. Подставьте точку (3;4), чтобы найти a."],
+      explanation: "4=a(3−4)²+1 ⟹ a=3. f(−1)=3(−1−4)²+1=3·25+1=76.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skLinearQuadratic,
+      text: "На рисунке изображён график функции f(x)=ax²+bx+c, где числа a, b и c — действительные, с вершиной в точке (4;−3), проходящий также через точку (2;−4). Найдите значение f(−1).",
+      answerType: "NUMBER",
+      correctAnswer: "-9.25",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "quadratic",
+        params: { a: -0.25, h: 4, v: -3 },
+        markedPoints: [{ x: 4, y: -3 }, { x: 2, y: -4 }],
+        range: 10,
+      },
+      hints: ["Вершина (4;−3): y=a(x−4)²−3. Подставьте (2;−4), чтобы найти a — он получится отрицательным (ветви вниз)."],
+      explanation: "−4=a(2−4)²−3 ⟹ a=−1/4. f(−1)=−(1/4)(−1−4)²−3=−25/4−3=−9,25.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skLinearQuadratic,
+      text: "На рисунке изображён график функции f(x)=ax²+bx+c, где числа a, b и c — целые, проходящий через точки (2;4) — вершина, (1;2) и (4;−4). Найдите f(6).",
+      answerType: "NUMBER",
+      correctAnswer: "-28",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "quadratic",
+        params: { a: -2, h: 2, v: 4 },
+        markedPoints: [{ x: 2, y: 4 }, { x: 1, y: 2 }, { x: 4, y: -4 }],
+        range: 8,
+      },
+      hints: ["Даны три целочисленные точки, но одна из них — вершина. Используйте вершину и любую из оставшихся двух."],
+      explanation: "Вершина (2;4): y=a(x−2)²+4. Точка (1;2): 2=a+4 ⟹ a=−2. f(6)=−2(6−2)²+4=−28.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    }
+  );
+
+  db.skills.push({
+    id: skExpLog,
+    subtopicId: chGraphsMain,
+    order: 2,
+    title: "Показательная и логарифмическая функции",
+    theoryCards: [
+      {
+        title: "Показательная функция: асимптота и ключевая точка",
+        formula: "y = aˣ  (a>0, a≠1)",
+        body: "График всегда лежит выше оси Ox (aˣ>0 при любом x), поэтому прямая y=0 — асимптота (график приближается к ней, но никогда не касается). Ключевая точка — (0;1), так как a⁰=1 при любом основании.",
+      },
+      {
+        title: "Сдвиги показательной функции",
+        formula: "y = a^(x−h) + v",
+        body: "Число h внутри показателя сдвигает график ВЛЕВО/ВПРАВО (как для параболы), число v снаружи — ВВЕРХ/ВНИЗ. При сдвиге по вертикали асимптота тоже сдвигается: y=v (а не y=0).",
+      },
+      {
+        title: "Логарифмическая функция: асимптота и ключевая точка",
+        formula: "y = logₐx  (a>0, a≠1, x>0)",
+        body: "Асимптота — вертикальная прямая x=0 (ось Oy), так как логарифм определён только при x>0. Ключевая точка — (1;0), так как logₐ1=0 при любом основании.",
+      },
+      {
+        title: "Сдвиги логарифмической функции",
+        formula: "y = b + logₐ(x−h)",
+        body: "Число h внутри аргумента сдвигает график и его асимптоту ВЛЕВО/ВПРАВО (новая асимптота: x=h). Число b снаружи сдвигает ВВЕРХ/ВНИЗ, не затрагивая асимптоту.",
+      },
+    ],
+  });
+
+  db.problems.push(
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции вида f(x)=aˣ, проходящий через точки (0;1) и (1;5). Найдите значение f(2).",
+      answerType: "NUMBER",
+      correctAnswer: "25",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "exponential",
+        params: { a: 1, h: 0, v: 0, base: 5 },
+        markedPoints: [{ x: 0, y: 1 }, { x: 1, y: 5 }],
+        range: 3,
+      },
+      keyFormula: "y = aˣ",
+      hints: ["Точка (0;1) не даёт информации (a⁰=1 всегда). Подставьте вторую точку (1;5), чтобы найти основание a."],
+      explanation: "5=a¹ ⟹ a=5. f(2)=5²=25.",
+      difficulty: 1,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции вида f(x)=aˣ, проходящий через точки (0;1) и (−1;3). Найдите значение f(−3).",
+      answerType: "NUMBER",
+      correctAnswer: "27",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "exponential",
+        params: { a: 1, h: 0, v: 0, base: 1 / 3 },
+        markedPoints: [{ x: 0, y: 1 }, { x: -1, y: 3 }],
+        range: 4,
+      },
+      hints: ["Подставьте точку (−1;3): 3=a⁻¹, откуда a=1/3."],
+      explanation: "a⁻¹=3 ⟹ a=1/3. f(−3)=(1/3)⁻³=3³=27.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции f(x)=aˣ⁺², проходящий через точки (0;2) и (−2;1). Найдите f(6).",
+      answerType: "NUMBER",
+      correctAnswer: "16",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "exponential",
+        params: { a: 1, h: -2, v: 0, base: Math.sqrt(2) },
+        markedPoints: [{ x: 0, y: 2 }, { x: -2, y: 1 }],
+        range: 6,
+      },
+      hints: [
+        "Точка (−2;1) не даёт информации (показатель обнуляется). Подставьте (0;2): 2=a².",
+        "Основание положительно по определению — возьмите положительный корень.",
+      ],
+      explanation: "a²=2 ⟹ a=√2. f(6)=(√2)⁸=(2)⁴=16.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции f(x)=aˣ⁺ᵇ, проходящий через точки (1;3) и (2;1). Найдите f(−1).",
+      answerType: "NUMBER",
+      correctAnswer: "27",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "exponential",
+        params: { a: 1, h: 2, v: 0, base: 1 / 3 },
+        markedPoints: [{ x: 1, y: 3 }, { x: 2, y: 1 }],
+        range: 5,
+      },
+      hints: [
+        "Ключевая точка (0;1) сдвинулась в (2;1) — значит весь график сдвинут на 2 вправо: b=−2.",
+        "Подставьте оставшуюся точку в y=a^(x−2), чтобы найти a.",
+      ],
+      explanation: "b=−2 (сдвиг ключевой точки). 3=a^(1−2)=a⁻¹ ⟹ a=1/3. f(−1)=(1/3)^(−1−2)=(1/3)⁻³=27.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции f(x)=aˣ+b, проходящий через точки (0;−2) и (4;1). Найдите f(10).",
+      answerType: "NUMBER",
+      correctAnswer: "29",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "exponential",
+        params: { a: 1, h: 0, v: -3, base: Math.sqrt(2) },
+        markedPoints: [{ x: 0, y: -2 }, { x: 4, y: 1 }],
+        range: 6,
+      },
+      hints: [
+        "Ключевая точка (0;1) сдвинулась в (0;−2) — значит весь график сдвинут на 3 вниз: b=−3.",
+        "Подставьте вторую точку в y=aˣ−3, чтобы найти a.",
+      ],
+      explanation: "b=−3. 1=a⁴−3 ⟹ a⁴=4 ⟹ a=√2. f(10)=(√2)¹⁰−3=2⁵−3=32−3=29.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции вида f(x)=logₐx, проходящий через точки (1;0) и (2;−1). Найдите значение f(8).",
+      answerType: "NUMBER",
+      correctAnswer: "-3",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "logarithm",
+        params: { a: 1, h: 0, v: 0, base: 0.5 },
+        markedPoints: [{ x: 1, y: 0 }, { x: 2, y: -1 }],
+        range: 9,
+      },
+      keyFormula: "y = logₐx",
+      hints: ["Точка (1;0) не даёт информации (logₐ1=0 всегда). Подставьте (2;−1), чтобы найти основание."],
+      explanation: "−1=logₐ2 ⟹ a⁻¹=2 ⟹ a=1/2. f(8)=log_(1/2)8=−3.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции f(x)=logₐ(x−2), проходящий через точки (3;0) и (4;−1). Найдите f(10).",
+      answerType: "NUMBER",
+      correctAnswer: "-3",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "logarithm",
+        params: { a: 1, h: 2, v: 0, base: 0.5 },
+        markedPoints: [{ x: 3, y: 0 }, { x: 4, y: -1 }],
+        range: 11,
+      },
+      hints: ["Ключевая точка (1;0) сдвинулась в (3;0) — весь график сдвинут на 2 вправо."],
+      explanation: "−1=logₐ(4−2)=logₐ2 ⟹ a=1/2. f(10)=log_(1/2)(10−2)=log_(1/2)8=−3.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+      tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skExpLog,
+      text: "На рисунке изображён график функции f(x)=b+logₐx, проходящий через точки (3;−1) и (1;−2). Найдите f(81).",
+      answerType: "NUMBER",
+      correctAnswer: "2",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "logarithm",
+        params: { a: 1, h: 0, v: -2, base: 3 },
+        markedPoints: [{ x: 3, y: -1 }, { x: 1, y: -2 }],
+        range: 10,
+      },
+      hints: [
+        "Ключевая точка (1;0) сдвинулась в (1;−2) — весь график сдвинут на 2 вниз: b=−2.",
+        "Подставьте оставшуюся точку в y=logₐx−2, чтобы найти основание a.",
+      ],
+      explanation: "b=−2 (сдвиг ключевой точки). −1=logₐ3−2 ⟹ logₐ3=1 ⟹ a=3. f(81)=log₃81−2=4−2=2.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    }
+  );
+
+  db.skills.push({
+    id: skHyperbolaSqrt,
+    subtopicId: chGraphsMain,
+    order: 3,
+    title: "Гипербола и корень",
+    theoryCards: [
+      {
+        title: "Корень: вершина графика",
+        formula: "y = k√(x−x₀) + y₀",
+        body: "(x₀;y₀) — вершина, точка, откуда график «начинается» (левее неё функция не определена — под корнем не может быть отрицательное число). Знак k определяет направление ветви: k>0 — вверх, k<0 — вниз.",
+      },
+      {
+        title: "Гипербола: асимптоты",
+        formula: "y = k/(x−x₀) + y₀",
+        body: "Вертикальная асимптота — прямая x=x₀ (там знаменатель обращается в 0), горизонтальная — прямая y=y₀ (при x→±∞ дробь стремится к 0). Знак k определяет, в каких четвертях (относительно асимптот) расположены ветви.",
+      },
+      {
+        title: "Как читать асимптоты с графика",
+        body: "На рисунке асимптоты обычно не проведены явно, но их положение видно по тому, куда «прижимаются» ветви кривой. Определив x₀ и y₀ по асимптотам, останется подставить одну целочисленную точку с графика, чтобы найти k.",
+      },
+    ],
+  });
+
+  db.problems.push(
+    {
+      id: stableId("p"),
+      skillId: skHyperbolaSqrt,
+      text: "На рисунке изображён график функции f(x)=k√x, проходящий через точку (4;−3). Найдите f(2,56).",
+      answerType: "NUMBER",
+      correctAnswer: "-2.4",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "sqrt",
+        params: { a: -1.5, h: 0, v: 0 },
+        markedPoints: [{ x: 4, y: -3 }],
+        range: 6,
+      },
+      keyFormula: "y = k√x",
+      hints: ["Подставьте точку (4;−3) в функцию, чтобы найти k, затем вычислите f(2,56)."],
+      explanation: "−3=k√4=2k ⟹ k=−1,5. f(2,56)=−1,5·√2,56=−1,5·1,6=−2,4.",
+      difficulty: 2,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skHyperbolaSqrt,
+      text: "На рисунке изображён график функции f(x)=k√x+p, проходящий через точки (0;2) — вершина, и (4;−4). Найдите значение x, при котором f(x)=−10.",
+      answerType: "NUMBER",
+      correctAnswer: "16",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "sqrt",
+        params: { a: -3, h: 0, v: 2 },
+        markedPoints: [{ x: 0, y: 2 }, { x: 4, y: -4 }],
+        range: 18,
+      },
+      hints: [
+        "Вершина (0;2) сразу даёт p=2. Подставьте вторую точку в y=k√x+2, чтобы найти k.",
+        "Подставьте −10 вместо f(x) и решите относительно x.",
+      ],
+      explanation: "p=2. −4=k√4+2 ⟹ k=−3. Уравнение: −3√x+2=−10 ⟹ √x=4 ⟹ x=16.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skHyperbolaSqrt,
+      text: "На рисунке изображён график функции вида f(x)=k/x, проходящий через точку (2;1). Найдите значение f(10).",
+      answerType: "NUMBER",
+      correctAnswer: "0.2",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "hyperbola",
+        params: { k: 2, h: 0, v: 0 },
+        markedPoints: [{ x: 2, y: 1 }],
+        range: 10,
+      },
+      keyFormula: "y = k/x",
+      hints: ["Подставьте точку (2;1) в функцию, чтобы найти k."],
+      explanation: "1=k/2 ⟹ k=2. f(10)=2/10=0,2.",
+      difficulty: 1,
+      egeTaskNumber: 11,
+    },
+    {
+      id: stableId("p"),
+      skillId: skHyperbolaSqrt,
+      text: "На рисунке изображён график функции f(x)=k/(x+a) с вертикальной асимптотой x=2, проходящий через точку (−1;−1). Найдите значение x, при котором f(x)=−0,2.",
+      answerType: "NUMBER",
+      correctAnswer: "-13",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "hyperbola",
+        params: { k: 3, h: 2, v: 0 },
+        markedPoints: [{ x: -1, y: -1 }],
+        range: 14,
+      },
+      hints: [
+        "Вертикальная асимптота x=2 сразу даёт a=−2 (знаменатель x+a обращается в 0 при x=2).",
+        "Подставьте точку (−1;−1) в y=k/(x−2), чтобы найти k, затем решите уравнение при f(x)=−0,2.",
+      ],
+      explanation: "a=−2 ⟹ y=k/(x−2). −1=k/(−1−2) ⟹ k=3. Уравнение: 3/(x−2)=−0,2 ⟹ x−2=−15 ⟹ x=−13.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skHyperbolaSqrt,
+      text: "На рисунке изображён график функции f(x)=k/x+a с горизонтальной асимптотой y=−1, проходящий через точку (−2;1). Найдите f(−8).",
+      answerType: "NUMBER",
+      correctAnswer: "-0.5",
+      diagram: {
+        kind: "functionGraph",
+        funcType: "hyperbola",
+        params: { k: -4, h: 0, v: -1 },
+        markedPoints: [{ x: -2, y: 1 }],
+        range: 10,
+      },
+      hints: [
+        "Горизонтальная асимптота y=−1 сразу даёт a=−1.",
+        "Подставьте точку (−2;1) в y=k/x−1, чтобы найти k, затем вычислите f(−8).",
+      ],
+      explanation: "a=−1 ⟹ y=k/x−1. 1=k/(−2)−1 ⟹ k=−4. f(−8)=−4/(−8)−1=0,5−1=−0,5.",
+      difficulty: 3,
+      egeTaskNumber: 11,
+      tier: "bank",
+    }
+  );
+
   // ---------------- Демо-данные ниже — только при первом запуске ----------------
   if (isFreshInstall) {
   // Полина Соколова — решила абсолютно всё в основном уроке (core), чтобы

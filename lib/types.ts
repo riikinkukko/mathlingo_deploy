@@ -97,7 +97,8 @@ export interface DiagramSpec {
     | "pyramid"
     | "cylinder"
     | "cone"
-    | "triangularPrism";
+    | "triangularPrism"
+    | "functionGraph";
   [key: string]: unknown;
 }
 

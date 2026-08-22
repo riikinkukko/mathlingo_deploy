@@ -16,6 +16,7 @@ import PyramidDiagram from "./PyramidDiagram";
 import CylinderDiagram from "./CylinderDiagram";
 import ConeDiagram from "./ConeDiagram";
 import TriangularPrismDiagram from "./TriangularPrismDiagram";
+import FunctionGraphDiagram from "./FunctionGraphDiagram";
 
 export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
   const { kind, ...props } = spec;
@@ -54,6 +55,8 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
       return <ConeDiagram {...(props as any)} />;
     case "triangularPrism":
       return <TriangularPrismDiagram {...(props as any)} />;
+    case "functionGraph":
+      return <FunctionGraphDiagram {...(props as any)} />;
     default:
       return null;
   }
