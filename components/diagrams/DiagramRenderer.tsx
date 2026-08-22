@@ -17,6 +17,7 @@ import CylinderDiagram from "./CylinderDiagram";
 import ConeDiagram from "./ConeDiagram";
 import TriangularPrismDiagram from "./TriangularPrismDiagram";
 import FunctionGraphDiagram from "./FunctionGraphDiagram";
+import QualitativeCurveDiagram from "./QualitativeCurveDiagram";
 
 export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
   const { kind, ...props } = spec;
@@ -57,6 +58,8 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
       return <TriangularPrismDiagram {...(props as any)} />;
     case "functionGraph":
       return <FunctionGraphDiagram {...(props as any)} />;
+    case "qualitativeCurve":
+      return <QualitativeCurveDiagram {...(props as any)} />;
     default:
       return null;
   }

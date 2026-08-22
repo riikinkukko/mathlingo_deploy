@@ -5,7 +5,6 @@ import StudentShell from "@/components/StudentShell";
 // Заглушки будущих разделов — без записи в БД, реального контента там пока
 // нет, это витрина того, что впереди по программе профильного ЕГЭ.
 const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] = [
-  { title: "Производная", icon: "∂", colorClass: "bg-amber-light text-amber-text" },
   { title: "Экономическая задача", icon: "💰", colorClass: "bg-coral-light text-coral-text" },
   { title: "Задачи с параметром", icon: "🔧", colorClass: "bg-pine-light text-pine-dark" },
   { title: "Задачи на теорию чисел", icon: "🔢", colorClass: "bg-teal-light text-teal-text" },

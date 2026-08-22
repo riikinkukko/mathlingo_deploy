@@ -98,7 +98,8 @@ export interface DiagramSpec {
     | "cylinder"
     | "cone"
     | "triangularPrism"
-    | "functionGraph";
+    | "functionGraph"
+    | "qualitativeCurve";
   [key: string]: unknown;
 }
 
