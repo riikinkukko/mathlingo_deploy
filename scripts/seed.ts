@@ -6320,6 +6320,9 @@ async function main() {
   const chStereoMain = stableId("s");
   db.subtopics.push({ id: chStereoMain, topicId: stereoTopicId, order: 1, title: "Многогранники" });
 
+  const chStereoRevolution = stableId("s");
+  db.subtopics.push({ id: chStereoRevolution, topicId: stereoTopicId, order: 2, title: "Тела вращения" });
+
   const skBox = stableId("sk");
   const skPrism = stableId("sk");
   const skPyramid = stableId("sk");
@@ -6635,8 +6638,8 @@ async function main() {
 
   db.skills.push({
     id: skRevolution,
-    subtopicId: chStereoMain,
-    order: 4,
+    subtopicId: chStereoRevolution,
+    order: 1,
     title: "Тела вращения",
     theoryCards: [
       {
@@ -6780,8 +6783,8 @@ async function main() {
 
   db.skills.push({
     id: skInscribed,
-    subtopicId: chStereoMain,
-    order: 5,
+    subtopicId: chStereoRevolution,
+    order: 2,
     title: "Вписанные и описанные тела",
     theoryCards: [
       {

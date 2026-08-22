@@ -210,7 +210,7 @@ export default async function StudentDashboard({
   );
 
   const programTeaser = (
-    <a href="/student/program" className="block rounded-2xl border border-dashed border-line bg-white px-4 py-3.5 transition hover:border-pine">
+    <a href={`/student/program?topic=${selectedTopic?.topic.id ?? ""}`} className="block rounded-2xl border border-dashed border-line bg-white px-4 py-3.5 transition hover:border-pine">
       <p className="flex items-center gap-1.5 font-display text-sm font-black text-ink">
         {isFreeStandalone && <IconCrown className="h-4 w-4 text-amber" />}
         Программа курса

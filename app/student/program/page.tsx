@@ -14,10 +14,23 @@ import { startPaymentAction } from "@/app/actions-payments";
 import StudentShell from "@/components/StudentShell";
 import { IconCheck, IconLock } from "@/components/icons";
 
-export default async function ProgramPage() {
+export default async function ProgramPage({
+  searchParams,
+}: {
+  searchParams: { topic?: string };
+}) {
   const user = (await getSessionUser())!;
   const [curriculum, progress] = await Promise.all([getCurriculum(), computeStudentProgress(user.id)]);
-  const allSkills = curriculum.flatMap((t) => t.chapters.flatMap((c) => c.skills));
+
+  // Та же логика, что и на дашборде (/student) — без фильтра по теме
+  // getPathStates трактует все навыки ВСЕХ тем как одну непрерывную
+  // цепочку, из-за чего первый навык второй темы наследовал бы
+  // "заблокированность" от непройденной первой. По умолчанию (без
+  // ?topic= в URL) — первая тема, чтобы старые ссылки продолжали работать.
+  const selectedTopic = curriculum.find((t) => t.topic.id === searchParams.topic) ?? curriculum[0];
+  const curriculumFiltered = selectedTopic ? [selectedTopic] : [];
+
+  const allSkills = curriculumFiltered.flatMap((t) => t.chapters.flatMap((c) => c.skills));
   const pathStates = getPathStates(allSkills, progress);
 
   const standalone = isStandaloneStudent(user);
@@ -27,12 +40,16 @@ export default async function ProgramPage() {
   const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
   const chapterInfo = await Promise.all(
-    curriculum[0].chapters.map(async ({ chapter, skills }) => {
+    curriculumFiltered[0].chapters.map(async ({ chapter, skills }) => {
       const problemCounts = await Promise.all(skills.map((s) => getProblemsForSkill(s.id, true)));
       const totalProblems = problemCounts.reduce((sum, p) => sum + p.length, 0);
       const doneSkills = skills.filter((s) => pathStates[s.id] === "done").length;
       const firstSkill = [...skills].sort((a, b) => a.order - b.order)[0];
-      const fullyOpen = !isFreeStandalone || chapter.order === 1;
+      // Free-план ограничивает по первой ГЛАВЕ ПЕРВОЙ ТЕМЫ конкретно —
+      // в остальных темах free-пользователь видит только пробный навык
+      // каждой главы, даже в "первой" главе этой темы.
+      const isFirstTopic = curriculumFiltered[0].topic.id === curriculum[0]?.topic.id;
+      const fullyOpen = !isFreeStandalone || (isFirstTopic && chapter.order === 1);
       return { chapter, skills, totalProblems, doneSkills, firstSkill, fullyOpen };
     })
   );
@@ -45,12 +62,15 @@ export default async function ProgramPage() {
     <StudentShell active="path" title="Программа">
       <div className="px-4 py-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
-          <h1 className="font-display text-2xl font-black text-ink">Программа планиметрии</h1>
+          <h1 className="font-display text-2xl font-black text-ink">
+            Программа: {curriculumFiltered[0].topic.title}
+          </h1>
           <p className="mt-1.5 text-sm text-ink-soft">
-            {curriculum[0].chapters.length} глав · {totalSkills} {pluralRu(totalSkills, ["навык", "навыка", "навыков"])} ·{" "}
+            {curriculumFiltered[0].chapters.length} глав · {totalSkills} {pluralRu(totalSkills, ["навык", "навыка", "навыков"])} ·{" "}
             {totalProblemsAll} {pluralRu(totalProblemsAll, ["задача", "задачи", "задач"])}. Пройденные навыки можно
             открыть повторно в любой момент — прогресс не сбрасывается.
-            {isFreeStandalone && " Бесплатно: вся глава «Треугольники» и первый навык каждой следующей."}
+            {isFreeStandalone && curriculumFiltered[0].topic.id === curriculum[0]?.topic.id &&
+              " Бесплатно: вся глава «Треугольники» и первый навык каждой следующей."}
           </p>
 
           <div className="mt-6 space-y-3">
