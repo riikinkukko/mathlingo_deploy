@@ -17,6 +17,7 @@ export default function LessonFlow({
   nextLabel,
   isLastSkill,
   forceTheoryFirst = false,
+  backHref = "/student",
 }: {
   skillTitle: string;
   theoryCards: TheoryCard[];
@@ -29,6 +30,11 @@ export default function LessonFlow({
    * для самого первого навыка, с которого ученик заходит в совершенно
    * новую для себя тему (см. app/student/skill/[id]/page.tsx). */
   forceTheoryFirst?: boolean;
+  /** Куда ведёт стрелка "←" наверху — по умолчанию общий дашборд без
+   * контекста темы, но обычно родитель передаёт "/student?topic=<id>",
+   * чтобы ученик вернулся в ТУ ЖЕ тему, где решал задачу, а не всегда
+   * в первую тему списка (см. app/student/skill/[id]/page.tsx). */
+  backHref?: string;
 }) {
   const allSolvedInitially = problems.every((p) => initialStates[p.id]?.status === "solved");
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
@@ -74,7 +80,7 @@ export default function LessonFlow({
       <div className="mx-auto w-full max-w-2xl">
         <div className="mb-4 flex items-center gap-3">
           <a
-            href="/student"
+            href={backHref}
             aria-label="Назад к пути обучения"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
           >
@@ -98,7 +104,7 @@ export default function LessonFlow({
     <div className="mx-auto w-full max-w-2xl">
       <div className="mb-4 flex items-center gap-3">
         <a
-          href="/student"
+          href={backHref}
           aria-label="Назад к пути обучения"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
         >

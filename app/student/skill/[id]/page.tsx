@@ -91,10 +91,11 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
         theoryCards={skill.theoryCards}
         problems={problems.map(toPublicProblem)}
         initialStates={states}
-        nextHref={next ? `/student/skill/${next.id}` : "/student"}
+        nextHref={next ? `/student/skill/${next.id}` : `/student?topic=${topicEntry?.topic.id ?? ""}`}
         nextLabel={next ? `Дальше: ${next.title}` : "К пути обучения"}
         isLastSkill={!next}
         forceTheoryFirst={forceTheoryFirst}
+        backHref={`/student?topic=${topicEntry?.topic.id ?? ""}`}
       />
     </div>
   );
