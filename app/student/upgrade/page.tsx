@@ -118,11 +118,20 @@ export default async function UpgradePage({
             </ul>
             {!isPro &&
               (realPayments ? (
-                <form action={startPaymentAction} className="mt-4">
-                  <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
-                    Оплатить через ЮKassa
-                  </button>
-                </form>
+                <>
+                  <form action={startPaymentAction} className="mt-4">
+                    <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
+                      Оплатить через ЮKassa
+                    </button>
+                  </form>
+                  <p className="mt-2 text-center text-[11px] leading-snug text-ink-soft">
+                    Нажимая «Оплатить», вы принимаете условия{" "}
+                    <a href="/legal/offer" target="_blank" className="font-bold text-pine hover:underline">
+                      Публичной оферты
+                    </a>
+                    .
+                  </p>
+                </>
               ) : (
                 <form action={upgradeToProAction} className="mt-4">
                   <button className="btn-primary w-full !bg-amber !text-xs" type="submit">

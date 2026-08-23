@@ -29,6 +29,25 @@ export default function RegisterForm() {
         <label className="label" htmlFor="password">Пароль</label>
         <input className="input" id="password" name="password" type="password" required placeholder="минимум 6 символов" />
       </div>
+      <label className="flex items-start gap-2.5 text-[13px] leading-snug text-ink-soft">
+        <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 accent-pine" />
+        <span>
+          Я согласен(на) с{" "}
+          <a href="/legal/terms" target="_blank" className="font-bold text-pine hover:underline">
+            Пользовательским соглашением
+          </a>
+          ,{" "}
+          <a href="/legal/privacy" target="_blank" className="font-bold text-pine hover:underline">
+            Политикой конфиденциальности
+          </a>{" "}
+          и даю{" "}
+          <a href="/legal/consent" target="_blank" className="font-bold text-pine hover:underline">
+            согласие на обработку персональных данных
+          </a>
+          . Если мне ещё нет 14 лет, регистрацию за меня выполняет родитель или
+          законный представитель.
+        </span>
+      </label>
       {state?.error && (
         <p className="rounded-lg bg-coral-light px-3 py-2 text-sm text-coral">{state.error}</p>
       )}

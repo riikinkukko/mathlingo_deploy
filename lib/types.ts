@@ -24,6 +24,9 @@ export interface User {
   isAdmin?: boolean;
   telegramChatId?: string;
   telegramLinkCode?: string;
+  // Момент согласия на обработку персональных данных (152-ФЗ). Опционально
+  // — у пользователей, созданных до введения этого поля, будет undefined.
+  consentGivenAt?: string;
   createdAt: string;
 }
 

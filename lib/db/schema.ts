@@ -63,6 +63,14 @@ export const users = pgTable("users", {
   // после успешного связывания.
   telegramChatId: text("telegram_chat_id"),
   telegramLinkCode: text("telegram_link_code"),
+  // Момент, когда пользователь принял Пользовательское соглашение и дал
+  // согласие на обработку персональных данных (checkbox при регистрации,
+  // см. app/register/RegisterForm.tsx). NULL у пользователей, созданных ДО
+  // введения этого поля (учеников/родителей, которых добавил репетитор
+  // напрямую, минуя форму регистрации) — по 152-ФЗ согласие в таком случае
+  // на практике даёт репетитор от имени/по договорённости с учеником при
+  // очном заключении договора на занятия, эта запись это не заменяет.
+  consentGivenAt: timestamp("consent_given_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

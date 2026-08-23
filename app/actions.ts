@@ -231,8 +231,12 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim() || "demo1234";
+  const consent = formData.get("consent");
 
   if (!name || !email) return { error: "Заполните имя и email" };
+  if (consent !== "on") {
+    return { error: "Нужно подтвердить, что согласие ученика (или его представителя) получено" };
+  }
 
   const existing = await getUserByEmail(email);
   if (existing) return { error: "Пользователь с таким email уже существует" };
@@ -244,6 +248,7 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
     passwordHash: await hashPassword(password),
     role: "STUDENT",
     teacherId: teacher.id,
+    consentGivenAt: new Date(),
   });
   revalidatePath("/teacher");
   return { success: true, password };
@@ -257,8 +262,12 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim() || "demo1234";
+  const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
+  if (consent !== "on") {
+    return { error: "Нужно подтвердить, что согласие родителя получено" };
+  }
 
   let parent = await getUserByEmail(email);
   if (parent && parent.role !== "PARENT") {
@@ -272,6 +281,7 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
       email,
       passwordHash: await hashPassword(password),
       role: "PARENT",
+      consentGivenAt: new Date(),
     });
     parent = { id, name, email, passwordHash: "", role: "PARENT", isAdmin: false, createdAt: new Date().toISOString() };
   }
@@ -404,9 +414,17 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
+  const consent = formData.get("consent");
 
   if (!name || !email || password.length < 6) {
     return { error: "Заполните имя, email и пароль (минимум 6 символов)" };
+  }
+  // Серверная проверка обязательна — клиентский required на чекбоксе легко
+  // обойти прямым POST-запросом, минуя форму в браузере. Без согласия на
+  // обработку персональных данных регистрация не должна проходить ни при
+  // каких условиях (требование 152-ФЗ, см. app/legal/consent).
+  if (consent !== "on") {
+    return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
   }
 
   const existing = await getUserByEmail(email);
@@ -419,6 +437,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     email,
     passwordHash: await hashPassword(password),
     role: "STUDENT" as Role,
+    consentGivenAt: new Date(),
     // teacherId сознательно не задаём — это самостоятельный пользователь.
     plan: "free",
     energy: 5,

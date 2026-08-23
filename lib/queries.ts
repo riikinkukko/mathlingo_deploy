@@ -35,6 +35,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     proUntil: row.proUntil ? row.proUntil.toISOString() : undefined,
     isAdmin: row.isAdmin,
     telegramChatId: row.telegramChatId ?? undefined,
+    consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
