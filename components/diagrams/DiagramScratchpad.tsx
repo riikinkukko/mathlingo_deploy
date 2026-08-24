@@ -181,7 +181,7 @@ export default function DiagramScratchpad({
         </div>
       </div>
 
-      <div className="px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+      <div className="px-4 pb-[max(1rem,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-3">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-2 rounded-2xl bg-white/10 p-2">
           <div className="flex items-center gap-1.5">
             <ToolButton active={tool === "pen"} onClick={() => setTool("pen")} label="✏️" />

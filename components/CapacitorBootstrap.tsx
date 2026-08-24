@@ -17,13 +17,18 @@ export default function CapacitorBootstrap() {
       const { Capacitor } = await import("@capacitor/core");
       if (!Capacitor.isNativePlatform()) return;
 
-      const { StatusBar, Style } = await import("@capacitor/status-bar");
+      // Плагин включён только через конфигурацию (capacitor.config.ts),
+      // без явного вызова API — по официальной рекомендации в этом
+      // случае его всё равно нужно один раз импортировать для регистрации.
+      await import("@capacitor-community/safe-area");
       const { SplashScreen } = await import("@capacitor/splash-screen");
       const { App } = await import("@capacitor/app");
 
-      // Тёмный текст на светлом фоне статус-бара — соответствует общей
-      // светлой палитре приложения (paper/pine).
-      await StatusBar.setStyle({ style: Style.Light }).catch(() => {});
+      // @capacitor-community/safe-area сам внедряет рабочие CSS-переменные
+      // (var(--safe-area-inset-*)) при подключении плагина — никакого
+      // явного вызова для этого не требуется (в отличие от более старых
+      // версий этого же плагина, где нужно было звать enable() вручную).
+      // Стиль системных панелей настроен статически в capacitor.config.ts.
       await SplashScreen.hide().catch(() => {});
 
       // Аппаратная/программная кнопка "назад" на Android: по умолчанию

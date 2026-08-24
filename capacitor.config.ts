@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from "@capacitor/cli";
+import { SystemBarsStyle } from "@capacitor-community/safe-area";
 
 /**
  * Приложение — не статический экспорт, а полноценный SSR-сайт (Server
@@ -34,9 +35,27 @@ const config: CapacitorConfig = {
       androidSplashResourceName: "splash",
       showSpinner: false,
     },
-    StatusBar: {
-      style: "DARK",
-      backgroundColor: "#F2FAF5",
+    // Начиная с Android 15/16, edge-to-edge включается принудительно — у
+    // Capacitor больше нет способа его отключить (старый подход через
+    // @capacitor/status-bar с overlaysWebView:false перестал работать на
+    // Android 16). Вместо этого используем специальный плагин-полифилл:
+    // на новых WebView (Chromium 140+) он просто пропускает обычный CSS
+    // env(safe-area-inset-*), а на более старых системных WebView (там
+    // известный баг — insets возвращаются нулевыми) сам внедряет рабочие
+    // значения через CSS-переменные var(--safe-area-inset-*) — это
+    // происходит автоматически при подключении плагина, без явного кода
+    // инициализации. См. app/globals.css.
+    SystemBars: {
+      insetsHandling: "disable",
+    },
+    SafeArea: {
+      // Внимание: именование в этом enum обратное интуитивному — "Light"
+      // означает ТЁМНЫЙ контент (иконки/текст статус-бара) на светлом
+      // фоне, а "Dark" — наоборот, светлый контент на тёмном фоне. У
+      // приложения светлый фон (палитра paper/pine-light), поэтому
+      // нужны именно тёмные иконки — то есть Light, не Dark.
+      statusBarStyle: SystemBarsStyle.Light,
+      navigationBarStyle: SystemBarsStyle.Light,
     },
   },
 };
