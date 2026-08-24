@@ -1,0 +1,26 @@
+name: Deploy to Timeweb
+
+# Срабатывает при каждом пуше в основную ветку. Если название основной
+# ветки на GitHub другое (проверьте на странице репозитория) — замените
+# оба места ниже: "branches: [master]" и "git pull origin master".
+on:
+  push:
+    branches: [master]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /var/www/planimetrika
+            git pull origin master
+            npm install
+            npx drizzle-kit migrate
+            npm run build
+            pm2 restart planimetrika
