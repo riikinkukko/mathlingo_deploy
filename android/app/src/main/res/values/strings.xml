@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Планиметрика</string>
+    <string name="title_activity_main">Планиметрика</string>
+    <string name="package_name">ru.planimetrika.app</string>
+    <string name="custom_url_scheme">ru.planimetrika.app</string>
+</resources>

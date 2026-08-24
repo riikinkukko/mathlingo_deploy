@@ -85,7 +85,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   const forceTheoryFirst = !hasAnyProgressInTopic;
 
   return (
-    <div className="min-h-screen bg-paper px-4 py-4 pb-16">
+    <div className="min-h-screen bg-paper px-4 pb-16 pt-[max(1rem,env(safe-area-inset-top))]">
       <LessonFlow
         skillTitle={skill.title}
         theoryCards={skill.theoryCards}

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import CapacitorBootstrap from "@/components/CapacitorBootstrap";
 
 export const metadata: Metadata = {
   title: "Планиметрика — платформа для подготовки к ЕГЭ",
@@ -25,6 +26,13 @@ export const viewport: Viewport = {
   themeColor: "#1CAE6B",
   width: "device-width",
   initialScale: 1,
+  // viewport-fit=cover — обязательно для мобильного приложения (Capacitor):
+  // без него контент на iPhone с "чёлкой"/Dynamic Island либо обрезается
+  // белой полосой сверху/снизу, либо (в других браузерах) наезжает на
+  // системные элементы. С этим флагом страница простирается под них, а
+  // дальше сами элементы интерфейса отступают на нужное расстояние через
+  // CSS-переменные env(safe-area-inset-*) — см. globals.css.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -36,6 +44,7 @@ export default function RootLayout({
     <html lang="ru">
       <body className="font-sans bg-paper text-ink antialiased">
         <ServiceWorkerRegister />
+        <CapacitorBootstrap />
         {children}
       </body>
     </html>
