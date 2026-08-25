@@ -4,7 +4,11 @@ import StudentShell from "@/components/StudentShell";
 import ReviewFlow from "@/components/ReviewFlow";
 import Mascot from "@/components/Mascot";
 
-export default async function ReviewPage() {
+export default async function ReviewPage({
+  searchParams,
+}: {
+  searchParams: { topic?: string };
+}) {
   const user = (await getSessionUser())!;
   const due = await getDueReviewProblems(user.id);
 
@@ -13,6 +17,13 @@ export default async function ReviewPage() {
     skillTitle: d.skillTitle,
     box: d.box,
   }));
+
+  // Повторение может смешивать задачи из РАЗНЫХ тем сразу (SRS не
+  // привязан к одной конкретной теме, в отличие от обычного урока) —
+  // поэтому нет единственно верной темы для возврата. Используем ту,
+  // с дашборда которой ученик открыл повторение (если передана через
+  // ?topic= — см. app/student/page.tsx), иначе — общий дашборд.
+  const backHref = searchParams.topic ? `/student?topic=${searchParams.topic}` : "/student";
 
   // Пусто — обычная навигационная страница, с сайдбаром/таб-баром.
   if (items.length === 0) {
@@ -28,7 +39,7 @@ export default async function ReviewPage() {
                 интервальное повторение: чем лучше вы помните задачу, тем реже она
                 возвращается.
               </p>
-              <a href="/student" className="btn-primary mt-5 inline-block !text-sm">
+              <a href={backHref} className="btn-primary mt-5 inline-block !text-sm">
                 К пути обучения
               </a>
             </div>
@@ -41,8 +52,8 @@ export default async function ReviewPage() {
   // Есть что повторять — сфокусированный режим без сайдбара/таб-бара, как
   // на экране самой задачи (ReviewFlow сам рисует упрощённую шапку).
   return (
-    <div className="min-h-screen bg-paper px-4 py-4 pb-16">
-      <ReviewFlow items={items} />
+    <div className="min-h-screen bg-paper px-4 pb-16 pt-[max(1rem,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
+      <ReviewFlow items={items} backHref={backHref} />
     </div>
   );
 }

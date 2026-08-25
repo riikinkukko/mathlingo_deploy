@@ -16,7 +16,7 @@ export default async function AdminPaymentsPage() {
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 py-4">
+      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
         <div className="mx-auto max-w-3xl">
           <a href="/admin" className="text-xs font-bold text-ink-soft hover:underline">
             ← Все пользователи

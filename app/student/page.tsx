@@ -188,7 +188,7 @@ export default async function StudentDashboard({
 
   const tiles = (
     <>
-      <a href="/student/review" className="flex-1 rounded-2xl bg-violet-light px-3.5 py-3 transition hover:brightness-95">
+      <a href={`/student/review?topic=${selectedTopic?.topic.id ?? ""}`} className="flex-1 rounded-2xl bg-violet-light px-3.5 py-3 transition hover:brightness-95">
         <p className="text-[11px] font-black uppercase tracking-wide text-violet-text">Повторение</p>
         <p className="mt-1 font-display text-[17px] font-black text-ink">
           {dueReviewCount} {pluralRu(dueReviewCount, ["задача", "задачи", "задач"])}

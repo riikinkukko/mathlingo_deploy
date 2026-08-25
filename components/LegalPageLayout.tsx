@@ -16,7 +16,7 @@ export default function LegalPageLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-paper px-4 py-8">
+    <div className="min-h-screen bg-paper px-4 pb-8 pt-[max(2rem,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
       <div className="mx-auto max-w-2xl">
         <a
           href="/"

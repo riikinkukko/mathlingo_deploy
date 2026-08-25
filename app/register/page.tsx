@@ -4,7 +4,7 @@ import PublicFooter from "@/components/PublicFooter";
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-screen flex-col bg-paper">
+    <div className="flex min-h-screen flex-col bg-paper pt-[env(safe-area-inset-top)]">
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="mb-4 text-center">

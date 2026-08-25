@@ -184,9 +184,9 @@ export default function DiagramScratchpad({
       <div className="px-4 pb-[max(1rem,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-3">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-2 rounded-2xl bg-white/10 p-2">
           <div className="flex items-center gap-1.5">
-            <ToolButton active={tool === "pen"} onClick={() => setTool("pen")} label="✏️" />
-            <ToolButton active={tool === "line"} onClick={() => setTool("line")} label="📏" />
-            <ToolButton active={tool === "eraser"} onClick={() => setTool("eraser")} label="🧹" />
+            <ToolButton active={tool === "pen"} onClick={() => setTool("pen")} label="✏️" ariaLabel="Карандаш" />
+            <ToolButton active={tool === "line"} onClick={() => setTool("line")} label="📏" ariaLabel="Линейка" />
+            <ToolButton active={tool === "eraser"} onClick={() => setTool("eraser")} label="🧹" ariaLabel="Ластик" />
           </div>
           <div className="flex items-center gap-1.5">
             {COLORS.map((c) => (
@@ -202,20 +202,8 @@ export default function DiagramScratchpad({
             ))}
           </div>
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={undo}
-              disabled={strokes.length === 0}
-              className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20 disabled:opacity-30"
-            >
-              Отменить
-            </button>
-            <button
-              onClick={clearAll}
-              disabled={strokes.length === 0}
-              className="rounded-xl bg-white/10 px-3 py-2 text-xs font-bold text-white transition hover:bg-white/20 disabled:opacity-30"
-            >
-              Очистить
-            </button>
+            <ToolButton active={false} onClick={undo} disabled={strokes.length === 0} label="↩️" ariaLabel="Отменить" />
+            <ToolButton active={false} onClick={clearAll} disabled={strokes.length === 0} label="🗑️" ariaLabel="Очистить всё" />
           </div>
         </div>
       </div>
@@ -225,11 +213,28 @@ export default function DiagramScratchpad({
   return typeof document !== "undefined" ? createPortal(modal, document.body) : null;
 }
 
-function ToolButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function ToolButton({
+  active,
+  onClick,
+  label,
+  disabled,
+  ariaLabel,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  disabled?: boolean;
+  /** Для кнопок, где сам эмодзи не самоочевиден (Отменить/Очистить) —
+   * озвучивается скринридером и показывается как подсказка при наведении. */
+  ariaLabel?: string;
+}) {
   return (
     <button
       onClick={onClick}
-      className={`flex h-9 w-9 items-center justify-center rounded-xl text-lg transition ${
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className={`flex h-9 w-9 items-center justify-center rounded-xl text-lg transition disabled:opacity-30 ${
         active ? "bg-pine" : "bg-white/10 hover:bg-white/20"
       }`}
     >

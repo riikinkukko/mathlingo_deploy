@@ -8,8 +8,13 @@ import CompletionCelebration from "./CompletionCelebration";
 
 export default function ReviewFlow({
   items,
+  backHref = "/student",
 }: {
   items: { problem: PublicProblem; skillTitle: string; box: number }[];
+  /** Куда ведёт стрелка "←" — см. app/student/review/page.tsx: повторение
+   * может смешивать задачи из разных тем, поэтому это либо тема, с
+   * дашборда которой ученик открыл повторение, либо общий дашборд. */
+  backHref?: string;
 }) {
   const [index, setIndex] = useState(0);
   const [solvedIds, setSolvedIds] = useState<Set<string>>(new Set());
@@ -35,7 +40,7 @@ export default function ReviewFlow({
     <div className="mx-auto w-full max-w-2xl">
       <div className="mb-4 flex items-center gap-3">
         <a
-          href="/student"
+          href={backHref}
           aria-label="Назад к пути обучения"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
         >
@@ -106,7 +111,7 @@ export default function ReviewFlow({
         <CompletionCelebration
           subtopicTitle="Повторение пройдено"
           xpEarned={items.length * 10}
-          nextHref="/student"
+          nextHref={backHref}
           nextLabel="К пути обучения"
           eyebrow="Память укрепляется 🧠"
         />

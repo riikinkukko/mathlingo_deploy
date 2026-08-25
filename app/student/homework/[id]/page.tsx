@@ -48,7 +48,7 @@ export default async function HomeworkPage({ params }: { params: { id: string } 
   }
 
   return (
-    <div className="min-h-screen bg-paper px-4 py-4 pb-16">
+    <div className="min-h-screen bg-paper px-4 pb-16 pt-[max(1rem,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
       <AssignmentFlow
         title={hw.title}
         kind={hw.kind}

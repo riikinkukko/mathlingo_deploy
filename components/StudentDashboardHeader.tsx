@@ -25,7 +25,7 @@ export default async function StudentDashboardHeader({
   const goalPct = Math.round((dailyGoal.done / dailyGoal.total) * 100);
 
   return (
-    <header className="border-b border-line-soft bg-paper px-[18px] pb-3 pt-[14px]">
+    <header className="border-b border-line-soft bg-paper px-[18px] pb-3 pt-[max(14px,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
       <div className="flex items-center justify-between">
         <a href="/student/profile" className="flex items-center gap-2.5">
           <Mascot mood="idle" size={40} float={false} />
