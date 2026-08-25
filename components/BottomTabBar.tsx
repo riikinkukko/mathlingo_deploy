@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser } from "./icons";
 
 export default function BottomTabBar({
@@ -13,10 +13,22 @@ export default function BottomTabBar({
   homeworkLabel?: string;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Таб-бар виден на ЛЮБОЙ странице ученика — а не только на дашборде,
+  // где явно выбрана тема. Если сейчас в URL уже есть ?topic= (например,
+  // ученик на дашборде конкретной темы), протаскиваем его дальше в
+  // "Повтор" — там кнопка "назад" использует именно этот параметр (см.
+  // app/student/review/page.tsx), чтобы вернуться в ТУ ЖЕ тему, а не в
+  // первую по умолчанию. На страницах без темы в URL (Домашка, Ошибки,
+  // Профиль) topic будет просто отсутствовать — тогда review откроется
+  // без параметра, как раньше.
+  const currentTopic = searchParams.get("topic");
+  const reviewHref = currentTopic ? `/student/review?topic=${currentTopic}` : "/student/review";
 
   const tabs = [
     { href: "/student", label: "Путь", icon: IconMap, match: (p: string) => p === "/student" || p.startsWith("/student/skill") },
-    { href: "/student/review", label: "Повтор", icon: IconRepeat, match: (p: string) => p.startsWith("/student/review"), badge: reviewCount },
+    { href: reviewHref, label: "Повтор", icon: IconRepeat, match: (p: string) => p.startsWith("/student/review"), badge: reviewCount },
     { href: "/student/homework", label: homeworkLabel, icon: IconClipboard, match: (p: string) => p.startsWith("/student/homework") },
     { href: "/student/mistakes", label: "Ошибки", icon: IconBook, match: (p: string) => p.startsWith("/student/mistakes"), badge: mistakesCount },
     { href: "/student/profile", label: "Профиль", icon: IconUser, match: (p: string) => p.startsWith("/student/profile") || p.startsWith("/student/achievements") },
