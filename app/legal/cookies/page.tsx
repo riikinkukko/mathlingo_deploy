@@ -49,7 +49,7 @@ export default function CookiesPage() {
       </p>
 
       <h2 className="font-display text-base font-black text-ink">Контакты</h2>
-      <p>По вопросам, связанным с использованием cookie: [УКАЗАТЬ EMAIL].</p>
+      <p>По вопросам, связанным с использованием cookie: pavlov7500@yandex.ru.</p>
     </LegalPageLayout>
   );
 }
