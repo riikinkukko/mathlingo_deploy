@@ -4,7 +4,7 @@ export const metadata = { title: "Пользовательское соглаш�
 
 export default function TermsPage() {
   return (
-    <LegalPageLayout title="Пользовательское соглашение" updatedAt="[ДАТА ПУБЛИКАЦИИ]">
+    <LegalPageLayout title="Пользовательское соглашение" updatedAt="27.08.2026">
       <p>
         Настоящее Пользовательское соглашение (далее — Соглашение) регулирует
         отношения между физлицом Павловым Артёмом Павловичем (далее —
