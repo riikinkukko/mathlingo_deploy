@@ -4,7 +4,7 @@ export const metadata = { title: "Публичная оферта — Плани
 
 export default function OfferPage() {
   return (
-    <LegalPageLayout title="Публичная оферта" updatedAt="[ДАТА ПУБЛИКАЦИИ]">
+    <LegalPageLayout title="Публичная оферта" updatedAt="27.08.2026">
       <p>
         Настоящий документ является официальным предложением (публичной
         офертой) физлицо Павлов Артём Павлович, ИНН 431209003326 (далее — Исполнитель), заключить договор
