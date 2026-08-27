@@ -4,7 +4,7 @@ export const metadata = { title: "Политика использования ф
 
 export default function CookiesPage() {
   return (
-    <LegalPageLayout title="Политика использования файлов cookie" updatedAt="[ДАТА ПУБЛИКАЦИИ]">
+    <LegalPageLayout title="Политика использования файлов cookie" updatedAt="27.08.2026">
       <p>
         Файл cookie — небольшой текстовый файл, который сайт сохраняет в
         браузере Пользователя для корректной работы отдельных функций.
