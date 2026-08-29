@@ -473,3 +473,35 @@ export async function downgradeToFreeAction() {
   revalidatePath("/student");
   redirect("/student");
 }
+
+// Требование Google Play User Data Policy для приложений с созданием
+// аккаунта (см. app/legal/delete-account) — путь удаления должен быть
+// доступен И в приложении, И на публичной веб-странице без входа.
+// Сознательно НЕ мгновенное каскадное удаление — это боевая база с
+// реальными пользователями, полное удаление затрагивает много связанных
+// таблиц (попытки, платежи, привязки родитель-ребёнок). Помечаем запрос
+// для ручной обработки владельцем, гарантированный срок — на публичной
+// странице.
+export async function requestAccountDeletionAction() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  await db
+    .update(schema.users)
+    .set({ deletionRequestedAt: new Date() })
+    .where(eq(schema.users.id, user.id));
+  revalidatePath("/student/profile");
+  revalidatePath("/admin");
+}
+
+export async function cancelAccountDeletionAction() {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  await db
+    .update(schema.users)
+    .set({ deletionRequestedAt: null })
+    .where(eq(schema.users.id, user.id));
+  revalidatePath("/student/profile");
+  revalidatePath("/admin");
+}

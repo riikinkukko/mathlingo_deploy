@@ -27,6 +27,7 @@ export interface User {
   // Момент согласия на обработку персональных данных (152-ФЗ). Опционально
   // — у пользователей, созданных до введения этого поля, будет undefined.
   consentGivenAt?: string;
+  deletionRequestedAt?: string;
   createdAt: string;
 }
 

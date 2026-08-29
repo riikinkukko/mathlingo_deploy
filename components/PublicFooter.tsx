@@ -25,12 +25,15 @@ export default function PublicFooter() {
           <a href="/legal/cookies" className="hover:text-pine hover:underline">
             Cookie
           </a>
+          <a href="/legal/delete-account" className="hover:text-pine hover:underline">
+            Удаление аккаунта
+          </a>
         </nav>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-soft/80">
-          ФИЗЛИЦО ПАВЛОВ АРТЁМ ПАВЛОВИЧ ·
-          ИНН: 431209003326
+          [ПОЛНОЕ НАИМЕНОВАНИЕ ЮРИДИЧЕСКОГО ЛИЦА / ИП] · ОГРН/ОГРНИП: [УКАЗАТЬ] ·
+          ИНН: [УКАЗАТЬ]
           <br />
-          PAVLOV7500@YANDEX.RU
+          [ЮРИДИЧЕСКИЙ АДРЕС] · [EMAIL ДЛЯ СВЯЗИ]
         </p>
       </div>
     </footer>

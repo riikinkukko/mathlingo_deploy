@@ -1,10 +1,11 @@
 import { requireAdmin } from "@/lib/auth";
-import { getAllStandaloneUsersForAdmin, isEffectivelyPro, getEffectiveEnergy, FREE_MAX_ENERGY } from "@/lib/queries";
+import { getAllStandaloneUsersForAdmin, getUsersWithPendingDeletion, isEffectivelyPro, getEffectiveEnergy, FREE_MAX_ENERGY } from "@/lib/queries";
 import { grantProAction, revokeProAction } from "./actions";
 
 export default async function AdminPage() {
   const admin = await requireAdmin();
   const users = await getAllStandaloneUsersForAdmin();
+  const pendingDeletions = await getUsersWithPendingDeletion();
 
   return (
     <div className="min-h-screen bg-paper pb-16">
@@ -21,6 +22,32 @@ export default async function AdminPage() {
       </header>
 
       <main className="mx-auto max-w-3xl px-4 pt-6">
+        {pendingDeletions.length > 0 && (
+          <div className="mb-6 rounded-2xl border-2 border-coral-light bg-coral-light/20 p-4">
+            <p className="mb-3 font-display text-sm font-black text-coral">
+              Запросы на удаление аккаунта ({pendingDeletions.length})
+            </p>
+            <p className="mb-3 text-xs text-ink-soft">
+              Требование Google Play — путь удаления должен существовать, но
+              не обязан быть мгновенным автоматическим. Обработайте вручную в
+              течение 30 дней с момента запроса (см. /legal/delete-account).
+            </p>
+            <div className="space-y-2">
+              {pendingDeletions.map((u) => (
+                <div key={u.id} className="flex items-center justify-between rounded-xl bg-white px-3 py-2 text-sm">
+                  <div>
+                    <p className="font-semibold text-ink">{u.name} · {u.role}</p>
+                    <p className="text-xs text-ink-soft">{u.email}</p>
+                  </div>
+                  <p className="text-xs text-ink-soft">
+                    запрошено {new Date(u.deletionRequestedAt!).toLocaleDateString("ru-RU")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <p className="mb-4 text-sm text-ink-soft">
           {users.length} {users.length === 1 ? "пользователь" : "пользователей"} без привязки к репетитору
           (только у них есть понятие тарифа Free/Pro).

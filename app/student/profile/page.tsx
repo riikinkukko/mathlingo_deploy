@@ -12,6 +12,7 @@ import { computeAchievementProgress } from "@/lib/achievements";
 import { isTelegramConfigured } from "@/lib/telegram";
 import { connectTelegramAction, disconnectTelegramAction } from "@/app/actions-telegram";
 import { logoutAction } from "@/app/actions";
+import DeleteAccountSection from "@/components/DeleteAccountSection";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
@@ -152,6 +153,7 @@ export default async function ProfilePage({
             </>
           )}
         </div>
+        <DeleteAccountSection requestedAt={user.deletionRequestedAt} />
       </div>
       </div>
     </StudentShell>

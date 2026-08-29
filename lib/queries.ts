@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and, inArray, desc, asc, sql, isNull } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, sql, isNull, isNotNull } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import {
   Homework,
@@ -36,6 +36,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     isAdmin: row.isAdmin,
     telegramChatId: row.telegramChatId ?? undefined,
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
+    deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -1000,6 +1001,18 @@ export async function getAllStandaloneUsersForAdmin(): Promise<User[]> {
     .from(schema.users)
     .where(and(eq(schema.users.role, "STUDENT"), isNull(schema.users.teacherId)))
     .orderBy(desc(schema.users.createdAt));
+  return rows.map(mapUser);
+}
+
+/** Все пользователи (любой роли) с активным запросом на удаление аккаунта
+ * — для ручной обработки владельцем через /admin (см. app/actions.ts,
+ * requestAccountDeletionAction — намеренно не автоматическое удаление). */
+export async function getUsersWithPendingDeletion(): Promise<User[]> {
+  const rows = await db
+    .select()
+    .from(schema.users)
+    .where(isNotNull(schema.users.deletionRequestedAt))
+    .orderBy(desc(schema.users.deletionRequestedAt));
   return rows.map(mapUser);
 }
 
