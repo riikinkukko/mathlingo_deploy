@@ -1,9 +1,8 @@
 import { getSessionUser } from "@/lib/auth";
 import { getMistakesForStudent } from "@/lib/queries";
-import { pluralRu } from "@/lib/pluralize";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
-import { IconCheck } from "@/components/icons";
+import { IconCheck, IconClose } from "@/components/icons";
 
 export default async function MistakesPage() {
   const user = (await getSessionUser())!;
@@ -33,7 +32,34 @@ export default async function MistakesPage() {
                   <h2 className="mb-3 text-xs font-black uppercase tracking-wide text-coral">
                     Всё ещё не решено верно ({unresolved.length})
                   </h2>
-
+                  <div className="space-y-2">
+                    {unresolved.map((m) => {
+                      const content = (
+                        <>
+                          <IconClose className="h-4 w-4 shrink-0 text-coral" />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] text-ink">{m.problem.text}</p>
+                            <p className="text-[11px] text-ink-soft/70">
+                              {m.chapterTitle} · {m.skillTitle}
+                            </p>
+                          </div>
+                        </>
+                      );
+                      return m.problem.skillId ? (
+                        <a
+                          key={m.problem.id}
+                          href={`/student/skill/${m.problem.skillId}`}
+                          className="card flex items-center gap-3 border-2 border-coral-light p-3.5 transition hover:border-coral"
+                        >
+                          {content}
+                        </a>
+                      ) : (
+                        <div key={m.problem.id} className="card flex items-center gap-3 border-2 border-coral-light p-3.5">
+                          {content}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
