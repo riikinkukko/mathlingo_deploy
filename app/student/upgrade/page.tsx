@@ -40,7 +40,7 @@ export default async function UpgradePage({
   const energy = Math.floor(getEffectiveEnergy(user));
   const minutesLeft = minutesUntilNextEnergy(user);
   const realPayments = isYooKassaConfigured();
-  const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 399);
+  const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 249);
   const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
   return (
@@ -106,7 +106,8 @@ export default async function UpgradePage({
               Pro
             </p>
             <p className="mb-3 font-display text-xl font-black text-ink">
-              {realPayments ? `${priceRub} ₽ / ${periodDays} дн.` : "для демонстрации — бесплатно"}
+              {priceRub} ₽ / {periodDays} дн.
+              {!realPayments && <span className="ml-1 text-xs font-semibold text-ink-soft">(демо-режим оплаты)</span>}
             </p>
             <ul className="space-y-2 text-sm text-ink-soft">
               {PRO_FEATURES.map((f) => (
