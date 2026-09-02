@@ -30,10 +30,10 @@ export default function PublicFooter() {
           </a>
         </nav>
         <p className="mt-3 text-[11px] leading-relaxed text-ink-soft/80">
-          Физлицо Павлов Артём Павлович ·
-          ИНН: 431209003326
+          [ПОЛНОЕ НАИМЕНОВАНИЕ ЮРИДИЧЕСКОГО ЛИЦА / ИП] · ОГРН/ОГРНИП: [УКАЗАТЬ] ·
+          ИНН: [УКАЗАТЬ]
           <br />
-          pavlov7500@yandex.ru
+          [ЮРИДИЧЕСКИЙ АДРЕС] · [EMAIL ДЛЯ СВЯЗИ]
         </p>
       </div>
     </footer>

@@ -14,7 +14,7 @@ export default async function TeacherShell({
   title,
   children,
 }: {
-  active: "students" | "content";
+  active: "students" | "content" | "upgrade";
   title: string;
   children: React.ReactNode;
 }) {

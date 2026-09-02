@@ -117,6 +117,11 @@ async function main() {
         // Это предсказуемее и безопаснее, чем любая автоматическая логика
         // по количеству учителей или порядку регистрации.
         isAdmin: process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL === "teacher@demo.ru" : true,
+        // Та же логика для владельца платформы — снимает лимит на учеников
+        // и коммерческие ограничения тарифа репетитора (см. app/actions.ts,
+        // addStudentAction). Отдельный от isAdmin флаг намеренно — тот про
+        // доступ к /admin, этот про коммерческие ограничения.
+        isPlatformOwner: process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL === "teacher@demo.ru" : true,
         createdAt: new Date().toISOString(),
       },
       {
@@ -8736,6 +8741,7 @@ async function commitToDatabase(built: DB, isFreshInstall: boolean) {
         energyUpdatedAt: u.energyUpdatedAt ? new Date(u.energyUpdatedAt) : null,
         proUntil: u.proUntil ? new Date(u.proUntil) : null,
         isAdmin: u.isAdmin ?? false,
+        isPlatformOwner: u.isPlatformOwner ?? false,
         createdAt: new Date(u.createdAt),
       });
     }

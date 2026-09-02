@@ -39,6 +39,12 @@ export interface CreatePaymentResult {
  * idempotenceKey обязателен по протоколу ЮKassa — если тот же запрос
  * (например, из-за повторной отправки формы) прилетит с тем же ключом,
  * ЮKassa вернёт УЖЕ созданный платёж вместо создания дубликата.
+ *
+ * savePaymentMethod:true — просим ЮKassa запомнить способ оплаты для
+ * будущих автосписаний (тариф репетитора). ВАЖНО: по документации ЮKassa
+ * автоплатежи по умолчанию работают только в тестовом магазине — для
+ * реального нужно отдельное разрешение от менеджера ЮKassa, это не
+ * настраивается через API/код в принципе.
  */
 export async function createYooKassaPayment(params: {
   amountRub: number;
@@ -46,6 +52,7 @@ export async function createYooKassaPayment(params: {
   returnUrl: string;
   idempotenceKey: string;
   metadata?: Record<string, string>;
+  savePaymentMethod?: boolean;
 }): Promise<CreatePaymentResult> {
   const res = await fetch(`${API_BASE}/payments`, {
     method: "POST",
@@ -60,6 +67,7 @@ export async function createYooKassaPayment(params: {
       capture: true, // автоматическое списание сразу после подтверждения оплаты
       description: params.description,
       metadata: params.metadata,
+      ...(params.savePaymentMethod ? { save_payment_method: true } : {}),
     }),
   });
 
@@ -74,6 +82,49 @@ export async function createYooKassaPayment(params: {
     throw new Error("ЮKassa вернула неожиданный формат ответа (нет id или confirmation_url)");
   }
   return { id: data.id, confirmationUrl };
+}
+
+/**
+ * Автоплатёж — повторное безакцептное списание по уже сохранённому
+ * способу оплаты (payment_method_id), без участия и подтверждения
+ * пользователя. НЕТ объекта confirmation — в этом ключевое отличие от
+ * обычного платежа: пользователь никуда не перенаправляется, результат
+ * приходит тем же вебхуком payment.succeeded/payment.canceled, что и
+ * для обычных платежей.
+ */
+export async function createRecurringYooKassaPayment(params: {
+  amountRub: number;
+  description: string;
+  paymentMethodId: string;
+  idempotenceKey: string;
+  metadata?: Record<string, string>;
+}): Promise<{ id: string; status: string }> {
+  const res = await fetch(`${API_BASE}/payments`, {
+    method: "POST",
+    headers: {
+      Authorization: getAuthHeader(),
+      "Content-Type": "application/json",
+      "Idempotence-Key": params.idempotenceKey,
+    },
+    body: JSON.stringify({
+      amount: { value: params.amountRub.toFixed(2), currency: "RUB" },
+      capture: true,
+      payment_method_id: params.paymentMethodId,
+      description: params.description,
+      metadata: params.metadata,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`ЮKassa вернула ошибку ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  if (!data?.id) {
+    throw new Error("ЮKassa вернула неожиданный формат ответа (нет id)");
+  }
+  return { id: data.id, status: data.status };
 }
 
 // Диапазоны IP, с которых ЮKassa реально отправляет вебхуки — вместо
@@ -95,10 +146,41 @@ function ipToLong(ip: string): number {
   return ip.split(".").reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
 }
 
+/** Разворачивает IPv6-адрес (с учётом сокращения "::") в 128-битное число
+ * — BigInt нужен, так как обычный JS number не может точно хранить 128
+ * бит. Понимает и полную форму (8 групп по 4 hex-цифры), и сокращённую
+ * ("::" вместо одной последовательности нулевых групп). */
+function ipv6ToBigInt(ip: string): bigint {
+  const [head, tail] = ip.split("::");
+  const headParts = head ? head.split(":") : [];
+  const tailParts = tail ? tail.split(":") : [];
+  const missing = 8 - headParts.length - tailParts.length;
+  const groups = [...headParts, ...Array(Math.max(missing, 0)).fill("0"), ...tailParts];
+  const SHIFT_16_BITS = BigInt(65536); // 2^16 — то же самое, что "acc << 16" для неотрицательных чисел
+  const ZERO = BigInt(0);
+  return groups.reduce((acc, group) => acc * SHIFT_16_BITS + BigInt(parseInt(group || "0", 16)), ZERO);
+}
+
+function isIpv6InCidr(ip: string, cidr: string): boolean {
+  const [range, bitsStr] = cidr.split("/");
+  const bits = BigInt(bitsStr ?? "128");
+  const ZERO = BigInt(0);
+  const ONE = BigInt(1);
+  const BITS_128 = BigInt(128);
+  const mask = bits === ZERO ? ZERO : (~ZERO << (BITS_128 - bits)) & ((ONE << BITS_128) - ONE);
+  try {
+    return (ipv6ToBigInt(ip) & mask) === (ipv6ToBigInt(range) & mask);
+  } catch {
+    return false;
+  }
+}
+
 function isIpInCidr(ip: string, cidr: string): boolean {
   if (!cidr.includes("/")) return ip === cidr;
   const [range, bitsStr] = cidr.split("/");
-  if (range.includes(":")) return false; // IPv6-диапазоны здесь не сравниваем побитово, см. ниже
+  // IPv6 отличается наличием ":" в адресе — у IPv4 такого символа не
+  // бывает, этого достаточно, чтобы выбрать правильную ветку сравнения.
+  if (range.includes(":") || ip.includes(":")) return isIpv6InCidr(ip, cidr);
   const bits = parseInt(bitsStr, 10);
   const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
   try {
@@ -108,10 +190,11 @@ function isIpInCidr(ip: string, cidr: string): boolean {
   }
 }
 
-/** true, если IP похож на один из документированных диапазонов ЮKassa.
- * Намеренно "мягкая" проверка (не считаем IPv6 побитово) — если сомневаетесь
- * в безопасности для вашего случая, дополнительно сверяйте payment.id через
- * GET-запрос к самой ЮKassa перед тем, как доверять телу вебхука. */
+/** true, если IP входит в один из документированных диапазонов ЮKassa —
+ * включая IPv6 (2a02:5180::/32), который раньше здесь не проверялся
+ * вообще (баг: функция сравнения всегда возвращала false для IPv6, из-за
+ * чего реальные вебхуки с IPv6-адресов ЮKassa отклонялись как чужие —
+ * платёж проходил на стороне ЮKassa, а сайт об этом не узнавал). */
 export function isYooKassaIp(ip: string): boolean {
   return YOOKASSA_IP_RANGES.some((range) => isIpInCidr(ip, range));
 }

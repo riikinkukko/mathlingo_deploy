@@ -80,6 +80,25 @@ export const users = pgTable("users", {
   // обработки владельцем через /admin, с гарантией удаления в разумный
   // срок (см. текст на публичной странице запроса).
   deletionRequestedAt: timestamp("deletion_requested_at", { withTimezone: true }),
+  // --- Тариф репетитора (не путать с plan выше — тот только для
+  // самостоятельного ученика). До 3 учеников бесплатно, дальше нужен
+  // teacherPlan='pro'. NULL/по умолчанию 'free' у всех существующих
+  // репетиторов — сознательно НЕ ломает уже работающих учителей задним
+  // числом, лимит применяется только при попытке добавить НОВОГО ученика
+  // сверх трёх (см. addStudentAction в app/actions.ts).
+  teacherPlan: planEnum("teacher_plan").notNull().default("free"),
+  teacherProUntil: timestamp("teacher_pro_until", { withTimezone: true }),
+  // Владелец платформы (вы) — полностью вне обычной системы тарифов, а
+  // не просто "вечный Pro": лимит на учеников для него не проверяется
+  // вообще, ни при каких условиях. Отдельно от isAdmin (тот — про доступ
+  // к /admin, это — про коммерческие ограничения; у вас оба true, но
+  // технически это разные вещи на случай будущих сценариев).
+  isPlatformOwner: boolean("is_platform_owner").notNull().default(false),
+  // Сохранённый способ оплаты ЮKassa для автоматических ежемесячных
+  // списаний тарифа репетитора (payment_method_id из ответа ЮKassa после
+  // первого платежа с save_payment_method:true). NULL — автосписание не
+  // настроено (ещё не платил, либо отменил автоплатёж).
+  yookassaPaymentMethodId: text("yookassa_payment_method_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -95,6 +114,14 @@ export const payments = pgTable("payments", {
   amountRub: integer("amount_rub").notNull(),
   status: text("status").notNull(), // pending | succeeded | canceled
   periodDays: integer("period_days").notNull(),
+  // Кому и что продлевать при успехе — ученику (plan/proUntil) или
+  // репетитору (teacherPlan/teacherProUntil). default для обратной
+  // совместимости со старыми записями (все они были student_pro).
+  paymentType: text("payment_type").notNull().default("student_pro"), // student_pro | teacher_pro
+  // true — при этом платеже способ оплаты был сохранён для будущих
+  // автосписаний (см. users.yookassaPaymentMethodId). false для разовых
+  // ученических Pro-платежей и для платежей без явного согласия на автоплатёж.
+  isRecurringSetup: boolean("is_recurring_setup").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   paidAt: timestamp("paid_at", { withTimezone: true }),
 });

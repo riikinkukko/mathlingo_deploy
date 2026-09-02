@@ -1,7 +1,7 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
 import { logoutAction } from "@/app/actions";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown } from "./icons";
+import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconStar } from "./icons";
 import { Notification } from "@/lib/types";
 
 export default function TeacherSidebar({
@@ -11,7 +11,7 @@ export default function TeacherSidebar({
   notifications,
   unreadCount,
 }: {
-  active: "students" | "content";
+  active: "students" | "content" | "upgrade";
   pendingReviewCount: number;
   isAdmin: boolean;
   notifications: Notification[];
@@ -20,6 +20,7 @@ export default function TeacherSidebar({
   const items = [
     { key: "students", label: "Мои ученики", href: "/teacher", icon: IconStudents, badge: pendingReviewCount },
     { key: "content", label: "Контент программы", href: "/teacher/content", icon: IconContent, badge: 0 },
+    { key: "upgrade", label: "Тариф", href: "/teacher/upgrade", icon: IconStar, badge: 0 },
   ] as const;
 
   return (

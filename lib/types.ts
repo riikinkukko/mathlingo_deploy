@@ -28,6 +28,10 @@ export interface User {
   // — у пользователей, созданных до введения этого поля, будет undefined.
   consentGivenAt?: string;
   deletionRequestedAt?: string;
+  teacherPlan?: "free" | "pro";
+  teacherProUntil?: string;
+  isPlatformOwner?: boolean;
+  yookassaPaymentMethodId?: string;
   createdAt: string;
 }
 

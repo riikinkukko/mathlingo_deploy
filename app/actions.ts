@@ -228,6 +228,23 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
 
+  // До 3 учеников бесплатно, дальше — тариф репетитора (1499 ₽/мес).
+  // Владелец платформы (isPlatformOwner) вне этого лимита вообще, как и
+  // репетитор с активным teacherPlan='pro'. teacherProUntil===undefined
+  // (выдано вручную из /admin бессрочно) тоже считается активным.
+  const isTeacherProActive =
+    teacher.teacherPlan === "pro" &&
+    (!teacher.teacherProUntil || new Date(teacher.teacherProUntil).getTime() > Date.now());
+  if (!teacher.isPlatformOwner && !isTeacherProActive) {
+    const currentStudents = await getStudentsOfTeacher(teacher.id);
+    if (currentStudents.length >= 3) {
+      return {
+        error:
+          "На бесплатном тарифе можно добавить до 3 учеников. Чтобы добавить больше — оформите тариф репетитора.",
+      };
+    }
+  }
+
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "").trim() || "demo1234";
@@ -447,6 +464,42 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   const token = await createSessionToken(userId, "STUDENT");
   await setSessionCookie(token);
   redirect("/student");
+}
+
+export async function registerTeacherAction(_prevState: unknown, formData: FormData) {
+  const name = String(formData.get("name") || "").trim();
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const password = String(formData.get("password") || "");
+  const consent = formData.get("consent");
+
+  if (!name || !email || password.length < 6) {
+    return { error: "Заполните имя, email и пароль (минимум 6 символов)" };
+  }
+  if (consent !== "on") {
+    return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
+  }
+
+  const existing = await getUserByEmail(email);
+  if (existing) return { error: "Пользователь с таким email уже существует" };
+
+  const userId = genId("u");
+  await db.insert(schema.users).values({
+    id: userId,
+    name,
+    email,
+    passwordHash: await hashPassword(password),
+    role: "TEACHER" as Role,
+    consentGivenAt: new Date(),
+    // teacherPlan по умолчанию 'free' — до 3 учеников бесплатно (лимит
+    // проверяется в addStudentAction), дальше нужен платный тариф.
+    // isPlatformOwner НЕ проставляем здесь никогда — этот флаг выдаётся
+    // только вручную одному конкретному человеку (владельцу платформы)
+    // через прямой SQL, см. README.
+  });
+
+  const token = await createSessionToken(userId, "TEACHER");
+  await setSessionCookie(token);
+  redirect("/teacher");
 }
 
 // ---------- План Free/Pro (демо-переключение, без реальной оплаты) ----------

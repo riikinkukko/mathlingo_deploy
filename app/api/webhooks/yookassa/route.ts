@@ -23,7 +23,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  let body: { event?: string; object?: { id?: string; status?: string } };
+  let body: {
+    event?: string;
+    object?: { id?: string; status?: string; payment_method?: { id?: string; saved?: boolean } };
+  };
   try {
     body = await req.json();
   } catch {
@@ -37,7 +40,15 @@ export async function POST(req: Request) {
 
   try {
     if (body.event === "payment.succeeded") {
-      await markPaymentSucceeded(paymentId);
+      // payment_method.saved:true — способ оплаты реально сохранён на
+      // стороне ЮKassa (это подтверждение, а не просто эхо нашего запроса
+      // save_payment_method:true — ЮKassa может отказать в сохранении,
+      // например для некоторых типов карт, поэтому явно проверяем saved).
+      const savedMethodId =
+        body.object?.payment_method?.saved && body.object.payment_method.id
+          ? body.object.payment_method.id
+          : undefined;
+      await markPaymentSucceeded(paymentId, savedMethodId);
     } else if (body.event === "payment.canceled") {
       await markPaymentCanceled(paymentId);
     }

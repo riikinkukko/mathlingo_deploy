@@ -1,11 +1,15 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
+
+const FREE_STUDENT_LIMIT = 3;
 
 export default async function TeacherDashboard() {
   const user = (await getSessionUser())!;
   const students = await getStudentsOfTeacher(user.id);
+  const isOwner = !!user.isPlatformOwner;
+  const isPro = isTeacherEffectivelyPro(user);
 
   const cards = await Promise.all(
     students.map(async (s) => {
@@ -23,6 +27,21 @@ export default async function TeacherDashboard() {
   return (
     <TeacherShell active="students" title="Мои ученики">
       <main className="mx-auto max-w-3xl px-4 pt-6">
+        {!isOwner && !isPro && (
+          <a
+            href="/teacher/upgrade"
+            className={`card mb-4 flex items-center justify-between p-3.5 transition hover:border-pine ${
+              students.length >= FREE_STUDENT_LIMIT ? "border-2 !border-amber bg-amber-light/40" : ""
+            }`}
+          >
+            <p className="text-sm font-semibold text-ink">
+              Тариф: <span className="font-bold text-pine-dark">Free</span> ·{" "}
+              {students.length}/{FREE_STUDENT_LIMIT} учеников
+            </p>
+            <span className="text-xs font-bold text-pine">Подробнее →</span>
+          </a>
+        )}
+
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-black text-ink">Мои ученики</h1>

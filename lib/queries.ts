@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and, inArray, desc, asc, sql, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import {
   Homework,
@@ -37,6 +37,10 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     telegramChatId: row.telegramChatId ?? undefined,
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
+    teacherPlan: row.teacherPlan ?? undefined,
+    teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
+    isPlatformOwner: row.isPlatformOwner,
+    yookassaPaymentMethodId: row.yookassaPaymentMethodId ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -791,6 +795,35 @@ export function isEffectivelyPro(user: User): boolean {
   return new Date(user.proUntil).getTime() > Date.now();
 }
 
+/** Активен ли платный тариф репетитора — владелец платформы (isPlatformOwner)
+ * считается отдельно, эта функция про именно ОПЛАЧЕННЫЙ статус, не про
+ * итоговое "снят ли лимит на учеников" (для этого см. addStudentAction). */
+export function isTeacherEffectivelyPro(user: User): boolean {
+  if (user.teacherPlan !== "pro") return false;
+  if (!user.teacherProUntil) return true;
+  return new Date(user.teacherProUntil).getTime() > Date.now();
+}
+
+/** Репетиторы, которым пора автоматически продлить тариф — teacherPlan
+ * уже 'pro', срок истекает СЕГОДНЯ или раньше, и есть сохранённый способ
+ * оплаты (иначе автосписание технически невозможно — например, платёж
+ * был без save_payment_method, или пользователь позже отменил автоплатёж
+ * через поддержку). Используется в /api/cron/renew-teacher-subscriptions. */
+export async function getTeachersDueForRenewal(): Promise<User[]> {
+  const rows = await db
+    .select()
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.role, "TEACHER"),
+        eq(schema.users.teacherPlan, "pro"),
+        lte(schema.users.teacherProUntil, new Date()),
+        isNotNull(schema.users.yookassaPaymentMethodId)
+      )
+    );
+  return rows.map(mapUser);
+}
+
 /** Ученики репетитора (с teacherId) и все не-ученики — вне системы планов,
  * для них энергия всегда безлимитна. Ограничение касается только тех, кто
  * зарегистрировался сам и не находится на Pro-плане. */
@@ -1063,6 +1096,8 @@ export async function createPendingPayment(params: {
   yookassaPaymentId: string;
   amountRub: number;
   periodDays: number;
+  paymentType?: "student_pro" | "teacher_pro";
+  isRecurringSetup?: boolean;
 }): Promise<string> {
   const id = genId("pay");
   await db.insert(schema.payments).values({
@@ -1072,6 +1107,8 @@ export async function createPendingPayment(params: {
     amountRub: params.amountRub,
     periodDays: params.periodDays,
     status: "pending",
+    paymentType: params.paymentType ?? "student_pro",
+    isRecurringSetup: params.isRecurringSetup ?? false,
   });
   return id;
 }
@@ -1079,8 +1116,12 @@ export async function createPendingPayment(params: {
 /** Вызывается из обработчика вебхука ЮKassa. Идемпотентна: если платёж с
  * таким yookassaPaymentId уже помечен succeeded — не продлевает подписку
  * повторно (ЮKassa может доставить один и тот же вебхук больше одного раза,
- * это ожидаемо по их же документации, а не баг с их стороны). */
-export async function markPaymentSucceeded(yookassaPaymentId: string): Promise<boolean> {
+ * это ожидаемо по их же документации, а не баг с их стороны).
+ *
+ * paymentMethodId — если пришёл в вебхуке (значит платёж был с
+ * save_payment_method:true и способ оплаты реально сохранился на стороне
+ * ЮKassa) — записываем его пользователю для будущих автоплатежей. */
+export async function markPaymentSucceeded(yookassaPaymentId: string, paymentMethodId?: string): Promise<boolean> {
   const rows = await db
     .select()
     .from(schema.payments)
@@ -1098,15 +1139,29 @@ export async function markPaymentSucceeded(yookassaPaymentId: string): Promise<b
 
     const userRows = await tx.select().from(schema.users).where(eq(schema.users.id, payment.userId)).limit(1);
     const user = userRows[0] ? mapUser(userRows[0]) : undefined;
-    // Если у пользователя уже был активный Pro — продлеваем ОТ даты
-    // истечения, а не от "сейчас" (иначе повторная оплата ДО истечения
-    // текущего периода потеряла бы уже оплаченные дни).
-    const base =
-      user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()
-        ? new Date(user.proUntil)
-        : new Date();
-    const proUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
-    await tx.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, payment.userId));
+
+    if (payment.paymentType === "teacher_pro") {
+      const base =
+        user && user.teacherProUntil && new Date(user.teacherProUntil).getTime() > Date.now()
+          ? new Date(user.teacherProUntil)
+          : new Date();
+      const teacherProUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
+      await tx
+        .update(schema.users)
+        .set({
+          teacherPlan: "pro",
+          teacherProUntil,
+          ...(paymentMethodId && payment.isRecurringSetup ? { yookassaPaymentMethodId: paymentMethodId } : {}),
+        })
+        .where(eq(schema.users.id, payment.userId));
+    } else {
+      const base =
+        user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()
+          ? new Date(user.proUntil)
+          : new Date();
+      const proUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
+      await tx.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, payment.userId));
+    }
   });
   return true;
 }

@@ -20,9 +20,15 @@ export default function LoginPage() {
             <LoginForm />
           </div>
           <p className="mt-4 text-center text-sm text-ink-soft">
-            Нет аккаунта репетитора?{" "}
+            Готовитесь сами, без репетитора?{" "}
             <a href="/register" className="font-bold text-pine hover:underline">
-              Зарегистрироваться самостоятельно
+              Зарегистрироваться как ученик
+            </a>
+          </p>
+          <p className="mt-1.5 text-center text-sm text-ink-soft">
+            Вы репетитор?{" "}
+            <a href="/register/teacher" className="font-bold text-pine hover:underline">
+              Зарегистрироваться как репетитор
             </a>
           </p>
           {process.env.NODE_ENV !== "production" && (
