@@ -244,6 +244,7 @@ async function main() {
   const skTriangleCenters = stableId("sk");
   const skExcenter = stableId("sk");
   const skCyclicTangentialQuad = stableId("sk");
+  const skTrezubets = stableId("sk");
   const skSectorSimilar = stableId("sk");
   const skills: Skill[] = [
     {
@@ -807,9 +808,26 @@ async function main() {
       ],
     },
     {
-      id: skSectorSimilar,
+      id: skTrezubets,
       subtopicId: chCircle,
       order: 8,
+      title: "Лемма о трезубце",
+      theoryCards: [
+        {
+          title: "Отрезки касательных от вершины",
+          formula: "AN = AN₂ = p",
+          body: "Если окружность касается стороны треугольника и продолжений двух других сторон (вневписанная), то расстояние от вершины, откуда выходят обе стороны с продолжениями, до точки касания на любой из них равно полупериметру треугольника p.",
+        },
+        {
+          title: "Как решать такие задачи",
+          body: "Обычно помогает подобие треугольников: маленький прямоугольный треугольник (вершина — точка касания на стороне, катет — известный отрезок) подобен треугольнику, образованному центром окружности и вершиной. Из подобия составляется уравнение на радиус.",
+        },
+      ],
+    },
+    {
+      id: skSectorSimilar,
+      subtopicId: chCircle,
+      order: 9,
       title: "Площадь сектора и подобие в окружностях",
       theoryCards: [
         {
@@ -2993,6 +3011,23 @@ async function main() {
       difficulty: 3,
       egeTaskNumber: 1,
       tier: "bank",
+    },
+    {
+      id: stableId("p"),
+      skillId: skTrezubets,
+      text: "Окружность касается стороны BC=15 и продолжений сторон AB=AC=8,5 треугольника ABC. Найдите радиус этой окружности.",
+      answerType: "NUMBER",
+      correctAnswer: "30",
+      diagram: { kind: "triangleExcircle" },
+      keyFormula: "Отрезки касательных от вершины равны полупериметру",
+      hints: [
+        "Точка касания окружности со стороной BC делит её пополам — треугольник равнобедренный, а расстояние от вершины B до точки касания равно p−c, где c=AC.",
+        "Найдите высоту AM по теореме Пифагора из треугольника ACM, затем составьте пропорцию из подобия треугольников ACM и ANO (O — центр окружности, N — точка касания на продолжении AC).",
+      ],
+      explanation:
+        "Полупериметр p=(15+2·8,5)/2=16. Точка касания M делит BC пополам (по симметрии), CM=7,5. По теореме Пифагора AM=√(AC²−CM²)=√(8,5²−7,5²)=√16=4. Из подобия △ACM~△ANO: CM/ON=AC/AO ⟹ 7,5/r=8,5/(4+r) ⟹ 7,5(4+r)=8,5r ⟹ 30=r.",
+      difficulty: 3,
+      egeTaskNumber: 1,
     },
     {
       id: stableId("p"),

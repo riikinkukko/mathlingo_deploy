@@ -44,6 +44,9 @@ export default function LoginForm() {
           placeholder="••••••••"
           required
         />
+        <a href="/forgot-password" className="mt-1.5 inline-block text-xs font-bold text-pine hover:underline">
+          Забыли пароль?
+        </a>
       </div>
       {state?.error && (
         <p className="rounded-lg bg-coral-light px-3 py-2 text-sm text-coral">

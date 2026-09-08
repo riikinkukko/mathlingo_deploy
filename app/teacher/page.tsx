@@ -2,6 +2,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
+import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 
 const FREE_STUDENT_LIMIT = 3;
 
@@ -27,6 +28,7 @@ export default async function TeacherDashboard() {
   return (
     <TeacherShell active="students" title="Мои ученики">
       <main className="mx-auto max-w-3xl px-4 pt-6">
+        {!user.emailVerifiedAt && <VerifyEmailReminder />}
         {!isOwner && !isPro && (
           <a
             href="/teacher/upgrade"

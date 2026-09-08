@@ -71,6 +71,11 @@ export const users = pgTable("users", {
   // на практике даёт репетитор от имени/по договорённости с учеником при
   // очном заключении договора на занятия, эта запись это не заменяет.
   consentGivenAt: timestamp("consent_given_at", { withTimezone: true }),
+  // Подтверждение email — NULL означает "не подтверждён". Намеренно НЕ
+  // блокирует доступ к сервису (мягкий подход для старта, не жёсткий
+  // gate) — просто позволяет показать напоминание в интерфейсе и
+  // отдельно снижает риск регистрации на чужой/несуществующий адрес.
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
   // Запрос на удаление аккаунта (требование Google Play User Data Policy
   // для приложений с созданием аккаунта — см. app/legal/delete-account).
   // Сознательно НЕ автоматическое каскадное удаление по нажатию кнопки —
@@ -128,6 +133,26 @@ export const registrationAttempts = pgTable("registration_attempts", {
   id: text("id").primaryKey(),
   ipAddress: text("ip_address").notNull(),
   role: text("role").notNull(), // "STUDENT" | "TEACHER" — лимиты считаются раздельно
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Одноразовые токены — и для подтверждения email, и для сброса пароля.
+// Одна таблица с полем type, а не две похожие — структура одинаковая
+// (случайный токен, срок действия, факт использования), незачем
+// дублировать. token — длинная случайная строка (см. genId), не
+// последовательный ID — иначе можно было бы перебором подобрать чужой.
+export const authTokens = pgTable("auth_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: text("token").notNull().unique(),
+  type: text("type").notNull(), // "email_verification" | "password_reset"
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  // NULL — токен ещё не использован. Заполняется при успешном
+  // использовании — не даёт применить одну и ту же ссылку из письма
+  // дважды (особенно важно для сброса пароля).
+  usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

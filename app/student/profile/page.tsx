@@ -13,6 +13,7 @@ import { isTelegramConfigured } from "@/lib/telegram";
 import { connectTelegramAction, disconnectTelegramAction } from "@/app/actions-telegram";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
+import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
@@ -65,6 +66,8 @@ export default async function ProfilePage({
             </button>
           </form>
         </div>
+
+        {!user.emailVerifiedAt && <VerifyEmailReminder />}
 
         <div className="card mb-6 p-5">
           <div className="flex items-center justify-between">

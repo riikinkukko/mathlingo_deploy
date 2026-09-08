@@ -1,3 +1,6 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
 import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser, IconGrid } from "./icons";
@@ -26,10 +29,20 @@ export default function StudentSidebar({
   notifications: Notification[];
   unreadCount: number;
 }) {
+  // Тот же принцип, что и в BottomTabBar (мобильная навигация) — раньше
+  // здесь была жёстко закодированная ссылка на /student/review без
+  // параметра ?topic=, из-за чего кнопка "назад" в Повторении всегда
+  // возвращала на первую тему по умолчанию, даже если ученик открывал
+  // повторение из другой темы. Десктопная версия навигации — отдельный
+  // компонент от мобильной, тот фикс её не затрагивал.
+  const searchParams = useSearchParams();
+  const currentTopic = searchParams.get("topic");
+  const reviewHref = currentTopic ? `/student/review?topic=${currentTopic}` : "/student/review";
+
   const items = [
     { key: "subjects", label: "Предметы", href: "/student/subjects", icon: IconGrid, badge: 0 },
     { key: "path", label: "Путь обучения", href: "/student", icon: IconMap, badge: 0 },
-    { key: "review", label: "Повторение", href: "/student/review", icon: IconRepeat, badge: reviewCount },
+    { key: "review", label: "Повторение", href: reviewHref, icon: IconRepeat, badge: reviewCount },
     { key: "homework", label: homeworkLabel, href: "/student/homework", icon: IconClipboard, badge: homeworkCount },
     { key: "mistakes", label: "Мои ошибки", href: "/student/mistakes", icon: IconBook, badge: mistakesCount },
     { key: "profile", label: "Профиль", href: "/student/profile", icon: IconUser, badge: 0 },

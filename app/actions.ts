@@ -24,10 +24,13 @@ import {
   isStandaloneStudent,
   getUserByEmail,
   genId,
+  createAuthToken,
+  consumeAuthToken,
   isRegistrationRateLimited,
   recordRegistrationAttempt,
 } from "@/lib/queries";
 import { performSubmitAttempt } from "@/lib/actions-core";
+import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 
 /** Реальный IP клиента — читает заголовки, которые nginx проставляет на
  * сервере (X-Real-IP/X-Forwarded-For, см. README про настройку прокси).
@@ -491,6 +494,14 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     energyUpdatedAt: new Date(),
   });
 
+  // Не блокируем регистрацию, если письмо не уйдёт по какой-то причине
+  // (например, временная проблема на стороне SMTP-провайдера) — email
+  // сможет подтвердить позже кнопкой "отправить письмо ещё раз" в профиле.
+  const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
+  await sendVerificationEmail(email, verificationToken).catch((e) =>
+    console.error("Не удалось отправить письмо верификации:", e)
+  );
+
   const token = await createSessionToken(userId, "STUDENT");
   await setSessionCookie(token);
   redirect("/onboarding");
@@ -539,6 +550,11 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
     // только вручную одному конкретному человеку (владельцу платформы)
     // через прямой SQL, см. README.
   });
+
+  const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
+  await sendVerificationEmail(email, verificationToken).catch((e) =>
+    console.error("Не удалось отправить письмо верификации:", e)
+  );
 
   const token = await createSessionToken(userId, "TEACHER");
   await setSessionCookie(token);
@@ -649,4 +665,62 @@ export async function saveOnboardingAction(formData: FormData) {
     .where(eq(schema.users.id, user.id));
 
   redirect("/student");
+}
+
+// ---------- Подтверждение email и сброс пароля ----------
+
+export async function verifyEmailAction(token: string): Promise<{ success: boolean }> {
+  const userId = await consumeAuthToken(token, "email_verification");
+  if (!userId) return { success: false };
+  await db.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, userId));
+  return { success: true };
+}
+
+/** Для уже залогиненного пользователя, у которого email ещё не
+ * подтверждён (например, письмо не дошло с первого раза) — кнопка
+ * "отправить письмо ещё раз" в профиле. */
+export async function resendVerificationEmailAction() {
+  const user = await getSessionUser();
+  if (!user || user.emailVerifiedAt) return;
+  const token = await createAuthToken(user.id, "email_verification", 24 * 3600 * 1000);
+  await sendVerificationEmail(user.email, token).catch((e) =>
+    console.error("Не удалось повторно отправить письмо верификации:", e)
+  );
+}
+
+/**
+ * Намеренно не сообщает, существует ли email в системе — иначе форму
+ * можно было бы использовать для проверки, кто зарегистрирован на
+ * платформе (утечка информации о пользователях). Всегда возвращает
+ * одинаковый успех, реальная отправка письма — только если аккаунт
+ * действительно найден.
+ */
+export async function requestPasswordResetAction(_prevState: unknown, formData: FormData) {
+  const email = String(formData.get("email") || "").trim().toLowerCase();
+  if (!email) return { error: "Введите email" };
+
+  const user = await getUserByEmail(email);
+  if (user) {
+    const token = await createAuthToken(user.id, "password_reset", 3600 * 1000);
+    await sendPasswordResetEmail(email, token).catch((e) =>
+      console.error("Не удалось отправить письмо сброса пароля:", e)
+    );
+  }
+  return { success: true };
+}
+
+export async function resetPasswordAction(_prevState: unknown, formData: FormData) {
+  const token = String(formData.get("token") || "");
+  const password = String(formData.get("password") || "");
+  if (password.length < 6) {
+    return { error: "Пароль должен быть не короче 6 символов" };
+  }
+
+  const userId = await consumeAuthToken(token, "password_reset");
+  if (!userId) {
+    return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
+  }
+
+  await db.update(schema.users).set({ passwordHash: await hashPassword(password) }).where(eq(schema.users.id, userId));
+  redirect("/login");
 }

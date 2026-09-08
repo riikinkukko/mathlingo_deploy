@@ -28,6 +28,7 @@ export interface User {
   // — у пользователей, созданных до введения этого поля, будет undefined.
   consentGivenAt?: string;
   deletionRequestedAt?: string;
+  emailVerifiedAt?: string;
   teacherPlan?: "free" | "pro";
   teacherProUntil?: string;
   isPlatformOwner?: boolean;
@@ -111,7 +112,8 @@ export interface DiagramSpec {
     | "cone"
     | "triangularPrism"
     | "functionGraph"
-    | "qualitativeCurve";
+    | "qualitativeCurve"
+    | "triangleExcircle";
   [key: string]: unknown;
 }
 

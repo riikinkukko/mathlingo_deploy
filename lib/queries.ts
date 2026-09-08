@@ -37,6 +37,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     telegramChatId: row.telegramChatId ?? undefined,
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
+    emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : undefined,
     teacherPlan: row.teacherPlan ?? undefined,
     teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
     isPlatformOwner: row.isPlatformOwner,
@@ -864,6 +865,43 @@ export async function isRegistrationRateLimited(ip: string, role: "STUDENT" | "T
 export async function recordRegistrationAttempt(ip: string, role: "STUDENT" | "TEACHER"): Promise<void> {
   if (!ip) return;
   await db.insert(schema.registrationAttempts).values({ id: genId("regatt"), ipAddress: ip, role });
+}
+
+/** Создаёт одноразовый токен (для email-верификации или сброса пароля) и
+ * возвращает его — вызывающий код сам решает, что с ним делать (обычно
+ * сразу отправляет ссылку по email, см. lib/email.ts). */
+export async function createAuthToken(
+  userId: string,
+  type: "email_verification" | "password_reset",
+  ttlMs: number
+): Promise<string> {
+  const token = genId("tok") + genId("tok"); // длиннее обычного id — токен не должен быть перебираемым
+  await db.insert(schema.authTokens).values({
+    id: genId("authtok"),
+    userId,
+    token,
+    type,
+    expiresAt: new Date(Date.now() + ttlMs),
+  });
+  return token;
+}
+
+/** Проверяет токен и, если он валиден (существует, не истёк, ещё не
+ * использован, нужного типа) — сразу помечает его использованным и
+ * возвращает userId. Одна и та же ссылка из письма не сработает дважды —
+ * особенно важно для сброса пароля (иначе письмо, случайно
+ * пересланное/оставшееся в истории почты, было бы бессрочной уязвимостью). */
+export async function consumeAuthToken(
+  token: string,
+  type: "email_verification" | "password_reset"
+): Promise<string | null> {
+  const rows = await db.select().from(schema.authTokens).where(eq(schema.authTokens.token, token)).limit(1);
+  const row = rows[0];
+  if (!row || row.type !== type || row.usedAt) return null;
+  if (row.expiresAt.getTime() < Date.now()) return null;
+
+  await db.update(schema.authTokens).set({ usedAt: new Date() }).where(eq(schema.authTokens.id, row.id));
+  return row.userId;
 }
 
 /** Ученики репетитора (с teacherId) и все не-ученики — вне системы планов,
