@@ -18,12 +18,16 @@ const COLORS = [
 
 export default function DiagramScratchpad({
   spec,
+  problemText,
   onClose,
   onDirty,
 }: {
   /** Необязателен — если не передан, холст открывается пустым (для задач
    * без готовой диаграммы, где ученик рисует с нуля, например тригонометрия). */
   spec?: DiagramSpec;
+  /** Текст условия задачи — показывается прямо в черновике, чтобы не нужно
+   * было закрывать окно и подглядывать в условие на основной странице. */
+  problemText?: string;
   onClose: () => void;
   /** Вызывается один раз при первом добавленном штрихе — родитель может
    * показать индикатор "есть пометки" на превью диаграммы. Черновик
@@ -33,6 +37,14 @@ export default function DiagramScratchpad({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  // Высота холста — изначально равна высоте видимой области экрана (то же
+  // поведение, что было раньше), но ученик может добавить ещё места, если
+  // одного экрана не хватает для полного решения задачи. viewportRef
+  // (снаружи) — то, что реально видно и скроллится; containerRef (внутри)
+  // растёт по высоте, canvas растягивается на всю эту высоту, не только
+  // на видимую часть.
+  const [canvasHeight, setCanvasHeight] = useState<number | null>(null);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const strokesRef = useRef<Stroke[]>([]);
   useEffect(() => {
@@ -43,8 +55,21 @@ export default function DiagramScratchpad({
   const drawing = useRef<{ active: boolean; points: Point[] }>({ active: false, points: [] });
   const [, forceRedraw] = useState(0); // тик для перерисовки во время активного жеста (line-превью)
 
+  // Начальная высота холста = высота видимой области экрана (то же, что
+  // было раньше, до появления возможности расширять холст). Измеряем один
+  // раз при открытии — дальше высота растёт только по явному действию
+  // ученика (кнопка "Добавить место"), не пересчитывается заново сама.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (viewport) setCanvasHeight(viewport.getBoundingClientRect().height);
+  }, []);
+
   // Подгоняем canvas под реальный размер контейнера с учётом плотности
-  // пикселей — иначе на retina-экранах линии будут смазанными.
+  // пикселей — иначе на retina-экранах линии будут смазанными. Срабатывает
+  // и при изменении canvasHeight (расширение холста), не только при
+  // изменении размера окна — иначе после нажатия "Добавить место" новая,
+  // увеличенная область осталась бы нерабочей для рисования (canvas
+  // физически не подрос бы вместе с видимым контейнером).
   useEffect(() => {
     function resize() {
       const canvas = canvasRef.current;
@@ -64,7 +89,7 @@ export default function DiagramScratchpad({
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [canvasHeight]);
 
   function getCanvasSize() {
     const container = containerRef.current;
@@ -165,9 +190,18 @@ export default function DiagramScratchpad({
         </button>
       </div>
 
-      <div className="relative mx-auto w-full max-w-lg flex-1 px-4">
-        <div ref={containerRef} className="relative h-full w-full rounded-2xl bg-white">
-          <div className="absolute inset-0 p-4">
+      <div ref={viewportRef} className="relative mx-auto w-full max-w-lg flex-1 overflow-y-auto px-4">
+        <div
+          ref={containerRef}
+          className="relative w-full rounded-2xl bg-white"
+          style={{ height: canvasHeight ?? "100%" }}
+        >
+          <div className="relative p-4">
+            {problemText && (
+              <p className="mb-3 whitespace-pre-wrap text-[13px] font-semibold leading-snug text-ink">
+                {problemText}
+              </p>
+            )}
             {spec && <DiagramRenderer spec={spec} />}
           </div>
           <canvas
@@ -179,6 +213,18 @@ export default function DiagramScratchpad({
             onPointerLeave={handlePointerUp}
           />
         </div>
+
+        {/* Одного экрана не всегда хватает для полного решения — ученик
+            сам добавляет место, а не холст растёт бесконечно по умолчанию
+            (это тратило бы память/производительность впустую в большинстве
+            случаев, где решение помещается на одном экране). */}
+        <button
+          type="button"
+          onClick={() => setCanvasHeight((h) => (h ?? 0) + 500)}
+          className="my-3 w-full rounded-xl border-2 border-dashed border-white/30 py-2.5 text-xs font-bold text-white/70 transition hover:border-white/60 hover:text-white"
+        >
+          ↓ Добавить место для решения
+        </button>
       </div>
 
       <div className="px-4 pb-[max(1rem,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-3">

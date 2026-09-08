@@ -5,6 +5,7 @@ import { isYooKassaConfigured } from "@/lib/yookassa";
 import TeacherShell from "@/components/TeacherShell";
 import Mascot from "@/components/Mascot";
 import TeacherUpgradeForm from "./TeacherUpgradeForm";
+import TeacherSubscriptionCard from "./TeacherSubscriptionCard";
 import { IconCheck, IconCrown } from "@/components/icons";
 
 const FREE_STUDENT_LIMIT = 3;
@@ -66,6 +67,14 @@ export default async function TeacherUpgradePage({
                 {isPro && <p className="mt-1 text-xs text-pine-dark">Без ограничений — тариф активен</p>}
               </div>
 
+              {isPro && user.yookassaPaymentMethodId && (
+                <TeacherSubscriptionCard
+                  cardLast4={user.yookassaCardLast4}
+                  cardType={user.yookassaCardType}
+                  teacherProUntil={user.teacherProUntil}
+                />
+              )}
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className={`card p-5 ${!isPro ? "border-2 !border-pine" : ""}`}>
                   <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">Free</p>
@@ -109,7 +118,8 @@ export default async function TeacherUpgradePage({
 
               <p className="mt-6 text-center text-xs text-ink-soft">
                 Оплата через ЮKassa — автоматическое продление каждые {periodDays} дней
-                до отмены. Отменить можно в любой момент, обратившись в поддержку.
+                до отмены. Отменить можно самостоятельно в любой момент — карточка со
+                способом оплаты появится здесь после первой оплаты.
               </p>
             </>
           )}

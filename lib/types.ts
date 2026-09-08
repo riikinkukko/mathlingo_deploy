@@ -32,6 +32,10 @@ export interface User {
   teacherProUntil?: string;
   isPlatformOwner?: boolean;
   yookassaPaymentMethodId?: string;
+  yookassaCardLast4?: string;
+  yookassaCardType?: string;
+  grade?: number;
+  targetScore?: number;
   createdAt: string;
 }
 

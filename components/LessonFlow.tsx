@@ -129,7 +129,14 @@ export default function LessonFlow({
             return (
               <button
                 key={p.id}
-                onClick={() => setIndex(i)}
+                onClick={() => {
+                  // Прыгать назад к уже пройденным задачам можно всегда —
+                  // это не открывает ничего нового. Вперёд, мимо текущей
+                  // задачи, которая ждёт проверки учителем — нельзя, тот
+                  // же принцип, что и у кнопки "Далее" ниже.
+                  if (i > index && currentState.status === "pending") return;
+                  setIndex(i);
+                }}
                 className={`h-2.5 rounded-pill transition-all ${
                   i === index
                     ? "w-7 bg-pine"
@@ -174,12 +181,19 @@ export default function LessonFlow({
         </button>
         <button
           onClick={() => setIndex((i) => Math.min(problems.length - 1, i + 1))}
-          disabled={index === problems.length - 1}
+          disabled={index === problems.length - 1 || currentState.status === "pending"}
           className="btn-secondary flex-1 disabled:opacity-30"
         >
           Далее →
         </button>
       </div>
+
+      {currentState.status === "pending" && (
+        <p className="mt-2 text-center text-xs text-ink-soft">
+          Решение отправлено репетитору на проверку — переход к следующей задаче
+          откроется, как только он его посмотрит.
+        </p>
+      )}
 
       {theoryOverlay && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 px-4 backdrop-blur-sm">

@@ -9,7 +9,7 @@ function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
 }
 
 export default function TriangleCevian({
-  base = "?",
+  base,
   height,
   variant = "height",
   labelA = "A",
@@ -35,7 +35,7 @@ export default function TriangleCevian({
     variant === "median" ? { x: (left.x + right.x) / 2, y: 170 } : { x: 140, y: 170 };
 
   return (
-    <svg viewBox="0 0 300 200" className="h-full w-full">
+    <svg viewBox="0 0 300 220" className="h-full w-full">
       <polygon
         points={`${apex.x},${apex.y} ${left.x},${left.y} ${right.x},${right.y}`}
         fill={D.pineLight}
@@ -89,7 +89,7 @@ export default function TriangleCevian({
         />
       )}
       {variant === "height" && height && <Lbl x={foot.x + 26} y={100} value={height} />}
-      <Lbl x={150} y={190} value={base} />
+      {base && <Lbl x={150} y={205} value={base} />}
       <VertexLabel x={apex.x} y={apex.y} dy={-10}>
         {labelA}
       </VertexLabel>

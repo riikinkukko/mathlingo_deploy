@@ -50,6 +50,27 @@
       "when": 1788303301009,
       "tag": "0006_mysterious_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788355024118,
+      "tag": "0007_short_warbound",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788378989108,
+      "tag": "0008_medical_lockjaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788379687467,
+      "tag": "0009_supreme_inhumans",
+      "breakpoints": true
     }
   ]
 }

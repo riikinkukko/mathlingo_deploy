@@ -25,7 +25,15 @@ export async function POST(req: Request) {
 
   let body: {
     event?: string;
-    object?: { id?: string; status?: string; payment_method?: { id?: string; saved?: boolean } };
+    object?: {
+      id?: string;
+      status?: string;
+      payment_method?: {
+        id?: string;
+        saved?: boolean;
+        card?: { last4?: string; card_type?: string };
+      };
+    };
   };
   try {
     body = await req.json();
@@ -44,11 +52,12 @@ export async function POST(req: Request) {
       // стороне ЮKassa (это подтверждение, а не просто эхо нашего запроса
       // save_payment_method:true — ЮKassa может отказать в сохранении,
       // например для некоторых типов карт, поэтому явно проверяем saved).
-      const savedMethodId =
-        body.object?.payment_method?.saved && body.object.payment_method.id
-          ? body.object.payment_method.id
+      const pm = body.object?.payment_method;
+      const savedMethod =
+        pm?.saved && pm.id
+          ? { id: pm.id, cardLast4: pm.card?.last4, cardType: pm.card?.card_type }
           : undefined;
-      await markPaymentSucceeded(paymentId, savedMethodId);
+      await markPaymentSucceeded(paymentId, savedMethod);
     } else if (body.event === "payment.canceled") {
       await markPaymentCanceled(paymentId);
     }

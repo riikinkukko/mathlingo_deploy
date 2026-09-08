@@ -222,6 +222,7 @@ export default function ProblemCard({
           {scratchpadOpen && (
             <DiagramScratchpad
               spec={problem.diagram}
+              problemText={problem.text}
               onClose={() => setScratchpadOpen(false)}
               onDirty={() => setHasSketch(true)}
             />
@@ -230,7 +231,11 @@ export default function ProblemCard({
       )}
 
       {!problem.diagram && scratchpadOpen && (
-        <DiagramScratchpad onClose={() => setScratchpadOpen(false)} onDirty={() => setHasSketch(true)} />
+        <DiagramScratchpad
+          problemText={problem.text}
+          onClose={() => setScratchpadOpen(false)}
+          onDirty={() => setHasSketch(true)}
+        />
       )}
 
       <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink" style={{ textWrap: "pretty" as any }}>

@@ -30,6 +30,7 @@ export default async function SubjectsPage() {
               const pathStates = getPathStates(allSkills, progress);
               const doneCount = allSkills.filter((s) => pathStates[s.id] === "done").length;
               const pct = allSkills.length ? Math.round((doneCount / allSkills.length) * 100) : 0;
+
               return (
                 <a
                   key={topic.id}

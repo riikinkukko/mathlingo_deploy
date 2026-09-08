@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte } from "drizzle-orm";
+import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import {
   Homework,
@@ -41,6 +41,10 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
     isPlatformOwner: row.isPlatformOwner,
     yookassaPaymentMethodId: row.yookassaPaymentMethodId ?? undefined,
+    yookassaCardLast4: row.yookassaCardLast4 ?? undefined,
+    yookassaCardType: row.yookassaCardType ?? undefined,
+    grade: row.grade ?? undefined,
+    targetScore: row.targetScore ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -824,6 +828,44 @@ export async function getTeachersDueForRenewal(): Promise<User[]> {
   return rows.map(mapUser);
 }
 
+// Максимум регистраций с одного IP за 24 часа, раздельно по ролям —
+// ученик и репетитор абузятся по-разному (свежая энергия vs лимит
+// учеников), поэтому не делим общий счётчик на двоих. Значение
+// намеренно не слишком строгое — не хотим блокировать семьи с
+// несколькими детьми на одном домашнем Wi-Fi или школьный класс за
+// одним NAT, только явно автоматизированный перебор.
+const REGISTRATION_LIMIT_PER_IP = 3;
+const REGISTRATION_WINDOW_HOURS = 24;
+
+/** true — лимит уже исчерпан, регистрацию с этого IP нужно отклонить.
+ * Если IP не удалось определить (пустая строка — например, локальная
+ * разработка без nginx перед сервером) — сознательно НЕ блокируем: лучше
+ * пропустить редкий случай абуза, чем по ошибке заблокировать реальных
+ * пользователей из-за проблемы с прокси на нашей стороне. */
+export async function isRegistrationRateLimited(ip: string, role: "STUDENT" | "TEACHER"): Promise<boolean> {
+  if (!ip) return false;
+  const windowStart = new Date(Date.now() - REGISTRATION_WINDOW_HOURS * 3600 * 1000);
+  const rows = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(schema.registrationAttempts)
+    .where(
+      and(
+        eq(schema.registrationAttempts.ipAddress, ip),
+        eq(schema.registrationAttempts.role, role),
+        gte(schema.registrationAttempts.createdAt, windowStart)
+      )
+    );
+  return Number(rows[0]?.count ?? 0) >= REGISTRATION_LIMIT_PER_IP;
+}
+
+/** Считаем ЛЮБУЮ попытку — успешную и неудачную (email занят, чекбокс не
+ * отмечен) — иначе бот просто перебирал бы email-адреса без ограничений,
+ * пока не найдёт свободный. */
+export async function recordRegistrationAttempt(ip: string, role: "STUDENT" | "TEACHER"): Promise<void> {
+  if (!ip) return;
+  await db.insert(schema.registrationAttempts).values({ id: genId("regatt"), ipAddress: ip, role });
+}
+
 /** Ученики репетитора (с teacherId) и все не-ученики — вне системы планов,
  * для них энергия всегда безлимитна. Ограничение касается только тех, кто
  * зарегистрировался сам и не находится на Pro-плане. */
@@ -1118,10 +1160,16 @@ export async function createPendingPayment(params: {
  * повторно (ЮKassa может доставить один и тот же вебхук больше одного раза,
  * это ожидаемо по их же документации, а не баг с их стороны).
  *
- * paymentMethodId — если пришёл в вебхуке (значит платёж был с
+ * savedMethod — если пришёл в вебхуке (значит платёж был с
  * save_payment_method:true и способ оплаты реально сохранился на стороне
- * ЮKassa) — записываем его пользователю для будущих автоплатежей. */
-export async function markPaymentSucceeded(yookassaPaymentId: string, paymentMethodId?: string): Promise<boolean> {
+ * ЮKassa) — записываем id и маскированные детали карты (last4, тип) для
+ * будущих автоплатежей и для отображения пользователю на странице тарифа
+ * (требование ЮKassa при согласовании автоплатежей — самостоятельная
+ * отвязка карты, см. app/teacher/upgrade/page.tsx). */
+export async function markPaymentSucceeded(
+  yookassaPaymentId: string,
+  savedMethod?: { id: string; cardLast4?: string; cardType?: string }
+): Promise<boolean> {
   const rows = await db
     .select()
     .from(schema.payments)
@@ -1151,7 +1199,13 @@ export async function markPaymentSucceeded(yookassaPaymentId: string, paymentMet
         .set({
           teacherPlan: "pro",
           teacherProUntil,
-          ...(paymentMethodId && payment.isRecurringSetup ? { yookassaPaymentMethodId: paymentMethodId } : {}),
+          ...(savedMethod && payment.isRecurringSetup
+            ? {
+                yookassaPaymentMethodId: savedMethod.id,
+                yookassaCardLast4: savedMethod.cardLast4 ?? null,
+                yookassaCardType: savedMethod.cardType ?? null,
+              }
+            : {}),
         })
         .where(eq(schema.users.id, payment.userId));
     } else {

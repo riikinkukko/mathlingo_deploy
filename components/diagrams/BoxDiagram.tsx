@@ -38,7 +38,10 @@ export default function BoxDiagram({
   const W = 130; // ширина передней грани
   const H = isCube ? 130 : 90; // высота передней грани
   const originX = 40;
-  const originY = 190;
+  const originY = 165; // было 190 — слишком близко к низу viewBox: после
+  // сдвига задней грани вниз (глубинное смещение здесь идёт именно вниз,
+  // не вверх, вопреки более раннему комментарию) и отступа подписи буквы
+  // A₁/B₁ реально обрезались нижним краем картинки.
   const { dx, dy } = depthOffset(DEPTH_PX);
 
   // Вершины передней грани (видимые, снизу вверх): A(низ-лево), B(низ-право), C(верх-право), D(верх-лево)
@@ -75,7 +78,7 @@ export default function BoxDiagram({
   ];
 
   return (
-    <svg viewBox="0 0 260 210" className="h-full w-full">
+    <svg viewBox="0 0 260 220" className="h-full w-full">
       {dashedEdges.map(([i, j], k) => (
         <line
           key={`d${k}`}

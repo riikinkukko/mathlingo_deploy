@@ -27,6 +27,7 @@ import StudentDashboardHeader from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
 import BottomTabBar from "@/components/BottomTabBar";
+import { targetScoreRecommendation } from "@/lib/curriculum-recommendations";
 import NotificationBell from "@/components/NotificationBell";
 import Mascot from "@/components/Mascot";
 import VerticalSkillPath from "@/components/VerticalSkillPath";
@@ -84,12 +85,14 @@ export default async function StudentDashboard({
   // Дашборд теперь может обслуживать несколько предметов (тем) — без этого
   // фильтра curriculum.flatMap ниже слил бы навыки Планиметрии и Теории
   // вероятности в одну общую последовательность. По умолчанию (без ?topic=
-  // в URL) — первая тема, чтобы все существующие ссылки на /student
+  // в URL) — просто первая тема, чтобы все существующие ссылки на /student
   // продолжали работать как раньше.
+  const defaultTopic = curriculum[0];
   const selectedTopic =
-    curriculum.find((t) => t.topic.id === searchParams.topic) ?? curriculum[0];
+    curriculum.find((t) => t.topic.id === searchParams.topic) ?? defaultTopic;
   const curriculumFull = curriculum;
   const curriculumFiltered = selectedTopic ? [selectedTopic] : [];
+  const targetScoreRec = targetScoreRecommendation(user.targetScore);
 
   const level = getLevelInfo(xp);
   const nextLevelTitle = LEVELS[level.index + 1]?.title ?? null;
@@ -236,6 +239,11 @@ export default async function StudentDashboard({
           dailyGoal={dailyGoal}
         />
         <main className="space-y-4 px-[18px] py-4">
+          {targetScoreRec && (
+            <div className="rounded-xl bg-teal-light/60 px-3.5 py-2.5 text-[12px] text-teal-text">
+              {targetScoreRec}
+            </div>
+          )}
           {heroCard}
           <div className="flex gap-2.5">{tiles}</div>
           {currentChapter && !chapterLockedByPlan && (

@@ -94,7 +94,10 @@ export default function AssignmentFlow({
             return (
               <button
                 key={it.problem.id}
-                onClick={() => setIndex(i)}
+                onClick={() => {
+                  if (i > index && currentState.status === "pending") return;
+                  setIndex(i);
+                }}
                 className={`h-2.5 rounded-pill transition-all ${
                   i === index ? "w-7 bg-pine" : st === "solved" ? "w-2.5 bg-pine/50" : "w-2.5 bg-line hover:bg-pine/30"
                 }`}
@@ -132,12 +135,19 @@ export default function AssignmentFlow({
         </button>
         <button
           onClick={() => setIndex((i) => Math.min(items.length - 1, i + 1))}
-          disabled={index === items.length - 1}
+          disabled={index === items.length - 1 || currentState.status === "pending"}
           className="btn-secondary flex-1 disabled:opacity-30"
         >
           Далее →
         </button>
       </div>
+
+      {currentState.status === "pending" && (
+        <p className="mt-2 text-center text-xs text-ink-soft">
+          Решение отправлено репетитору на проверку — переход к следующей задаче
+          откроется, как только он его посмотрит.
+        </p>
+      )}
 
       {showCelebration && (
         <CompletionCelebration

@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
@@ -23,8 +24,22 @@ import {
   isStandaloneStudent,
   getUserByEmail,
   genId,
+  isRegistrationRateLimited,
+  recordRegistrationAttempt,
 } from "@/lib/queries";
 import { performSubmitAttempt } from "@/lib/actions-core";
+
+/** Реальный IP клиента — читает заголовки, которые nginx проставляет на
+ * сервере (X-Real-IP/X-Forwarded-For, см. README про настройку прокси).
+ * Пустая строка в локальной разработке без nginx перед сервером — это
+ * ожидаемо, isRegistrationRateLimited() специально не блокирует в этом
+ * случае вместо того, чтобы ошибочно резать реальных пользователей. */
+function getClientIp(): string {
+  const h = headers();
+  const forwarded = h.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return h.get("x-real-ip") || "";
+}
 import { AssignmentKind, Role } from "@/lib/types";
 
 // ---------- AUTH ----------
@@ -432,8 +447,18 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
+  const clientIp = getClientIp();
+
+  // Анти-абуз: без этого лимит по энергии у самостоятельного Free-ученика
+  // (5 задач в день) обходится тривиально — просто регистрируешь новый
+  // аккаунт после исчерпания энергии. Считаем ЛЮБУЮ попытку ниже, не
+  // только успешную, иначе бот перебирал бы email без ограничений.
+  if (await isRegistrationRateLimited(clientIp, "STUDENT")) {
+    return { error: "Слишком много попыток регистрации с этого адреса. Попробуйте позже." };
+  }
 
   if (!name || !email || password.length < 6) {
+    await recordRegistrationAttempt(clientIp, "STUDENT");
     return { error: "Заполните имя, email и пароль (минимум 6 символов)" };
   }
   // Серверная проверка обязательна — клиентский required на чекбоксе легко
@@ -441,11 +466,16 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   // обработку персональных данных регистрация не должна проходить ни при
   // каких условиях (требование 152-ФЗ, см. app/legal/consent).
   if (consent !== "on") {
+    await recordRegistrationAttempt(clientIp, "STUDENT");
     return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
   }
 
   const existing = await getUserByEmail(email);
-  if (existing) return { error: "Пользователь с таким email уже существует" };
+  if (existing) {
+    await recordRegistrationAttempt(clientIp, "STUDENT");
+    return { error: "Пользователь с таким email уже существует" };
+  }
+  await recordRegistrationAttempt(clientIp, "STUDENT");
 
   const userId = genId("u");
   await db.insert(schema.users).values({
@@ -463,7 +493,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
 
   const token = await createSessionToken(userId, "STUDENT");
   await setSessionCookie(token);
-  redirect("/student");
+  redirect("/onboarding");
 }
 
 export async function registerTeacherAction(_prevState: unknown, formData: FormData) {
@@ -471,16 +501,29 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
+  const clientIp = getClientIp();
+
+  // Анти-абуз: без этого лимит "3 ученика бесплатно" тривиально обходится
+  // регистрацией 10 разных аккаунтов репетитора (3×10=30 бесплатных мест).
+  if (await isRegistrationRateLimited(clientIp, "TEACHER")) {
+    return { error: "Слишком много попыток регистрации с этого адреса. Попробуйте позже." };
+  }
 
   if (!name || !email || password.length < 6) {
+    await recordRegistrationAttempt(clientIp, "TEACHER");
     return { error: "Заполните имя, email и пароль (минимум 6 символов)" };
   }
   if (consent !== "on") {
+    await recordRegistrationAttempt(clientIp, "TEACHER");
     return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
   }
 
   const existing = await getUserByEmail(email);
-  if (existing) return { error: "Пользователь с таким email уже существует" };
+  if (existing) {
+    await recordRegistrationAttempt(clientIp, "TEACHER");
+    return { error: "Пользователь с таким email уже существует" };
+  }
+  await recordRegistrationAttempt(clientIp, "TEACHER");
 
   const userId = genId("u");
   await db.insert(schema.users).values({
@@ -557,4 +600,53 @@ export async function cancelAccountDeletionAction() {
     .where(eq(schema.users.id, user.id));
   revalidatePath("/student/profile");
   revalidatePath("/admin");
+}
+
+/**
+ * Самостоятельная отвязка карты / отмена автопродления тарифа репетитора
+ * — обязательное требование ЮKassa при согласовании рекуррентных платежей
+ * (без такого интерфейса, без обращения в поддержку, они не подключают
+ * опцию автоплатежей вообще). Обнуляет ТОЛЬКО способ оплаты — cron
+ * (getTeachersDueForRenewal) перестанет находить этого учителя и не
+ * попытается списать снова. teacherPlan/teacherProUntil НЕ трогаем —
+ * доступ сохраняется до конца уже оплаченного периода, как и обещано
+ * пользователю в подтверждающем диалоге на странице.
+ */
+export async function cancelTeacherAutoRenewalAction() {
+  const user = await getSessionUser();
+  if (!user || user.role !== "TEACHER") redirect("/login");
+
+  await db
+    .update(schema.users)
+    .set({
+      yookassaPaymentMethodId: null,
+      yookassaCardLast4: null,
+      yookassaCardType: null,
+    })
+    .where(eq(schema.users.id, user.id));
+  revalidatePath("/teacher/upgrade");
+}
+
+/**
+ * Онбординг после регистрации самостоятельного ученика — класс и цель по
+ * баллам РЕАЛЬНО меняют порядок/доступность тем (не просто хранятся для
+ * отчётности), см. lib/curriculum-recommendations.ts. Можно пропустить
+ * (оба поля останутся null) — ничего не ограничиваем, если пользователь
+ * не захотел отвечать, старое поведение.
+ */
+export async function saveOnboardingAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) redirect("/login");
+
+  const targetScoreRaw = formData.get("targetScore");
+  const targetScore = targetScoreRaw ? Number(targetScoreRaw) : null;
+
+  await db
+    .update(schema.users)
+    .set({
+      targetScore: targetScore && targetScore >= 0 && targetScore <= 100 ? targetScore : null,
+    })
+    .where(eq(schema.users.id, user.id));
+
+  redirect("/student");
 }

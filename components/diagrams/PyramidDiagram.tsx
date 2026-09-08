@@ -19,16 +19,23 @@ export default function PyramidDiagram({
   showCenter?: boolean;
   centerLabel?: string;
 }) {
+  // Основание — квадрат в косоугольной проекции. Раньше сдвиг "вглубь"
+  // (от A к D, от B к C) шёл под углом ~51° от горизонтали — втрое круче,
+  // чем в остальных 3D-диаграммах (~22°) — из-за этого основание выглядело
+  // перекошенным, не как узнаваемый квадрат в перспективе. Тот же пологий
+  // угол, что и в BoxDiagram/TriangularPrismDiagram.
   const A = { x: 55, y: 165 };
   const B = { x: 195, y: 165 };
-  const C = { x: 235, y: 115 };
-  const Dd = { x: 95, y: 115 };
+  const depthDx = 59;
+  const depthDy = -24;
+  const C = { x: B.x + depthDx, y: B.y + depthDy };
+  const Dd = { x: A.x + depthDx, y: A.y + depthDy };
   const centerX = (A.x + B.x + C.x + Dd.x) / 4;
   const centerY = (A.y + B.y + C.y + Dd.y) / 4;
   const S = { x: centerX, y: 25 };
 
   return (
-    <svg viewBox="0 0 290 190" className="h-full w-full">
+    <svg viewBox="0 0 300 190" className="h-full w-full">
       <line x1={A.x} y1={A.y} x2={Dd.x} y2={Dd.y} stroke={D.inkSoft} strokeWidth="1.5" strokeDasharray="4 3" />
       <line x1={S.x} y1={S.y} x2={A.x} y2={A.y} stroke={D.inkSoft} strokeWidth="1.5" strokeDasharray="4 3" />
       {showCenter && (

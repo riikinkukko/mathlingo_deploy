@@ -41,20 +41,17 @@ function catmullRomToBezierPath(pts: { px: number; py: number }[]): string {
  * markedXPoints — вертикальные засечки с подписями на оси x, которые
  * фигурируют в тексте задачи (x₁, x₂... или конкретные числа).
  */
+
 export default function QualitativeCurveDiagram({
   points,
   markedXPoints = [],
   xRange = [-10, 10],
   yRange = [-4, 4],
-  showZeroLine = false,
 }: {
   points: ControlPoint[];
   markedXPoints?: MarkedX[];
   xRange?: [number, number];
   yRange?: [number, number];
-  /** Показать усиленную линию y=0 — полезно для графика f'(x), где
-   * ключевое качество — положение кривой относительно нуля. */
-  showZeroLine?: boolean;
 }) {
   const W = 300;
   const H = 190;
@@ -71,36 +68,40 @@ export default function QualitativeCurveDiagram({
   const pixelPoints = points.map((p) => toPx(p.x, p.y));
   const pathD = catmullRomToBezierPath(pixelPoints);
 
-  const zeroY = toPx(0, 0).py;
+  // Раньше горизонтальная линия рисовалась на фиксированной позиции внизу
+  // картинки (H-padY) — то есть это была просто нижняя граница системы
+  // координат, НЕ настоящая ось y=0, если функция принимала отрицательные
+  // значения (а почти все задачи здесь именно такие). Ученик видел
+  // кривую, "пересекающую" эту псевдо-ось, хотя на деле она не была
+  // осью x вообще. Теперь ось x всегда стоит ровно на y=0, если 0 входит
+  // в yRange (у всех текущих задач это так) — иначе (редкий случай,
+  // функция целиком выше или ниже нуля) откатываемся на прежнее поведение.
+  const zeroInRange = yMin <= 0 && yMax >= 0;
+  const xAxisY = zeroInRange ? toPx(0, 0).py : H - padY;
   const originX = toPx(Math.max(xMin, 0), 0).px;
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
-      {/* оси */}
-      <line x1={padX} y1={H - padY} x2={W - padX} y2={H - padY} stroke={D.inkSoft} strokeWidth="1.5" />
+      {/* ось x — всегда на настоящем y=0, не на условной нижней границе */}
+      <line x1={padX} y1={xAxisY} x2={W - padX} y2={xAxisY} stroke={D.inkSoft} strokeWidth="1.5" />
       <line x1={originX} y1={padY} x2={originX} y2={H - padY} stroke={D.inkSoft} strokeWidth="1.5" />
-      <text x={W - padX - 8} y={H - padY - 6} fontSize="11" fontWeight="700" fill={D.inkSoft}>
+      <text x={W - padX - 8} y={xAxisY - 6} fontSize="11" fontWeight="700" fill={D.inkSoft}>
         x
       </text>
       <text x={originX + 6} y={padY + 10} fontSize="11" fontWeight="700" fill={D.inkSoft}>
         y
       </text>
 
-      {showZeroLine && (
-        <line x1={padX} y1={zeroY} x2={W - padX} y2={zeroY} stroke={D.amber} strokeWidth="1" strokeDasharray="3 3" />
-      )}
-
       {/* сама кривая */}
       <path d={pathD} fill="none" stroke={D.pine} strokeWidth="2.5" />
 
-      {/* отмеченные точки на оси x — засечка + подпись */}
+      {/* отмеченные точки на оси x — засечка + подпись, теперь у настоящей оси */}
       {markedXPoints.map((mp, i) => {
         const { px } = toPx(mp.x, 0);
-        const baseY = H - padY;
         return (
           <g key={i}>
-            <line x1={px} y1={baseY - 4} x2={px} y2={baseY + 4} stroke={D.ink} strokeWidth="1.5" />
-            <text x={px} y={baseY + 16} textAnchor="middle" fontSize="11" fontWeight="700" fontStyle="italic" fill={D.ink}>
+            <line x1={px} y1={xAxisY - 4} x2={px} y2={xAxisY + 4} stroke={D.ink} strokeWidth="1.5" />
+            <text x={px} y={xAxisY + 16} textAnchor="middle" fontSize="11" fontWeight="700" fontStyle="italic" fill={D.ink}>
               {mp.label}
             </text>
           </g>
