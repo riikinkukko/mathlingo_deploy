@@ -44,10 +44,21 @@ export function buildTelegramLinkUrl(code: string): string | null {
 /** Отправляет сообщение через Bot API. Не бросает исключение при сетевой
  * ошибке или ошибке самого Telegram (например, пользователь заблокировал
  * бота) — уведомление в самом приложении важнее, чем падение всего запроса
- * из-за недоступности Telegram. Ошибка просто логируется. */
+ * из-за недоступности Telegram. Ошибка просто логируется.
+ *
+ * Жёсткий таймаут в 8с через AbortController — НЕ опционально. Без него
+ * зависшее исходящее соединение до api.telegram.org (сеть до Telegram с
+ * VPS в РФ иногда ведёт себя нестабильно) держит открытым весь запрос,
+ * который эту функцию вызвал. Это и оказалось причиной бага с привязкой:
+ * вебхук делал `await sendTelegramMessage(...)` ДО ответа Telegram на его
+ * же входящий запрос — если этот fetch зависал, вебхук не успевал вовремя
+ * ответить 200 OK, и Telegram фиксировал у себя "Connection timed out",
+ * переставая доставлять новые обновления вовсе. */
 export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
   const token = getBotToken();
   if (!token) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
     const res = await fetch(`${API_BASE}/bot${token}/sendMessage`, {
       method: "POST",
@@ -58,6 +69,7 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
         parse_mode: "HTML",
         disable_web_page_preview: true,
       }),
+      signal: controller.signal,
     });
     if (!res.ok) {
       console.error("Telegram sendMessage вернул ошибку:", res.status, await res.text().catch(() => ""));
@@ -65,8 +77,10 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
     }
     return true;
   } catch (e) {
-    console.error("Ошибка отправки сообщения в Telegram:", e);
+    console.error("Ошибка отправки сообщения в Telegram (сеть или таймаут 8с):", e);
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

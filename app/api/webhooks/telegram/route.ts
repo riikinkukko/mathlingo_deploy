@@ -43,26 +43,41 @@ export async function POST(req: Request) {
   const chatId: string | undefined = message?.chat?.id?.toString();
   console.log("[telegram-webhook] Входящее сообщение:", { chatId, text });
 
+  // ВАЖНО: сначала выполняем всю работу с БД (быстро, локальный Postgres),
+  // но НЕ ждём здесь отправку ответного сообщения в Telegram — это исходящий
+  // запрос к api.telegram.org, а сеть до Telegram с VPS иногда виснет.
+  // Раньше `await sendTelegramMessage(...)` стоял ДО return, и зависшая
+  // отправка не давала вебхуку вовремя ответить 200 OK на ЭТОТ ЖЕ входящий
+  // запрос — Telegram фиксировал у себя "Connection timed out" и переставал
+  // присылать новые апдейты вообще (см. getWebhookInfo). Теперь отправка
+  // сообщения запускается ПОСЛЕ того, как мы уже ответили Telegram, и её
+  // возможное зависание (с таймаутом 8с внутри sendTelegramMessage) больше
+  // не блокирует подтверждение доставки текущего апдейта.
+  let replyText: string | null = null;
   if (text && chatId && text.startsWith("/start")) {
     const code = text.replace("/start", "").trim();
     if (code) {
       const linked = await linkTelegramAccountByCode(code, chatId);
       console.log("[telegram-webhook] Попытка привязки по коду", JSON.stringify(code), "->", linked ? "успех" : "код не найден в БД (устарел/уже использован/опечатка)");
-      await sendTelegramMessage(
-        chatId,
-        linked
-          ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда."
-          : "Не нашли код привязки. Вернитесь в приложение и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая."
-      );
+      replyText = linked
+        ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда."
+        : "Не нашли код привязки. Вернитесь в приложение и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая.";
     } else {
-      await sendTelegramMessage(
-        chatId,
-        "Привет! Чтобы подключить уведомления, перейдите по ссылке из профиля в Планиметрике — не открывайте бота напрямую."
-      );
+      replyText = "Привет! Чтобы подключить уведомления, перейдите по ссылке из профиля в Планиметрике — не открывайте бота напрямую.";
     }
   }
 
+  if (replyText && chatId) {
+    // Намеренно без await — fire-and-forget. Процесс живёт постоянно (PM2,
+    // не serverless), так что промис спокойно доработает в фоне уже после
+    // того, как HTTP-ответ ниже уйдёт Telegram.
+    sendTelegramMessage(chatId, replyText).catch((e) =>
+      console.error("[telegram-webhook] Не удалось отправить ответное сообщение (не блокирует доставку апдейта):", e)
+    );
+  }
+
   // Telegram ожидает именно 200 OK как подтверждение получения — иначе
-  // будет повторять доставку этого же обновления.
+  // будет повторять доставку этого же обновления. Отвечаем сразу, не
+  // дожидаясь исходящего сообщения (см. комментарий выше).
   return NextResponse.json({ ok: true });
 }
