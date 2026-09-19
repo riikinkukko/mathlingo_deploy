@@ -2,23 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { generateTelegramLinkCode, unlinkTelegramAccount } from "@/lib/queries";
-import { buildTelegramLinkUrl, isTelegramConfigured } from "@/lib/telegram";
+import { unlinkTelegramAccount } from "@/lib/queries";
 
-export async function connectTelegramAction() {
-  const user = await getSessionUser();
-  if (!user) redirect("/login");
-  if (!isTelegramConfigured()) {
-    redirect("/student/profile?error=telegram_not_configured");
-  }
-
-  const code = await generateTelegramLinkCode(user!.id);
-  const url = buildTelegramLinkUrl(code);
-  if (!url) {
-    redirect("/student/profile?error=telegram_not_configured");
-  }
-  redirect(url);
-}
+// connectTelegramAction (генерация кода + redirect() на t.me из server
+// action) убран отсюда — см. комментарий в app/student/profile/page.tsx:
+// ссылка на бота теперь строится прямо на сервере при рендере страницы и
+// рендерится обычным <a href>, без redirect() на внешний домен из
+// server action.
 
 export async function disconnectTelegramAction() {
   const user = await getSessionUser();

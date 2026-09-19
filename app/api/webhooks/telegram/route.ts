@@ -15,26 +15,39 @@ export const dynamic = "force-dynamic";
  * отличие от ЮKassa.
  */
 export async function POST(req: Request) {
+  // Логируем КАЖДЫЙ входящий вызов вебхука — раньше здесь не было ни
+  // единого console.log, и если баг был именно в том, что Telegram вообще
+  // не достучался до сервера (неверный секрет на проде, nginx не
+  // прокидывает заголовок и т.п.), в pm2-логах не было ни следа — вебхук
+  // с виду "просто ничего не делал". Теперь любая причина отказа видна.
   const secretHeader = req.headers.get("x-telegram-bot-api-secret-token");
   if (!isValidTelegramSecret(secretHeader)) {
+    console.error(
+      "[telegram-webhook] Отклонён: неверный или отсутствующий секрет в заголовке.",
+      "Заголовок получен:", secretHeader ? `да, длина ${secretHeader.length}` : "нет вообще",
+      "— проверьте TELEGRAM_WEBHOOK_SECRET в .env.local на сервере и что nginx пробрасывает этот заголовок."
+    );
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   let update: any;
   try {
     update = await req.json();
-  } catch {
+  } catch (e) {
+    console.error("[telegram-webhook] Тело запроса не распарсилось как JSON:", e);
     return NextResponse.json({ ok: true }); // отвечаем 200 в любом случае — так просит Telegram
   }
 
   const message = update?.message;
   const text: string | undefined = message?.text;
   const chatId: string | undefined = message?.chat?.id?.toString();
+  console.log("[telegram-webhook] Входящее сообщение:", { chatId, text });
 
   if (text && chatId && text.startsWith("/start")) {
     const code = text.replace("/start", "").trim();
     if (code) {
       const linked = await linkTelegramAccountByCode(code, chatId);
+      console.log("[telegram-webhook] Попытка привязки по коду", JSON.stringify(code), "->", linked ? "успех" : "код не найден в БД (устарел/уже использован/опечатка)");
       await sendTelegramMessage(
         chatId,
         linked

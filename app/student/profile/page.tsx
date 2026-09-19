@@ -9,8 +9,9 @@ import {
   isEffectivelyPro,
 } from "@/lib/queries";
 import { computeAchievementProgress } from "@/lib/achievements";
-import { isTelegramConfigured } from "@/lib/telegram";
-import { connectTelegramAction, disconnectTelegramAction } from "@/app/actions-telegram";
+import { isTelegramConfigured, buildTelegramLinkUrl } from "@/lib/telegram";
+import { generateTelegramLinkCode } from "@/lib/queries";
+import { disconnectTelegramAction } from "@/app/actions-telegram";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
@@ -32,6 +33,19 @@ export default async function ProfilePage({
   const progress = computeAchievementProgress(achievementStats);
   const earnedCount = progress.filter((p) => p.tierIndex >= 0).length;
   const topAchievements = [...progress].sort((a, b) => b.tierIndex - a.tierIndex).slice(0, 4);
+
+  // Ссылку на бота строим прямо здесь, на сервере, и рендерим обычным <a
+  // href>, а не через серверный экшен с redirect() на внешний домен —
+  // такой redirect из server action один раз уже стал подозреваемым в
+  // баге "код в БД появляется, а привязка не срабатывает" (см. README):
+  // это отдельный, менее предсказуемый путь навигации, чем просто клик
+  // по ссылке браузером. Код генерируется заново при каждом заходе на
+  // профиль, пока Telegram не подключён — старый код от предыдущего
+  // визита просто перезаписывается, это не проблема (он одноразовый).
+  const telegramLinkUrl =
+    !user.telegramChatId && isTelegramConfigured()
+      ? buildTelegramLinkUrl(await generateTelegramLinkCode(user.id))
+      : null;
 
   const standalone = isStandaloneStudent(user);
   const pro = standalone && isEffectivelyPro(user);
@@ -144,12 +158,10 @@ export default async function ProfilePage({
                 Получай уведомления о новых заданиях, пробниках и проверке решений
                 прямо в Telegram — не нужно заходить в приложение, чтобы не пропустить.
               </p>
-              {isTelegramConfigured() ? (
-                <form action={connectTelegramAction}>
-                  <button type="submit" className="btn-primary !text-xs">
-                    Подключить Telegram
-                  </button>
-                </form>
+              {telegramLinkUrl ? (
+                <a href={telegramLinkUrl} className="btn-primary !text-xs" target="_blank" rel="noopener noreferrer">
+                  Подключить Telegram
+                </a>
               ) : (
                 <p className="text-xs text-ink-soft/70">Пока недоступно.</p>
               )}
