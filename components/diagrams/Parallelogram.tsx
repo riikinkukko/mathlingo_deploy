@@ -13,6 +13,14 @@ const TR = { x: 250, y: 50 };
 const BR = { x: 190, y: 150 };
 const BL = { x: 50, y: 150 };
 
+interface Bisector {
+  from: "A" | "B" | "C" | "D";
+  toSide: "AB" | "BC" | "CD" | "DA";
+  /** Доля от первой к второй вершине стороны (0..1), где стоит отмеченная точка. */
+  t: number;
+  label: string;
+}
+
 export default function Parallelogram({
   a,
   h,
@@ -25,6 +33,7 @@ export default function Parallelogram({
   labelB = "B",
   labelC = "C",
   labelD = "D",
+  bisector,
 }: {
   a?: string;
   h?: string;
@@ -37,7 +46,16 @@ export default function Parallelogram({
   labelB?: string; // нижний правый
   labelC?: string; // верхний правый
   labelD?: string; // верхний левый
+  bisector?: Bisector;
 }) {
+  const vertexPoint = { A: BL, B: BR, C: TR, D: TL };
+  const sideEnds: Record<Bisector["toSide"], [typeof BL, typeof BL]> = {
+    AB: [BL, BR],
+    BC: [BR, TR],
+    CD: [TR, TL],
+    DA: [TL, BL],
+  };
+
   return (
     <svg viewBox="0 0 300 200" className="h-full w-full">
       <polygon
@@ -123,6 +141,39 @@ export default function Parallelogram({
             />
           );
         })}
+
+      {bisector && (() => {
+        const from = vertexPoint[bisector.from];
+        const [p1, p2] = sideEnds[bisector.toSide];
+        const point = {
+          x: p1.x + (p2.x - p1.x) * bisector.t,
+          y: p1.y + (p2.y - p1.y) * bisector.t,
+        };
+        return (
+          <>
+            <line
+              x1={from.x}
+              y1={from.y}
+              x2={point.x}
+              y2={point.y}
+              stroke={D.amber}
+              strokeWidth="2.5"
+            />
+            <circle cx={point.x} cy={point.y} r="3" fill={D.amber} />
+            <text
+              x={point.x + (point.x < 150 ? -12 : 12)}
+              y={point.y + (point.y < 100 ? -8 : 16)}
+              textAnchor={point.x < 150 ? "end" : "start"}
+              fontSize="13"
+              fontWeight="800"
+              fontStyle="italic"
+              fill={D.ink}
+            >
+              {bisector.label}
+            </text>
+          </>
+        );
+      })()}
 
       {a && <Lbl x={(BR.x + BL.x) / 2} y={BL.y + 22} value={a} />}
       <VertexLabel x={BL.x} y={BL.y} dx={-10} dy={14}>

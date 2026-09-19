@@ -10,10 +10,14 @@
 
 html {
   background-color: #f2faf5;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 body {
   color: #132a20;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .card {

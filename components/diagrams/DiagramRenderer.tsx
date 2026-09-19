@@ -52,7 +52,7 @@ export default function DiagramRenderer({ spec }: { spec: DiagramSpec }) {
     case "pyramid":
       return <PyramidDiagram {...(props as any)} />;
     case "cylinder":
-      return <CylinderDiagram />;
+      return <CylinderDiagram {...(props as any)} />;
     case "cone":
       return <ConeDiagram {...(props as any)} />;
     case "triangularPrism":
