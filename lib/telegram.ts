@@ -12,7 +12,8 @@
  * не работает".
  */
 
-const API_BASE = "https://api.telegram.org";
+// TELEGRAM_API_BASE — только для локального теста с фейковым сервером Telegram.
+const API_BASE = process.env.TELEGRAM_API_BASE?.trim() || "https://api.telegram.org";
 
 function getBotToken(): string | null {
   const raw = process.env.TELEGRAM_BOT_TOKEN;

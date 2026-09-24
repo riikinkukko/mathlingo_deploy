@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
-    "seed:reset": "tsx scripts/seed.ts --reset"
+    "seed:reset": "tsx scripts/seed.ts --reset",
+    "telegram:poll": "tsx scripts/telegram-poller.ts"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^8.0.1",

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isValidTelegramSecret, sendTelegramMessage } from "@/lib/telegram";
-import { linkTelegramAccountByCode } from "@/lib/queries";
+import { isValidTelegramSecret } from "@/lib/telegram";
+import { handleTelegramUpdate } from "@/lib/telegram-updates";
 
 export const dynamic = "force-dynamic";
 
@@ -38,43 +38,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }); // отвечаем 200 в любом случае — так просит Telegram
   }
 
-  const message = update?.message;
-  const text: string | undefined = message?.text;
-  const chatId: string | undefined = message?.chat?.id?.toString();
-  console.log("[telegram-webhook] Входящее сообщение:", { chatId, text });
-
-  // ВАЖНО: сначала выполняем всю работу с БД (быстро, локальный Postgres),
-  // но НЕ ждём здесь отправку ответного сообщения в Telegram — это исходящий
-  // запрос к api.telegram.org, а сеть до Telegram с VPS иногда виснет.
-  // Раньше `await sendTelegramMessage(...)` стоял ДО return, и зависшая
-  // отправка не давала вебхуку вовремя ответить 200 OK на ЭТОТ ЖЕ входящий
-  // запрос — Telegram фиксировал у себя "Connection timed out" и переставал
-  // присылать новые апдейты вообще (см. getWebhookInfo). Теперь отправка
-  // сообщения запускается ПОСЛЕ того, как мы уже ответили Telegram, и её
-  // возможное зависание (с таймаутом 8с внутри sendTelegramMessage) больше
-  // не блокирует подтверждение доставки текущего апдейта.
-  let replyText: string | null = null;
-  if (text && chatId && text.startsWith("/start")) {
-    const code = text.replace("/start", "").trim();
-    if (code) {
-      const linked = await linkTelegramAccountByCode(code, chatId);
-      console.log("[telegram-webhook] Попытка привязки по коду", JSON.stringify(code), "->", linked ? "успех" : "код не найден в БД (устарел/уже использован/опечатка)");
-      replyText = linked
-        ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда."
-        : "Не нашли код привязки. Вернитесь в приложение и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая.";
-    } else {
-      replyText = "Привет! Чтобы подключить уведомления, перейдите по ссылке из профиля в Планиметрике — не открывайте бота напрямую.";
-    }
-  }
-
-  if (replyText && chatId) {
-    // Намеренно без await — fire-and-forget. Процесс живёт постоянно (PM2,
-    // не serverless), так что промис спокойно доработает в фоне уже после
-    // того, как HTTP-ответ ниже уйдёт Telegram.
-    sendTelegramMessage(chatId, replyText).catch((e) =>
-      console.error("[telegram-webhook] Не удалось отправить ответное сообщение (не блокирует доставку апдейта):", e)
-    );
-  }
+  // Обработка — в общем модуле (тот же код использует long-polling
+  // воркер scripts/telegram-poller.ts, основной способ получения апдейтов).
+  // Без await: отвечаем Telegram 200 OK сразу, чтобы медленная исходящая
+  // отправка ответа не приводила к таймауту доставки вебхука.
+  handleTelegramUpdate(update).catch((e) =>
+    console.error("[telegram-webhook] Ошибка обработки апдейта:", e)
+  );
 
   // Telegram ожидает именно 200 OK как подтверждение получения — иначе
   // будет повторять доставку этого же обновления. Отвечаем сразу, не
