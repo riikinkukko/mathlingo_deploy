@@ -28,7 +28,15 @@ export default async function TeacherDashboard() {
   return (
     <TeacherShell active="students" title="Мои ученики">
       <main className="mx-auto max-w-3xl px-4 pt-6">
-        {!user.emailVerifiedAt && <VerifyEmailReminder />}
+        {!user.emailVerifiedAt && (
+          <VerifyEmailReminder
+            reason={
+              !isOwner && !isPro
+                ? "Подтвердите email — без этого на бесплатном тарифе нельзя добавлять учеников."
+                : undefined
+            }
+          />
+        )}
         {!isOwner && !isPro && (
           <a
             href="/teacher/upgrade"

@@ -55,6 +55,7 @@ export default function ProblemCard({
   const [scratchpadOpen, setScratchpadOpen] = useState(false);
   const [hasSketch, setHasSketch] = useState(false);
   const [noEnergy, setNoEnergy] = useState(false);
+  const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
   const [pending, startTransition] = useTransition();
   const answerInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +69,7 @@ export default function ProblemCard({
 
       if (res.kind === "no_energy") {
         setNoEnergy(true);
+        setNoEnergyUnverified(!!res.emailUnverified);
         return;
       }
       if (res.kind === "pending") {
@@ -306,13 +308,33 @@ export default function ProblemCard({
       {noEnergy && (
         <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4">
           <p className="mb-1 font-extrabold text-amber">⚡ Энергия закончилась</p>
-          <p className="mb-3 text-sm text-ink-soft">
-            На бесплатном плане ограниченное число новых задач в день. Энергия
-            восстанавливается со временем, или переходи на Pro — там она безлимитна.
-          </p>
-          <a href="/student/upgrade" className="btn-primary !text-xs">
-            Узнать про Pro
-          </a>
+          {noEnergyUnverified ? (
+            <>
+              <p className="mb-3 text-sm text-ink-soft">
+                Чтобы энергия восстанавливалась, подтверди email — ссылка в письме,
+                которое мы отправили при регистрации. Или переходи на Pro — там
+                энергия безлимитна.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <a href="/student/profile" className="btn-primary !text-xs">
+                  Подтвердить email
+                </a>
+                <a href="/student/upgrade" className="btn-secondary !text-xs">
+                  Узнать про Pro
+                </a>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-ink-soft">
+                На бесплатном плане ограниченное число новых задач в день. Энергия
+                восстанавливается со временем, или переходи на Pro — там она безлимитна.
+              </p>
+              <a href="/student/upgrade" className="btn-primary !text-xs">
+                Узнать про Pro
+              </a>
+            </>
+          )}
         </div>
       )}
 

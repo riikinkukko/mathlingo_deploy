@@ -7,6 +7,7 @@ import {
   getProblemsForSkill,
   pushNotification,
   spendEnergy,
+  isEnergyRechargeBlocked,
   updateSrsState,
   genId,
 } from "./queries";
@@ -81,7 +82,7 @@ export async function performSubmitAttempt(
 
   if (isFirstAttempt) {
     const ok = await db.transaction((tx) => spendEnergy(tx, user.id));
-    if (!ok) return { kind: "no_energy" as const };
+    if (!ok) return { kind: "no_energy" as const, emailUnverified: isEnergyRechargeBlocked(user) };
   }
 
   if (problem.answerType === "DETAILED") {

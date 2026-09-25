@@ -23,6 +23,7 @@ import {
   spendEnergy,
   isStandaloneStudent,
   getUserByEmail,
+  isMailboxTakenBySelfRegisteredAccount,
   genId,
   createAuthToken,
   consumeAuthToken,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/queries";
 import { performSubmitAttempt } from "@/lib/actions-core";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
+import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
 
 /** Реальный IP клиента — читает заголовки, которые nginx проставляет на
  * сервере (X-Real-IP/X-Forwarded-For, см. README про настройку прокси).
@@ -253,6 +255,15 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   const isTeacherProActive =
     teacher.teacherPlan === "pro" &&
     (!teacher.teacherProUntil || new Date(teacher.teacherProUntil).getTime() > Date.now());
+  // Анти-абуз: бесплатные места для учеников — только после подтверждения
+  // email. Иначе 10 аккаунтов на выдуманные адреса = 30 бесплатных мест.
+  // Платящий репетитор и владелец платформы не затрагиваются.
+  if (!teacher.isPlatformOwner && !isTeacherProActive && !teacher.emailVerifiedAt) {
+    return {
+      error:
+        "Чтобы добавлять учеников, подтвердите email — ссылка в письме после регистрации. Письмо можно отправить ещё раз вверху страницы.",
+    };
+  }
   if (!teacher.isPlatformOwner && !isTeacherProActive) {
     const currentStudents = await getStudentsOfTeacher(teacher.id);
     if (currentStudents.length >= 3) {
@@ -445,6 +456,22 @@ export async function markAllNotificationsReadAction() {
 
 // ---------- Публичная регистрация самостоятельных учеников ----------
 
+/** Проверки адреса при самостоятельной регистрации (ученик и репетитор).
+ * Возвращает текст ошибки или null. Анти-абуз: один реальный ящик — один
+ * аккаунт (с учётом +меток и синонимов, см. lib/email-rules.ts), одноразовые
+ * почты не принимаются. */
+async function checkRegistrationEmail(email: string): Promise<string | null> {
+  if (!isValidEmailFormat(email)) return "Проверьте адрес email — похоже, в нём опечатка";
+  if (isDisposableEmail(email)) {
+    return "Одноразовые почтовые адреса не подходят — укажите свою постоянную почту";
+  }
+  if (await getUserByEmail(email)) return "Пользователь с таким email уже существует";
+  if (await isMailboxTakenBySelfRegisteredAccount(email)) {
+    return "Аккаунт с этим почтовым ящиком уже есть. Войдите в него или восстановите пароль";
+  }
+  return null;
+}
+
 export async function registerAction(_prevState: unknown, formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -473,10 +500,10 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
   }
 
-  const existing = await getUserByEmail(email);
-  if (existing) {
+  const emailError = await checkRegistrationEmail(email);
+  if (emailError) {
     await recordRegistrationAttempt(clientIp, "STUDENT");
-    return { error: "Пользователь с таким email уже существует" };
+    return { error: emailError };
   }
   await recordRegistrationAttempt(clientIp, "STUDENT");
 
@@ -529,10 +556,10 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
     return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
   }
 
-  const existing = await getUserByEmail(email);
-  if (existing) {
+  const emailError = await checkRegistrationEmail(email);
+  if (emailError) {
     await recordRegistrationAttempt(clientIp, "TEACHER");
-    return { error: "Пользователь с таким email уже существует" };
+    return { error: emailError };
   }
   await recordRegistrationAttempt(clientIp, "TEACHER");
 

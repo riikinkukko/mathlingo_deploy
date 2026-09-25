@@ -7,6 +7,7 @@ import {
   getAchievementStats,
   isStandaloneStudent,
   isEffectivelyPro,
+  isEnergyRechargeBlocked,
 } from "@/lib/queries";
 import { computeAchievementProgress } from "@/lib/achievements";
 import { isTelegramConfigured, buildTelegramLinkUrl } from "@/lib/telegram";
@@ -81,7 +82,15 @@ export default async function ProfilePage({
           </form>
         </div>
 
-        {!user.emailVerifiedAt && <VerifyEmailReminder />}
+        {!user.emailVerifiedAt && (
+          <VerifyEmailReminder
+            reason={
+              isEnergyRechargeBlocked(user)
+                ? "Подтвердите email — без этого энергия не восстанавливается."
+                : undefined
+            }
+          />
+        )}
 
         <div className="card mb-6 p-5">
           <div className="flex items-center justify-between">

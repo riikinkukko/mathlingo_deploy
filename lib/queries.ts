@@ -2,6 +2,7 @@ import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
+import { canonicalEmailSql } from "./email-rules";
 import {
   Homework,
   Problem,
@@ -915,6 +916,33 @@ export function isStandaloneStudent(user: User): boolean {
   return user.role === "STUDENT" && !user.teacherId;
 }
 
+/** Анти-абуз: у самостоятельного Free-ученика энергия не восстанавливается,
+ * пока он не подтвердил email. Иначе новый аккаунт на любой выдуманный адрес
+ * давал бы бесконечную энергию. Стартовые 5 единиц даются и без подтверждения,
+ * чтобы не ломать первое знакомство с приложением. Ученики репетитора и Pro
+ * не затрагиваются (у них энергия безлимитна). */
+export function isEnergyRechargeBlocked(user: User): boolean {
+  return isStandaloneStudent(user) && !isUnlimitedEnergy(user) && !user.emailVerifiedAt;
+}
+
+/** Анти-абуз при регистрации: занят ли этот ящик другим самостоятельным
+ * аккаунтом с учётом "+меток", точек Gmail и доменов-синонимов Яндекса (см.
+ * lib/email-rules.ts). Ученики, созданные репетитором (teacherId задан), не
+ * учитываются — их адреса вводит репетитор, это не их собственные ящики. */
+export async function isMailboxTakenBySelfRegisteredAccount(email: string): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        isNull(schema.users.teacherId),
+        sql`${canonicalEmailSql(sql`${schema.users.email}`)} = ${canonicalEmailSql(sql`${email}`)}`
+      )
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
 /** true, если навык доступен на Free-плане: вся первая глава целиком, плюс
  * первый навык (минимальный order) КАЖДОЙ следующей главы — "попробовать
  * перед покупкой", а не наглухо закрытые главы 2-6. Единая точка правды —
@@ -937,7 +965,7 @@ export function getEffectiveEnergy(user: User): number {
   if (isUnlimitedEnergy(user)) return Infinity;
   const last = new Date(user.energyUpdatedAt ?? user.createdAt).getTime();
   const elapsedMin = (Date.now() - last) / 60000;
-  const recharged = Math.floor(elapsedMin / ENERGY_RECHARGE_MINUTES);
+  const recharged = isEnergyRechargeBlocked(user) ? 0 : Math.floor(elapsedMin / ENERGY_RECHARGE_MINUTES);
   const base = user.energy ?? FREE_MAX_ENERGY;
   return Math.min(FREE_MAX_ENERGY, base + recharged);
 }
@@ -946,6 +974,7 @@ export function minutesUntilNextEnergy(user: User): number {
   if (isUnlimitedEnergy(user)) return 0;
   const current = getEffectiveEnergy(user);
   if (current >= FREE_MAX_ENERGY) return 0;
+  if (isEnergyRechargeBlocked(user)) return 0;
   const last = new Date(user.energyUpdatedAt ?? user.createdAt).getTime();
   const elapsedMin = (Date.now() - last) / 60000;
   const intoCurrentCycle = elapsedMin % ENERGY_RECHARGE_MINUTES;

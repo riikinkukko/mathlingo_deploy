@@ -5,6 +5,7 @@ import {
   isEffectivelyPro,
   getEffectiveEnergy,
   minutesUntilNextEnergy,
+  isEnergyRechargeBlocked,
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
 import { upgradeToProAction, downgradeToFreeAction } from "@/app/actions";
@@ -39,6 +40,7 @@ export default async function UpgradePage({
   const isPro = isEffectivelyPro(user);
   const energy = Math.floor(getEffectiveEnergy(user));
   const minutesLeft = minutesUntilNextEnergy(user);
+  const rechargeBlocked = isEnergyRechargeBlocked(user);
   const realPayments = isYooKassaConfigured();
   const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 249);
   const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
@@ -71,9 +73,17 @@ export default async function UpgradePage({
             <p className="mt-1 font-display text-3xl font-black text-teal">
               {energy}/{FREE_MAX_ENERGY}
             </p>
-            {energy < FREE_MAX_ENERGY && (
+            {energy < FREE_MAX_ENERGY && !rechargeBlocked && (
               <p className="mt-1 text-xs text-ink-soft">
                 Следующая единица энергии через {minutesLeft} мин
+              </p>
+            )}
+            {rechargeBlocked && (
+              <p className="mt-2 text-xs font-bold text-amber">
+                Энергия не восстанавливается, пока не подтверждён email.{" "}
+                <a href="/student/profile" className="underline">
+                  Подтвердить
+                </a>
               </p>
             )}
           </div>
