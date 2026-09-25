@@ -4,10 +4,8 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getUserById } from "./queries";
 import { Role, User } from "./types";
+import { getSessionSecret } from "./session-secret";
 
-const SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "dev-secret-change-me-please-32chars"
-);
 const COOKIE_NAME = "mathapp_session";
 
 export async function hashPassword(password: string) {
@@ -23,15 +21,15 @@ export async function createSessionToken(userId: string, role: Role) {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
-    .sign(SECRET);
+    .sign(getSessionSecret());
 }
 
 export async function verifySessionToken(
   token: string
-): Promise<{ userId: string; role: Role } | null> {
+): Promise<{ userId: string; role: Role; issuedAt?: number } | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return { userId: payload.userId as string, role: payload.role as Role };
+    const { payload } = await jwtVerify(token, getSessionSecret());
+    return { userId: payload.userId as string, role: payload.role as Role, issuedAt: payload.iat };
   } catch {
     return null;
   }
@@ -57,7 +55,21 @@ export async function getSessionUser(): Promise<User | null> {
   const session = await verifySessionToken(token);
   if (!session) return null;
   const user = await getUserById(session.userId);
-  return user ?? null;
+  // Подпись верна, но аккаунта уже нет или пароль с тех пор меняли — такая
+  // сессия недействительна. Отправляем на вход, а не возвращаем null: страницы
+  // кабинетов рассчитывают, что пользователь есть (middleware уже проверил
+  // подпись), и с null падали бы с ошибкой вместо понятного экрана входа.
+  if (!user || isSessionRevoked(user, session.issuedAt)) redirect("/login");
+  return user;
+}
+
+/** Сессия выдана до последней смены/сброса пароля — недействительна. Так сброс
+ * пароля выкидывает все ранее открытые сессии (в т.ч. у того, кто, возможно,
+ * узнал старый пароль). Секундная точность у iat — с запасом в 1 с. */
+export function isSessionRevoked(user: User, issuedAtSec?: number): boolean {
+  if (!user.passwordChangedAt) return false;
+  if (!issuedAtSec) return true;
+  return (issuedAtSec + 1) * 1000 <= new Date(user.passwordChangedAt).getTime();
 }
 
 /** Единая точка проверки доступа к /admin/*. isAdmin не закодирован в JWT

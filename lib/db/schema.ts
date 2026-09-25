@@ -76,6 +76,9 @@ export const users = pgTable("users", {
   // gate) — просто позволяет показать напоминание в интерфейсе и
   // отдельно снижает риск регистрации на чужой/несуществующий адрес.
   emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  // Сессии, выданные ДО этой даты, недействительны (сброс/смена пароля
+  // выкидывает все открытые сессии, включая чужие, если пароль утёк).
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
   // Запрос на удаление аккаунта (требование Google Play User Data Policy
   // для приложений с созданием аккаунта — см. app/legal/delete-account).
   // Сознательно НЕ автоматическое каскадное удаление по нажатию кнопки —
@@ -133,6 +136,14 @@ export const registrationAttempts = pgTable("registration_attempts", {
   id: text("id").primaryKey(),
   ipAddress: text("ip_address").notNull(),
   role: text("role").notNull(), // "STUDENT" | "TEACHER" — лимиты считаются раздельно
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Неудачные попытки входа — защита от перебора паролей. key — либо
+// "ip:<адрес>", либо "email:<адрес>": лимиты считаются и по IP, и по аккаунту.
+export const loginFailures = pgTable("login_failures", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

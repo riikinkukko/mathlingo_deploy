@@ -45,7 +45,7 @@ export default function AddStudentForm() {
       </div>
       <div>
         <label className="label" htmlFor="password">Пароль (необязательно)</label>
-        <input className="input" id="password" name="password" placeholder="по умолчанию demo1234" />
+        <input className="input" id="password" name="password" placeholder="оставьте пустым — сгенерируем" />
       </div>
       <label className="flex items-start gap-2.5 text-[13px] leading-snug text-ink-soft">
         <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 accent-pine" />

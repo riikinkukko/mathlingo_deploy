@@ -3,6 +3,7 @@ import * as schema from "./db/schema";
 import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { canonicalEmailSql } from "./email-rules";
+import { secureToken, secureCode } from "./secure-random";
 import {
   Homework,
   Problem,
@@ -39,6 +40,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
     emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : undefined,
+    passwordChangedAt: row.passwordChangedAt ? row.passwordChangedAt.toISOString() : undefined,
     teacherPlan: row.teacherPlan ?? undefined,
     teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
     isPlatformOwner: row.isPlatformOwner,
@@ -844,6 +846,39 @@ const REGISTRATION_WINDOW_HOURS = 24;
  * разработка без nginx перед сервером) — сознательно НЕ блокируем: лучше
  * пропустить редкий случай абуза, чем по ошибке заблокировать реальных
  * пользователей из-за проблемы с прокси на нашей стороне. */
+// ---------- Защита от перебора паролей ----------
+// Считаем только НЕУДАЧНЫЕ входы, раздельно по IP и по email: так нельзя ни
+// перебирать пароли к одному аккаунту с разных IP, ни перебирать много
+// аккаунтов с одного IP. Успешный вход сбрасывает счётчик по email.
+const LOGIN_WINDOW_MIN = 15;
+const LOGIN_FAILS_PER_EMAIL = 8;
+const LOGIN_FAILS_PER_IP = 30;
+
+export async function isLoginRateLimited(ip: string, email: string): Promise<boolean> {
+  const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60 * 1000);
+  const count = async (key: string) => {
+    const rows = await db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.loginFailures)
+      .where(and(eq(schema.loginFailures.key, key), gte(schema.loginFailures.createdAt, since)));
+    return Number(rows[0]?.c ?? 0);
+  };
+  if (email && (await count(`email:${email}`)) >= LOGIN_FAILS_PER_EMAIL) return true;
+  if (ip && (await count(`ip:${ip}`)) >= LOGIN_FAILS_PER_IP) return true;
+  return false;
+}
+
+export async function recordLoginFailure(ip: string, email: string): Promise<void> {
+  const rows = [];
+  if (email) rows.push({ id: genId("lf"), key: `email:${email}` });
+  if (ip) rows.push({ id: genId("lf"), key: `ip:${ip}` });
+  if (rows.length) await db.insert(schema.loginFailures).values(rows);
+}
+
+export async function clearLoginFailures(email: string): Promise<void> {
+  if (email) await db.delete(schema.loginFailures).where(eq(schema.loginFailures.key, `email:${email}`));
+}
+
 export async function isRegistrationRateLimited(ip: string, role: "STUDENT" | "TEACHER"): Promise<boolean> {
   if (!ip) return false;
   const windowStart = new Date(Date.now() - REGISTRATION_WINDOW_HOURS * 3600 * 1000);
@@ -876,7 +911,7 @@ export async function createAuthToken(
   type: "email_verification" | "password_reset",
   ttlMs: number
 ): Promise<string> {
-  const token = genId("tok") + genId("tok"); // длиннее обычного id — токен не должен быть перебираемым
+  const token = secureToken(); // криптостойкий: 256 бит случайности
   await db.insert(schema.authTokens).values({
     id: genId("authtok"),
     userId,
@@ -1015,6 +1050,42 @@ export async function getHomeworksForStudent(studentId: string): Promise<Homewor
   return [...own, ...proExams].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
+/**
+ * Может ли ученик открыть эту задачу — серверная проверка для экшенов решения
+ * задачи и раскрытия ответа. Те же правила, что на странице навыка
+ * (app/student/skill/[id]/page.tsx), но там проверка защищает только
+ * страницу, а экшены можно вызвать напрямую с любым problemId.
+ * - source "assignment": задача должна входить в одно из заданий ученика
+ *   (своя домашка или Pro-пробник платформы для Pro-пользователя);
+ * - уроки/повторение: Free-самостоятельному — только навыки, доступные на
+ *   Free, и без развёрнутых (DETAILED) задач. Ученикам репетитора и Pro — всё.
+ */
+export async function canStudentAccessProblem(
+  user: User,
+  problem: { id: string; skillId?: string; answerType: string },
+  source: "lesson" | "assignment" | "review"
+): Promise<boolean> {
+  if (user.role !== "STUDENT") return false;
+  if (source === "assignment") {
+    const assignments = await getHomeworksForStudent(user.id);
+    return assignments.some((h) => h.problemIds.includes(problem.id));
+  }
+  const isFreeStandalone = isStandaloneStudent(user) && !isEffectivelyPro(user);
+  if (!isFreeStandalone) return true;
+  if (problem.answerType === "DETAILED" || !problem.skillId) return false;
+  const skillRows = await db.select().from(schema.skills).where(eq(schema.skills.id, problem.skillId)).limit(1);
+  const skill = skillRows[0];
+  if (!skill) return false;
+  const subRows = await db.select().from(schema.subtopics).where(eq(schema.subtopics.id, skill.subtopicId)).limit(1);
+  const sub = subRows[0];
+  if (!sub) return false;
+  const siblings = await db
+    .select({ id: schema.skills.id, order: schema.skills.order })
+    .from(schema.skills)
+    .where(eq(schema.skills.subtopicId, skill.subtopicId));
+  return isSkillAccessibleOnFree(skill, sub.order, siblings);
+}
+
 // ---------- Достижения (lib/achievements.ts определяет пороги/тиры) ----------
 
 export async function getAchievementStats(studentId: string): Promise<{
@@ -1084,7 +1155,7 @@ export async function getAchievementStats(studentId: string): Promise<{
 // ---------- Привязка Telegram для уведомлений ----------
 
 function randomCode(): string {
-  return Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  return secureCode(16);
 }
 
 /** Генерирует одноразовый код привязки и сохраняет на пользователе — вызов
@@ -1233,6 +1304,17 @@ export async function createPendingPayment(params: {
  * будущих автоплатежей и для отображения пользователю на странице тарифа
  * (требование ЮKassa при согласовании автоплатежей — самостоятельная
  * отвязка карты, см. app/teacher/upgrade/page.tsx). */
+/** Сумма платежа, которую МЫ выставили при создании (из нашей БД) — чтобы
+ * сверить её с суммой, которую ЮKassa реально списала. */
+export async function getPaymentAmountRub(yookassaPaymentId: string): Promise<number | null> {
+  const rows = await db
+    .select({ amountRub: schema.payments.amountRub })
+    .from(schema.payments)
+    .where(eq(schema.payments.yookassaPaymentId, yookassaPaymentId))
+    .limit(1);
+  return rows[0] ? Number(rows[0].amountRub) : null;
+}
+
 export async function markPaymentSucceeded(
   yookassaPaymentId: string,
   savedMethod?: { id: string; cardLast4?: string; cardType?: string }

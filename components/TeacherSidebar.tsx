@@ -8,20 +8,24 @@ export default function TeacherSidebar({
   active,
   pendingReviewCount,
   isAdmin,
+  canEditContent,
   notifications,
   unreadCount,
 }: {
   active: "students" | "content" | "upgrade";
   pendingReviewCount: number;
   isAdmin: boolean;
+  canEditContent: boolean;
   notifications: Notification[];
   unreadCount: number;
 }) {
-  const items = [
+  const allItems = [
     { key: "students", label: "Мои ученики", href: "/teacher", icon: IconStudents, badge: pendingReviewCount },
     { key: "content", label: "Контент программы", href: "/teacher/content", icon: IconContent, badge: 0 },
     { key: "upgrade", label: "Тариф", href: "/teacher/upgrade", icon: IconStar, badge: 0 },
   ] as const;
+  // Редактор общего курса — только владельцу платформы и админам.
+  const items = allItems.filter((i) => i.key !== "content" || canEditContent);
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[236px] flex-col bg-pine-dark px-4 py-5 lg:flex">

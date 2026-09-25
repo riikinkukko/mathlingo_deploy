@@ -29,6 +29,7 @@ export interface User {
   consentGivenAt?: string;
   deletionRequestedAt?: string;
   emailVerifiedAt?: string;
+  passwordChangedAt?: string;
   teacherPlan?: "free" | "pro";
   teacherProUntil?: string;
   isPlatformOwner?: boolean;

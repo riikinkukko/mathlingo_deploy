@@ -60,9 +60,11 @@ export default async function TeacherDashboard() {
             </p>
           </div>
           <div className="flex gap-2">
-            <a href="/teacher/content" className="btn-secondary">
-              Контент программы
-            </a>
+            {(isOwner || user.isAdmin) && (
+              <a href="/teacher/content" className="btn-secondary">
+                Контент программы
+              </a>
+            )}
             <a href="/teacher/students/new" className="btn-primary">
               + Добавить ученика
             </a>

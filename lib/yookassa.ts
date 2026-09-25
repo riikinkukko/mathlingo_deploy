@@ -11,7 +11,8 @@
  * проверка на живых запросах — со стороны того, у кого есть эти ключи.
  */
 
-const API_BASE = "https://api.yookassa.ru/v3";
+// YOOKASSA_API_BASE — только для локального теста с фейковым API.
+const API_BASE = process.env.YOOKASSA_API_BASE?.trim() || "https://api.yookassa.ru/v3";
 
 function getAuthHeader(): string {
   const shopId = process.env.YOOKASSA_SHOP_ID;
@@ -82,6 +83,43 @@ export async function createYooKassaPayment(params: {
     throw new Error("ЮKassa вернула неожиданный формат ответа (нет id или confirmation_url)");
   }
   return { id: data.id, confirmationUrl };
+}
+
+export interface YooKassaPaymentInfo {
+  id: string;
+  status: string;
+  paid: boolean;
+  amountRub: number;
+  paymentMethod?: { id?: string; saved?: boolean; card?: { last4?: string; card_type?: string } };
+}
+
+/**
+ * Запрашивает платёж напрямую у ЮKassa (GET /v3/payments/{id}). Вебхук
+ * использует ТОЛЬКО этот ответ, а не тело входящего уведомления: тело может
+ * прислать кто угодно, а ответ на наш собственный авторизованный запрос к
+ * api.yookassa.ru подделать нельзя. Так рекомендует и сама ЮKassa.
+ */
+export async function getYooKassaPayment(paymentId: string): Promise<YooKassaPaymentInfo | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(`${API_BASE}/payments/${encodeURIComponent(paymentId)}`, {
+      headers: { Authorization: getAuthHeader() },
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data?.id) return null;
+    return {
+      id: data.id,
+      status: String(data.status),
+      paid: !!data.paid,
+      amountRub: Number(data.amount?.value),
+      paymentMethod: data.payment_method,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
+import { getSessionSecret } from "./lib/session-secret";
 
-const SECRET = new TextEncoder().encode(
-  process.env.SESSION_SECRET || "dev-secret-change-me-please-32chars"
-);
 const COOKIE_NAME = "mathapp_session";
 
 const ROLE_PREFIX: Record<string, string> = {
@@ -25,7 +23,7 @@ export async function middleware(req: NextRequest) {
   }
 
   try {
-    const { payload } = await jwtVerify(token, SECRET);
+    const { payload } = await jwtVerify(token, getSessionSecret());
     const role = payload.role as string;
     if (role !== ROLE_PREFIX[matchedPrefix]) {
       return NextResponse.redirect(new URL(`/${role.toLowerCase()}`, req.url));

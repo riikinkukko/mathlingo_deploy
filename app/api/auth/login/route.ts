@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server";
-import { createSessionToken, verifyPassword } from "@/lib/auth";
-import { getUserByEmail } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request) {
-  let body: { email?: string; password?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Некорректное тело запроса (ожидается JSON)" }, { status: 400 });
-  }
-
-  const email = String(body.email || "").trim().toLowerCase();
-  const password = String(body.password || "");
-  if (!email || !password) {
-    return NextResponse.json({ error: "Укажите email и пароль" }, { status: 400 });
-  }
-
-  const user = await getUserByEmail(email);
-  if (!user) {
-    return NextResponse.json({ error: "Пользователь с таким email не найден" }, { status: 401 });
-  }
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) {
-    return NextResponse.json({ error: "Неверный пароль" }, { status: 401 });
-  }
-
-  const token = await createSessionToken(user.id, user.role);
-  const { passwordHash, ...safeUser } = user;
-  return NextResponse.json({ token, user: safeUser });
+/**
+ * Отключено. JSON-API для будущего нативного мобильного клиента, которым
+ * сейчас никто не пользуется (приложение Capacitor открывает сам сайт и
+ * работает через обычные формы). При этом эндпоинт обходил все защиты веб-
+ * формы: лимит попыток по IP, запрет одноразовых почт, «один ящик — один
+ * аккаунт», согласие на обработку ПДн (152-ФЗ), подтверждение email, защиту
+ * от перебора паролей. Если понадобится нативный клиент — вернуть через
+ * общие функции проверки из app/actions.ts, а не отдельной копией логики.
+ */
+export async function POST() {
+  return NextResponse.json({ error: "Этот способ входа отключён. Используйте сайт или приложение." }, { status: 410 });
 }

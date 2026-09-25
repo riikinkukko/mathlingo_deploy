@@ -78,6 +78,13 @@
       "when": 1788827122807,
       "tag": "0010_yielding_black_tarantula",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790347712160,
+      "tag": "0011_luxuriant_kat_farrell",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import {
   pushNotification,
   spendEnergy,
   isEnergyRechargeBlocked,
+  canStudentAccessProblem,
   updateSrsState,
   genId,
 } from "./queries";
@@ -72,6 +73,12 @@ export async function performSubmitAttempt(
   const problem = await getProblem(problemId);
   if (!problem) return { error: "Задача не найдена" as const };
   if (!answer.trim()) return { error: "Введите ответ" as const };
+  // Серверная проверка доступа: Free не должен решать Pro-навыки и DETAILED,
+  // а в режиме задания — только задачи из своих заданий. Страница навыка
+  // проверяет это же, но экшен можно вызвать напрямую с любым problemId.
+  if (!(await canStudentAccessProblem(user, problem, source))) {
+    return { error: "Задача недоступна" as const };
+  }
 
   const existingAttempts = await db
     .select({ id: schema.attempts.id })

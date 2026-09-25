@@ -1,4 +1,4 @@
-import { verifySessionToken } from "./auth";
+import { verifySessionToken, isSessionRevoked } from "./auth";
 import { getUserById } from "./queries";
 import { User } from "./types";
 
@@ -17,5 +17,7 @@ export async function getBearerUser(req: Request): Promise<User | null> {
   if (!token) return null;
   const session = await verifySessionToken(token);
   if (!session) return null;
-  return (await getUserById(session.userId)) ?? null;
+  const user = await getUserById(session.userId);
+  if (!user || isSessionRevoked(user, session.issuedAt)) return null;
+  return user;
 }

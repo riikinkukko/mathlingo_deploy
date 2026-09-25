@@ -26,6 +26,7 @@ export default async function TeacherShell({
   ]);
   const pendingReviewCount = pendingReviews.length;
   const isAdmin = !!user.isAdmin;
+  const canEditContent = isAdmin || !!user.isPlatformOwner;
 
   return (
     <div className="min-h-screen bg-paper">
@@ -41,6 +42,7 @@ export default async function TeacherShell({
         active={active}
         pendingReviewCount={pendingReviewCount}
         isAdmin={isAdmin}
+        canEditContent={canEditContent}
         notifications={notifications}
         unreadCount={unreadCount}
       />
@@ -67,6 +69,7 @@ export default async function TeacherShell({
             Ученики
           </span>
         </a>
+{canEditContent && (
         <a
           href="/teacher/content"
           className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5"
@@ -76,6 +79,7 @@ export default async function TeacherShell({
             Контент
           </span>
         </a>
+        )}
         {isAdmin && (
           <a
             href="/admin"

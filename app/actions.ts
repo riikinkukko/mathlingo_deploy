@@ -23,16 +23,24 @@ import {
   spendEnergy,
   isStandaloneStudent,
   getUserByEmail,
+  getUserById,
+  canStudentAccessProblem,
+  getHomeworksForStudent,
   isMailboxTakenBySelfRegisteredAccount,
   genId,
   createAuthToken,
   consumeAuthToken,
   isRegistrationRateLimited,
   recordRegistrationAttempt,
+  isLoginRateLimited,
+  recordLoginFailure,
+  clearLoginFailures,
 } from "@/lib/queries";
 import { performSubmitAttempt } from "@/lib/actions-core";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
+import { isYooKassaConfigured } from "@/lib/yookassa";
+import { generatePassword } from "@/lib/secure-random";
 
 /** Реальный IP клиента — читает заголовки, которые nginx проставляет на
  * сервере (X-Real-IP/X-Forwarded-For, см. README про настройку прокси).
@@ -41,11 +49,24 @@ import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
  * случае вместо того, чтобы ошибочно резать реальных пользователей. */
 function getClientIp(): string {
   const h = headers();
+  // X-Real-IP выставляет nginx из реального соединения — подделать нельзя.
+  // Первый адрес X-Forwarded-For присылает сам клиент, поэтому из XFF берём
+  // последний (его добавил наш nginx) и только если X-Real-IP нет.
+  const realIp = h.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
   const forwarded = h.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return h.get("x-real-ip") || "";
+  return forwarded ? forwarded.split(",").pop()!.trim() : "";
 }
 import { AssignmentKind, Role } from "@/lib/types";
+
+/** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
+ * принимают studentId из формы, обязаны это проверять сами: серверный экшен
+ * можно вызвать напрямую с любым studentId. */
+async function isOwnStudent(teacherId: string, studentId: string): Promise<boolean> {
+  if (!studentId) return false;
+  const student = await getUserById(studentId);
+  return !!student && student.role === "STUDENT" && student.teacherId === teacherId;
+}
 
 // ---------- AUTH ----------
 
@@ -53,11 +74,20 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
 
-  const user = await getUserByEmail(email);
-  if (!user) return { error: "Пользователь с таким email не найден" };
+  const clientIp = getClientIp();
+  if (await isLoginRateLimited(clientIp, email)) {
+    return { error: "Слишком много неудачных попыток входа. Подождите 15 минут или восстановите пароль." };
+  }
 
-  const ok = await verifyPassword(password, user.passwordHash);
-  if (!ok) return { error: "Неверный пароль" };
+  // Одинаковое сообщение для «нет такого email» и «неверный пароль» — иначе
+  // по ответу можно узнать, зарегистрирован ли человек на сайте.
+  const user = await getUserByEmail(email);
+  const ok = user ? await verifyPassword(password, user.passwordHash) : false;
+  if (!user || !ok) {
+    await recordLoginFailure(clientIp, email);
+    return { error: "Неверный email или пароль" };
+  }
+  await clearLoginFailures(email);
 
   const token = await createSessionToken(user.id, user.role);
   await setSessionCookie(token);
@@ -103,6 +133,29 @@ export async function revealSolutionAction(problemId: string) {
   if (!user || user.role !== "STUDENT") return { error: "Нужно войти как ученик" };
   const problem = await getProblem(problemId);
   if (!problem) return { error: "Задача не найдена" };
+
+  // Раньше экшен отдавал правильный ответ к ЛЮБОЙ задаче сразу. Теперь то же
+  // правило, что показывает интерфейс: ответ — после 3 неверных попыток или
+  // если задача уже решена; только к доступной ученику задаче и не во время
+  // контрольной/пробника.
+  const accessible =
+    (await canStudentAccessProblem(user, problem, "lesson")) ||
+    (await canStudentAccessProblem(user, problem, "assignment"));
+  if (!accessible) return { error: "Задача недоступна" };
+
+  const assignments = await getHomeworksForStudent(user.id);
+  if (assignments.some((h) => h.kind !== "homework" && h.problemIds.includes(problem.id))) {
+    return { error: "В контрольной и пробнике ответ не показывается" };
+  }
+
+  const own = await db
+    .select({ isCorrect: schema.attempts.isCorrect })
+    .from(schema.attempts)
+    .where(and(eq(schema.attempts.studentId, user.id), eq(schema.attempts.problemId, problem.id)));
+  const solved = own.some((a) => a.isCorrect === true);
+  const wrong = own.filter((a) => a.isCorrect === false).length;
+  if (!solved && wrong < 3) return { error: "Ответ откроется после трёх попыток" };
+
   return { explanation: problem.explanation, correctAnswer: problem.correctAnswer };
 }
 
@@ -195,6 +248,11 @@ export async function createLessonLogAction(formData: FormData) {
   if (!teacher || teacher.role !== "TEACHER") {
     redirect(`/teacher/student/${studentId}?error=1`);
   }
+  // Только своему ученику: иначе любой репетитор мог слать домашки и записи
+  // журнала (с уведомлениями ученику и родителям) чужим ученикам.
+  if (!(await isOwnStudent(teacher.id, studentId))) {
+    redirect(`/teacher/student/${studentId}?error=1`);
+  }
 
   const date = String(formData.get("date") || "");
   const topic = String(formData.get("topic") || "").trim();
@@ -276,7 +334,7 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "").trim() || "demo1234";
+  const password = String(formData.get("password") || "").trim() || generatePassword();
   const consent = formData.get("consent");
 
   if (!name || !email) return { error: "Заполните имя и email" };
@@ -307,12 +365,19 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   const studentId = String(formData.get("studentId") || "");
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "").trim() || "demo1234";
+  const password = String(formData.get("password") || "").trim() || generatePassword();
   const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
   if (consent !== "on") {
     return { error: "Нужно подтвердить, что согласие родителя получено" };
+  }
+  // Родителя можно привязать только к СВОЕМУ ученику. Без этой проверки любой
+  // репетитор мог создать "родителя" для чужого ученика и через его кабинет
+  // видеть все данные этого ученика.
+  const student = await getUserById(studentId);
+  if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
+    return { error: "Ученик не найден" };
   }
 
   let parent = await getUserByEmail(email);
@@ -348,6 +413,11 @@ export async function createHomeworkAction(formData: FormData) {
   const teacher = await getSessionUser();
   const studentId = String(formData.get("studentId") || "");
   if (!teacher || teacher.role !== "TEACHER") {
+    redirect(`/teacher/homework/new?studentId=${studentId}&error=1`);
+  }
+  // Только своему ученику: иначе любой репетитор мог слать домашки и записи
+  // журнала (с уведомлениями ученику и родителям) чужим ученикам.
+  if (!(await isOwnStudent(teacher.id, studentId))) {
     redirect(`/teacher/homework/new?studentId=${studentId}&error=1`);
   }
 
@@ -590,9 +660,17 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
 
 // ---------- План Free/Pro (демо-переключение, без реальной оплаты) ----------
 
+/** Демо-переключение Free/Pro без оплаты — ТОЛЬКО для локальной разработки.
+ * Серверные экшены можно вызвать напрямую запросом, даже если кнопка скрыта в
+ * интерфейсе, поэтому проверка обязана быть здесь, на сервере: в продакшене и
+ * везде, где подключена ЮKassa, эти экшены ничего не делают. */
+function isDemoPlanSwitchAllowed(): boolean {
+  return process.env.NODE_ENV !== "production" && !isYooKassaConfigured();
+}
+
 export async function upgradeToProAction() {
   const user = await getSessionUser();
-  if (!user || !isStandaloneStudent(user)) {
+  if (!user || !isStandaloneStudent(user) || !isDemoPlanSwitchAllowed()) {
     redirect("/student");
   }
   await db.update(schema.users).set({ plan: "pro" }).where(eq(schema.users.id, user.id));
@@ -602,7 +680,7 @@ export async function upgradeToProAction() {
 
 export async function downgradeToFreeAction() {
   const user = await getSessionUser();
-  if (!user || !isStandaloneStudent(user)) {
+  if (!user || !isStandaloneStudent(user) || !isDemoPlanSwitchAllowed()) {
     redirect("/student");
   }
   await db
@@ -748,6 +826,12 @@ export async function resetPasswordAction(_prevState: unknown, formData: FormDat
     return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
   }
 
-  await db.update(schema.users).set({ passwordHash: await hashPassword(password) }).where(eq(schema.users.id, userId));
+  // passwordChangedAt — все сессии, открытые до сброса, перестают работать.
+  await db
+    .update(schema.users)
+    .set({ passwordHash: await hashPassword(password), passwordChangedAt: new Date() })
+    .where(eq(schema.users.id, userId));
+  const resetUser = await getUserById(userId);
+  if (resetUser) await clearLoginFailures(resetUser.email);
   redirect("/login");
 }

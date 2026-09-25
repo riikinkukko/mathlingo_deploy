@@ -179,12 +179,25 @@ export default function DiagramScratchpad({
   }
 
   const modal = (
-    <div className="fixed inset-0 z-50 flex flex-col bg-ink/95">
-      <div className="flex items-center justify-between px-4 py-3">
+    <div className="fixed inset-0 z-50 flex flex-col bg-ink/60">
+      {/* Окно — не на весь экран, а «шторкой» снизу: сверху остаётся полоса
+          (плюс отступ под статус-бар/чёлку в приложении), чтобы крестик был
+          в зоне досягаемости большого пальца, а не под самым верхним краем.
+          Тап по затемнённой полосе тоже закрывает черновик. */}
+      <button
+        type="button"
+        aria-label="Закрыть черновик"
+        onClick={onClose}
+        className="w-full shrink-0 cursor-default"
+        style={{ height: "calc(max(1rem, var(--safe-area-inset-top, env(safe-area-inset-top))) + 12vh)" }}
+      />
+      <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col rounded-t-3xl bg-ink/95 shadow-2xl">
+      <div className="flex items-center justify-between px-4 pb-2 pt-3">
         <p className="text-sm font-bold text-white/80">Черновик — пометки не сохраняются</p>
         <button
           onClick={onClose}
-          className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          aria-label="Закрыть"
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-white transition hover:bg-white/25"
         >
           <IconClose className="h-5 w-5" />
         </button>
@@ -252,6 +265,7 @@ export default function DiagramScratchpad({
             <ToolButton active={false} onClick={clearAll} disabled={strokes.length === 0} label="🗑️" ariaLabel="Очистить всё" />
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

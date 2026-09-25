@@ -16,10 +16,17 @@ import {
 } from "@/lib/queries";
 import { AnswerType, Skill } from "@/lib/types";
 
+/** Редактировать ОБЩИЙ курс (главы, навыки, задачи, правильные ответы) может
+ * только владелец платформы или админ. Раньше хватало роли TEACHER — а
+ * репетитором может зарегистрироваться кто угодно, то есть любой посторонний
+ * мог менять ответы к задачам для всех пользователей. */
 async function requireTeacher() {
   const user = await getSessionUser();
   if (!user || user.role !== "TEACHER") {
     redirect("/login");
+  }
+  if (!user!.isPlatformOwner && !user!.isAdmin) {
+    redirect("/teacher");
   }
   return user!;
 }
