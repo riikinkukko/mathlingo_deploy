@@ -6,6 +6,7 @@ import TeacherShell from "@/components/TeacherShell";
 import Mascot from "@/components/Mascot";
 import TeacherUpgradeForm from "./TeacherUpgradeForm";
 import TeacherSubscriptionCard from "./TeacherSubscriptionCard";
+import { getTeacherProPrice } from "@/lib/tariffs";
 import { IconCheck, IconCrown } from "@/components/icons";
 
 const FREE_STUDENT_LIMIT = 3;
@@ -22,8 +23,7 @@ export default async function TeacherUpgradePage({
   const isPro = isTeacherEffectivelyPro(user);
   const isOwner = !!user.isPlatformOwner;
   const realPayments = isYooKassaConfigured();
-  const priceRub = Number(process.env.YOOKASSA_TEACHER_PRICE_RUB || 1499);
-  const periodDays = Number(process.env.YOOKASSA_TEACHER_PERIOD_DAYS || 30);
+  const { priceRub, periodDays } = getTeacherProPrice();
 
   return (
     <TeacherShell active="upgrade" title="Тариф">

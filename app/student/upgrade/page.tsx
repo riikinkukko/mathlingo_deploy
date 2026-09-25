@@ -11,23 +11,13 @@ import {
 import { upgradeToProAction, downgradeToFreeAction } from "@/app/actions";
 import { startPaymentAction } from "@/app/actions-payments";
 import { isYooKassaConfigured } from "@/lib/yookassa";
+import { getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
 
-const PRO_FEATURES = [
-  "Бесконечная энергия — решай сколько угодно задач в день",
-  "Все главы программы, а не только «Треугольники»",
-  "Развёрнутые (DETAILED) задачи с эталонным решением для самопроверки",
-  "Авторские пробники платформы",
-  "Подробная аналитика по темам (в разработке)",
-];
-
-const FREE_FEATURES = [
-  `${FREE_MAX_ENERGY} энергии в день (восстанавливается со временем)`,
-  "Глава «Треугольники» полностью открыта",
-  "Обычные задачи с подсказками и разбором",
-];
+const PRO_FEATURES = STUDENT_PRO_FEATURES;
+const FREE_FEATURES = STUDENT_FREE_FEATURES;
 
 export default async function UpgradePage({
   searchParams,
@@ -42,8 +32,7 @@ export default async function UpgradePage({
   const minutesLeft = minutesUntilNextEnergy(user);
   const rechargeBlocked = isEnergyRechargeBlocked(user);
   const realPayments = isYooKassaConfigured();
-  const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 249);
-  const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
+  const { priceRub, periodDays } = getStudentProPrice();
 
   return (
     <StudentShell active="profile" title="Тариф">

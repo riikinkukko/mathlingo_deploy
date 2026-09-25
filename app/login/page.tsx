@@ -31,6 +31,11 @@ export default function LoginPage() {
               Зарегистрироваться как репетитор
             </a>
           </p>
+          <p className="mt-3 text-center text-sm">
+            <a href="/tariffs" className="font-bold text-ink-soft underline hover:text-pine">
+              Тарифы и цены
+            </a>
+          </p>
           {process.env.NODE_ENV !== "production" && (
             <div className="mt-6 rounded-2xl border-2 border-line bg-white/60 p-4 text-xs leading-relaxed text-ink-soft">
               <p className="mb-1.5 font-extrabold text-ink">Демо-доступы:</p>

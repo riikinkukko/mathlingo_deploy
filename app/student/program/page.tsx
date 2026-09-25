@@ -1,4 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
+import { getStudentProPrice } from "@/lib/tariffs";
 import {
   getCurriculum,
   computeStudentProgress,
@@ -36,8 +37,7 @@ export default async function ProgramPage({
   const standalone = isStandaloneStudent(user);
   const isFreeStandalone = standalone && !isEffectivelyPro(user);
   const realPayments = isYooKassaConfigured();
-  const priceRub = Number(process.env.YOOKASSA_PRICE_RUB || 399);
-  const periodDays = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
+  const { priceRub, periodDays } = getStudentProPrice();
 
   const chapterInfo = await Promise.all(
     curriculumFiltered[0].chapters.map(async ({ chapter, skills }) => {

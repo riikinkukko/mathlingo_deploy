@@ -26,6 +26,11 @@ export default function RegisterPage() {
               Войти
             </a>
           </p>
+          <p className="mt-3 text-center text-sm">
+            <a href="/tariffs" className="font-bold text-ink-soft underline hover:text-pine">
+              Тарифы и цены
+            </a>
+          </p>
         </div>
       </div>
       <PublicFooter />
