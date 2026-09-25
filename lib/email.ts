@@ -21,6 +21,15 @@ function getTransporter() {
     // сервисов (в т.ч. Rusender) используют 587 со STARTTLS, где это должно
     // быть false, иначе соединение не установится вообще.
     secure: Number(process.env.SMTP_PORT || 587) === 465,
+    // Короткие таймауты: отправка письма вызывается с await прямо в
+    // регистрации/сбросе пароля. По умолчанию nodemailer ждёт соединения до
+    // 2 минут — если SMTP-порт закрыт на VPS (у Timeweb Cloud 465/587
+    // заблокированы по умолчанию), пользователь висел бы 2 минуты на кнопке
+    // «Зарегистрироваться». Теперь максимум ~10-20 секунд, дальше — ошибка
+    // в логах, а регистрация продолжается.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASSWORD,
