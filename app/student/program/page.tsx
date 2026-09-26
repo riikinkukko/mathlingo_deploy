@@ -1,5 +1,6 @@
 import { getSessionUser } from "@/lib/auth";
 import { getStudentProPrice } from "@/lib/tariffs";
+import PayButton from "@/components/PayButton";
 import {
   getCurriculum,
   computeStudentProgress,
@@ -179,9 +180,9 @@ export default async function ProgramPage({
               </ul>
               {realPayments ? (
                 <form action={startPaymentAction} className="mt-5">
-                  <button className="btn-primary !h-12 !bg-amber !text-[15px]" type="submit">
+                  <PayButton className="btn-primary !h-12 !bg-amber !text-[15px]">
                     Оплатить {priceRub} ₽ / {periodDays} дн. →
-                  </button>
+                  </PayButton>
                 </form>
               ) : (
                 <form action={upgradeToProAction} className="mt-5">

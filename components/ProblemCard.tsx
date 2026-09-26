@@ -5,6 +5,7 @@ import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
+import { ymGoal } from "@/lib/ym";
 import DiagramScratchpad from "./diagrams/DiagramScratchpad";
 import MathKeyboard from "./MathKeyboard";
 import Mascot from "./Mascot";
@@ -85,6 +86,7 @@ export default function ProblemCard({
         setSolved(true);
         if (!wasAlreadySolved) {
           setJustSolved(true);
+          ymGoal("problem_solved");
           onSolved?.();
         }
         return;

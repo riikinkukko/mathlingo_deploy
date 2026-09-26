@@ -15,6 +15,8 @@ import { getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from 
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
+import TrackGoal from "@/components/TrackGoal";
+import PayButton from "@/components/PayButton";
 
 const PRO_FEATURES = STUDENT_PRO_FEATURES;
 const FREE_FEATURES = STUDENT_FREE_FEATURES;
@@ -36,6 +38,7 @@ export default async function UpgradePage({
 
   return (
     <StudentShell active="profile" title="Тариф">
+      {!isPro && <TrackGoal goal="paywall_view" />}
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 text-center">
@@ -120,9 +123,9 @@ export default async function UpgradePage({
               (realPayments ? (
                 <>
                   <form action={startPaymentAction} className="mt-4">
-                    <button className="btn-primary w-full !bg-amber !text-xs" type="submit">
+                    <PayButton className="btn-primary w-full !bg-amber !text-xs">
                       Оплатить через ЮKassa
-                    </button>
+                    </PayButton>
                   </form>
                   <p className="mt-2 text-center text-[11px] leading-snug text-ink-soft">
                     Нажимая «Оплатить», вы принимаете условия{" "}

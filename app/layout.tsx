@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { Suspense } from "react";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
 import CapacitorBootstrap from "@/components/CapacitorBootstrap";
+import Analytics from "@/components/Analytics";
 
 export const metadata: Metadata = {
   title: "Планиметрика — платформа для подготовки к ЕГЭ",
@@ -54,6 +56,10 @@ export default function RootLayout({
       <body className="font-sans bg-paper text-ink antialiased">
         <ServiceWorkerRegister />
         <CapacitorBootstrap />
+        {/* useSearchParams в Analytics требует Suspense-границы в App Router */}
+        <Suspense fallback={null}>
+          <Analytics />
+        </Suspense>
         {children}
       </body>
     </html>

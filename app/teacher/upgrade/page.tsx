@@ -7,6 +7,7 @@ import Mascot from "@/components/Mascot";
 import TeacherUpgradeForm from "./TeacherUpgradeForm";
 import TeacherSubscriptionCard from "./TeacherSubscriptionCard";
 import { getTeacherProPrice } from "@/lib/tariffs";
+import TrackGoal from "@/components/TrackGoal";
 import { IconCheck, IconCrown } from "@/components/icons";
 
 const FREE_STUDENT_LIMIT = 3;
@@ -27,6 +28,7 @@ export default async function TeacherUpgradePage({
 
   return (
     <TeacherShell active="upgrade" title="Тариф">
+      {!isPro && <TrackGoal goal="paywall_view" />}
       <div className="px-4 py-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
           <div className="mb-6 text-center">

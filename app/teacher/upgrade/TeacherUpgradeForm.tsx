@@ -2,11 +2,12 @@
 
 import { useFormState, useFormStatus } from "react-dom";
 import { startTeacherPaymentAction } from "@/app/actions-payments";
+import { ymGoal } from "@/lib/ym";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
   return (
-    <button className="btn-primary w-full !bg-amber !text-xs" type="submit" disabled={pending}>
+    <button className="btn-primary w-full !bg-amber !text-xs" type="submit" disabled={pending} onClick={() => ymGoal("payment_started")}>
       {pending ? "Переходим к оплате…" : "Оформить и оплатить"}
     </button>
   );

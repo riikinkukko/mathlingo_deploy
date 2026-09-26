@@ -601,7 +601,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
 
   const token = await createSessionToken(userId, "STUDENT");
   await setSessionCookie(token);
-  redirect("/onboarding");
+  redirect("/onboarding?ym=register");
 }
 
 export async function registerTeacherAction(_prevState: unknown, formData: FormData) {
@@ -655,7 +655,7 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
 
   const token = await createSessionToken(userId, "TEACHER");
   await setSessionCookie(token);
-  redirect("/teacher");
+  redirect("/teacher?ym=register");
 }
 
 // ---------- План Free/Pro (демо-переключение, без реальной оплаты) ----------
