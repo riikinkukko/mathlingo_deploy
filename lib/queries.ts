@@ -260,12 +260,18 @@ export async function computeOverallStats(studentId: string) {
     (a) => Date.now() - new Date(a.createdAt).getTime() < 7 * 24 * 3600 * 1000
   );
   const activeDays = new Set(last7.map((a) => a.createdAt.slice(0, 10))).size;
+  // Время последней активности ученика — для панели "давно не заходил".
+  const lastActiveAt =
+    attempts.length > 0
+      ? attempts.reduce((max, a) => (a.createdAt > max ? a.createdAt : max), attempts[0].createdAt)
+      : null;
   return {
     attemptsCount: attempts.length,
     solvedProblems,
     totalProblems,
     accuracy: attempts.length ? Math.round((correct.length / attempts.length) * 100) : 0,
     activeDaysLast7: activeDays,
+    lastActiveAt,
   };
 }
 

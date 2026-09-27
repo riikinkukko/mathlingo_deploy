@@ -1,10 +1,17 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
+import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 
 const FREE_STUDENT_LIMIT = 3;
+// Через сколько дней без активности ученик считается "потерявшимся".
+const INACTIVE_DAYS = 3;
+
+function daysSince(iso: string): number {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 3600 * 1000));
+}
 
 export default async function TeacherDashboard() {
   const user = (await getSessionUser())!;
@@ -12,18 +19,39 @@ export default async function TeacherDashboard() {
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const cards = await Promise.all(
-    students.map(async (s) => {
-      const [stats, homeworks] = await Promise.all([
-        computeOverallStats(s.id),
-        getHomeworksForStudent(s.id),
-      ]);
-      const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, s.id)));
-      const pendingCount = statuses.filter((st) => !st.complete).length;
-      const overdue = statuses.some((st) => !st.complete && st.overdue);
-      return { s, stats, pendingCount, overdue };
-    })
-  );
+  const [cards, pendingReviews] = await Promise.all([
+    Promise.all(
+      students.map(async (s) => {
+        const [stats, homeworks] = await Promise.all([
+          computeOverallStats(s.id),
+          getHomeworksForStudent(s.id),
+        ]);
+        const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, s.id)));
+        const pendingCount = statuses.filter((st) => !st.complete).length;
+        const overdueCount = statuses.filter((st) => !st.complete && st.overdue).length;
+        return { s, stats, pendingCount, overdue: overdueCount > 0, overdueCount };
+      })
+    ),
+    getPendingReviewsForTeacher(user.id),
+  ]);
+
+  // Сводка для "панели дня".
+  const panelData: DayPanelData = {
+    reviewsCount: pendingReviews.length,
+    overdue: cards
+      .filter((c) => c.overdueCount > 0)
+      .map((c) => ({ id: c.s.id, name: c.s.name, count: c.overdueCount })),
+    inactive: cards
+      .map((c) => {
+        // сколько дней назад заходил; если ни разу — считаем от создания аккаунта
+        const ref = c.stats.lastActiveAt ?? c.s.createdAt;
+        const days = c.stats.lastActiveAt ? daysSince(c.stats.lastActiveAt) : null;
+        const idleDays = daysSince(ref);
+        return { id: c.s.id, name: c.s.name, days, idleDays };
+      })
+      .filter((x) => x.idleDays >= INACTIVE_DAYS)
+      .map(({ id, name, days }) => ({ id, name, days })),
+  };
 
   return (
     <TeacherShell active="students" title="Мои ученики">
@@ -37,6 +65,8 @@ export default async function TeacherDashboard() {
             }
           />
         )}
+        {students.length > 0 && <TeacherDayPanel data={panelData} />}
+
         {!isOwner && !isPro && (
           <a
             href="/teacher/upgrade"
