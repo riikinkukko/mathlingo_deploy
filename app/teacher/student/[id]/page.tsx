@@ -11,6 +11,7 @@ import {
   getLessonLogsForStudent,
   getPendingReviewsForTeacher,
   getParentsOfStudent,
+  getUpcomingLessonsForStudent,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
@@ -18,9 +19,12 @@ import GradeBadge from "@/components/GradeBadge";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import SkillsProgressSummary from "@/components/SkillsProgressSummary";
 import RecentList from "@/components/RecentList";
+import AddLessonForm from "@/components/AddLessonForm";
+import UpcomingLessons from "@/components/UpcomingLessons";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
+import DeleteStudentButton from "./DeleteStudentButton";
 
 const KIND_LABEL: Record<string, string> = {
   homework: "Домашка",
@@ -39,7 +43,7 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const [curriculum, progress, stats, homeworks, mistakesRaw, lessonLogs, pendingReviewsRaw, parents] =
+  const [curriculum, progress, stats, homeworks, mistakesRaw, lessonLogs, pendingReviewsRaw, parents, upcomingLessons] =
     await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
@@ -49,6 +53,7 @@ export default async function StudentDetailPage({
       getLessonLogsForStudent(student.id),
       getPendingReviewsForTeacher(teacher.id),
       getParentsOfStudent(student.id),
+      getUpcomingLessonsForStudent(student.id),
     ]);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
@@ -153,6 +158,16 @@ export default async function StudentDetailPage({
         </CollapsibleSection>
 
         <CollapsibleSection
+          title="Расписание занятий"
+          summary={upcomingLessons.length > 0 ? `${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])} впереди` : undefined}
+        >
+          <div className="mb-4">
+            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" />
+          </div>
+          <AddLessonForm studentId={student.id} from="student" />
+        </CollapsibleSection>
+
+        <CollapsibleSection
           title="Журнал занятий"
           summary={lessonLogs.length > 0 ? `${lessonLogs.length} ${pluralRu(lessonLogs.length, ["запись", "записи", "записей"])}` : undefined}
         >
@@ -192,6 +207,18 @@ export default async function StudentDetailPage({
               Пригласите родителя — он сможет следить за прогрессом, журналом занятий и заданиями ученика.
             </p>
             <AddParentForm studentId={student.id} />
+          </div>
+        </section>
+
+        <section className="mt-8 border-t border-line-soft pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-ink">Удаление ученика</p>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Если ученик перестал заниматься — удалите его, чтобы освободить место. Действие необратимо.
+              </p>
+            </div>
+            <DeleteStudentButton studentId={student.id} studentName={student.name} />
           </div>
         </section>
       </main>

@@ -358,6 +358,28 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   return { success: true, password };
 }
 
+export async function deleteStudentAction(formData: FormData) {
+  const teacher = await getSessionUser();
+  const studentId = String(formData.get("studentId") || "");
+
+  if (!teacher || teacher.role !== "TEACHER") {
+    redirect(`/teacher/student/${studentId}?error=1`);
+  }
+  // Удалять можно только СВОЕГО ученика.
+  if (!(await isOwnStudent(teacher.id, studentId))) {
+    redirect(`/teacher/student/${studentId}?error=1`);
+  }
+
+  // Все связанные данные (попытки, ДЗ, журнал, расписание, SRS, уведомления,
+  // привязки родителей, платежи) удаляются каскадно по внешним ключам
+  // (onDelete: "cascade"). Аккаунты родителей при этом остаются — они могут
+  // быть привязаны и к другим ученикам.
+  await db.delete(schema.users).where(eq(schema.users.id, studentId));
+
+  revalidatePath("/teacher");
+  redirect("/teacher?ok=student_deleted");
+}
+
 export async function addParentLinkAction(_prevState: unknown, formData: FormData) {
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
