@@ -18,7 +18,9 @@ import {
   getStudentNotes,
   getWeeklyStats,
   getUnmarkedPastLessons,
+  getScheduledLessonById,
 } from "@/lib/queries";
+import LessonDoneBanner from "@/components/LessonDoneBanner";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import { formatDateRu } from "@/lib/money";
 import GoalCard from "@/components/GoalCard";
@@ -52,14 +54,37 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function StudentDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { done?: string; log?: string };
 }) {
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
   if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
     notFound();
   }
+
+  // ?done=<id> — только что отмечено «Провести/Было» → плашка «Записать отчёт».
+  // ?log=<id>  — пришли по этой плашке → журнал открыт, форма заполнена.
+  // Оба занятия проверяем: своё и этого ученика.
+  const ownLesson = async (id?: string) => {
+    if (!id) return undefined;
+    const l = await getScheduledLessonById(id);
+    return l && l.teacherId === teacher.id && l.studentId === student.id ? l : undefined;
+  };
+  const [doneLesson, logLesson] = await Promise.all([ownLesson(searchParams.done), ownLesson(searchParams.log)]);
+  const logPrefill = logLesson
+    ? {
+        date: new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Europe/Moscow",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(logLesson.startsAt)),
+        topic: logLesson.topic ?? "",
+      }
+    : undefined;
 
   const [
     curriculum,
@@ -127,6 +152,10 @@ export default async function StudentDetailPage({
           <StatChip label="Точность ответов" value={`${stats.accuracy}%`} />
           <StatChip label="Активных дней за неделю" value={`${stats.activeDaysLast7}`} />
         </div>
+
+        {doneLesson && doneLesson.status === "done" && (
+          <LessonDoneBanner lesson={doneLesson} onStudentPage />
+        )}
 
         <GoalCard targetScore={student.targetScore} mocks={mocks} />
 
@@ -300,9 +329,11 @@ export default async function StudentDetailPage({
           <PaymentHistory payments={payments} showStudent={false} from="student" />
         </CollapsibleSection>
 
+        <div id="journal" className="scroll-mt-20">
         <CollapsibleSection
           title="Журнал занятий"
           summary={lessonLogs.length > 0 ? `${lessonLogs.length} ${pluralRu(lessonLogs.length, ["запись", "записи", "записей"])}` : undefined}
+          defaultOpen={!!logPrefill}
         >
           <div className="mb-4">
             <RecentList
@@ -321,8 +352,14 @@ export default async function StudentDetailPage({
               ))}
             />
           </div>
-          <LessonLogForm studentId={student.id} />
+          <LessonLogForm
+            studentId={student.id}
+            defaultDate={logPrefill?.date}
+            defaultTopic={logPrefill?.topic}
+            autoFocus={!!logPrefill}
+          />
         </CollapsibleSection>
+        </div>
 
         <section>
           <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>

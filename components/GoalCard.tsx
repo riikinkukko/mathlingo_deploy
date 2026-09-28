@@ -12,15 +12,19 @@ const POINTS: [string, string, string] = ["балл", "балла", "балло�
 export default function GoalCard({
   targetScore,
   mocks,
+  readOnly = false,
 }: {
   targetScore?: number;
   mocks: MockScore[];
+  /** для родителя: без призывов «задать цель» и ссылок на формы */
+  readOnly?: boolean;
 }) {
   const last = mocks[0];
   const prev = mocks[1];
   const delta = last && prev ? last.score - prev.score : null;
 
   if (!targetScore && !last) {
+    if (readOnly) return null;
     return (
       <div className="card mb-8 flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
@@ -91,7 +95,11 @@ export default function GoalCard({
         </>
       )}
       {targetScore && !last && (
-        <p className="mt-2 text-xs text-ink-soft">Запишите первый пробник — появится прогресс к цели.</p>
+        <p className="mt-2 text-xs text-ink-soft">
+          {readOnly
+            ? "Пробников пока не было — прогресс к цели появится после первого."
+            : "Запишите первый пробник — появится прогресс к цели."}
+        </p>
       )}
     </div>
   );

@@ -162,7 +162,8 @@ export async function setLessonStatusAction(formData: FormData) {
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
   revalidatePath(`/teacher/student/${lesson.studentId}`);
-  redirect(`${back}?ok=lesson`);
+  // После «Провести/Было» страница покажет плашку «Записать отчёт →».
+  redirect(status === "done" ? `${back}?done=${encodeURIComponent(lessonId)}` : `${back}?ok=lesson`);
 }
 
 export async function deleteLessonAction(formData: FormData) {

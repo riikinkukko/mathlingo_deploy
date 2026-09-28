@@ -116,6 +116,9 @@ export function AddMockScoreForm({ studentId }: { studentId: string }) {
           />
         </div>
       </div>
+      <p className="text-[11px] text-ink-soft">
+        Балл и дату пробника видит родитель в своём кабинете; комментарий — только вы.
+      </p>
       {state?.error && <p className="text-sm font-semibold text-coral">{state.error}</p>}
       <div className="flex items-center gap-3">
         <Submit label="Записать пробник" />

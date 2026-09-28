@@ -50,6 +50,7 @@ export default function UpcomingLessons({
   emptyText = "Занятий пока не запланировано.",
   limit,
   past = false,
+  readOnly = false,
 }: {
   lessons: LessonItem[];
   showStudent: boolean;
@@ -59,6 +60,8 @@ export default function UpcomingLessons({
   limit?: number;
   /** прошедшие неотмеченные занятия: подписи «Было / Не было» вместо «Провести / Отменить» */
   past?: boolean;
+  /** только просмотр (родитель): без кнопок «Провести / Отменить / удалить» */
+  readOnly?: boolean;
 }) {
   if (lessons.length === 0) {
     return <div className="card p-6 text-center text-sm text-ink-soft">{emptyText}</div>;
@@ -103,6 +106,7 @@ export default function UpcomingLessons({
                     {l.topic || <span className="italic">Тема не указана</span>}
                   </p>
                 </div>
+                {!readOnly && (
                 <div className="flex shrink-0 gap-1.5">
                   <form action={setLessonStatusAction}>
                     <input type="hidden" name="lessonId" value={l.id} />
@@ -128,6 +132,7 @@ export default function UpcomingLessons({
                   </form>
                   <LessonDeleteControl lessonId={l.id} seriesId={l.seriesId} from={from} />
                 </div>
+                )}
               </div>
             ))}
           </div>

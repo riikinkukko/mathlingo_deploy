@@ -9,7 +9,13 @@ import {
   getUserById,
   getLessonLogsForStudent,
   isParentOf,
+  getMockScores,
+  getWeeklyStats,
+  getUpcomingLessonsForStudent,
 } from "@/lib/queries";
+import GoalCard from "@/components/GoalCard";
+import UpcomingLessons from "@/components/UpcomingLessons";
+import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import ParentShell from "@/components/ParentShell";
 import GradeBadge from "@/components/GradeBadge";
 import CollapsibleSection from "@/components/CollapsibleSection";
@@ -44,6 +50,16 @@ export default async function ChildDetailPage({
   );
   const statusById = new Map(homeworkStatuses);
 
+  const [mocksRaw, weekly, upcomingLessons] = await Promise.all([
+    getMockScores(child.id),
+    getWeeklyStats(child.id, 12),
+    getUpcomingLessonsForStudent(child.id),
+  ]);
+  // Комментарии к пробникам репетитор пишет для себя — родителю отдаём только
+  // балл и дату. Обнуляем сразу, чтобы текст не попал ни в HTML, ни в данные.
+  const mocks = mocksRaw.map((m) => ({ ...m, note: null }));
+  const solved12w = weekly.reduce((sum, w) => sum + w.solved, 0);
+
   return (
     <ParentShell title={child.name}>
       <main className="mx-auto max-w-3xl px-4 py-6">
@@ -52,11 +68,33 @@ export default async function ChildDetailPage({
           {teacher && <p className="mt-1 text-sm text-ink-soft">Репетитор: {teacher.name}</p>}
         </div>
 
-        <div className="mb-8 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-3 gap-3">
           <StatChip label="Решено задач" value={`${stats.solvedProblems}/${stats.totalProblems}`} />
           <StatChip label="Точность ответов" value={`${stats.accuracy}%`} />
           <StatChip label="Активных дней за неделю" value={`${stats.activeDaysLast7}`} />
         </div>
+
+        <GoalCard targetScore={child.targetScore} mocks={mocks} readOnly />
+        {/* У GoalCard свой нижний отступ; если карточки нет — держим ритм страницы. */}
+        {!child.targetScore && mocks.length === 0 && <div className="mb-4" />}
+
+        {upcomingLessons.length > 0 && (
+          <CollapsibleSection
+            title="Ближайшие занятия"
+            summary={`${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])}`}
+            defaultOpen
+          >
+            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" readOnly limit={5} />
+          </CollapsibleSection>
+        )}
+
+        <CollapsibleSection
+          title="Динамика"
+          summary={`${solved12w} ${pluralRu(solved12w, ["задача", "задачи", "задач"])} за 12 недель`}
+          defaultOpen
+        >
+          <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={child.targetScore} readOnly />
+        </CollapsibleSection>
 
         <CollapsibleSection
           title="Журнал занятий"

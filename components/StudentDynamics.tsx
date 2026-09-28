@@ -40,10 +40,12 @@ export default function StudentDynamics({
   weeks,
   mocks,
   targetScore,
+  readOnly = false,
 }: {
   weeks: DynamicsWeek[];
   mocks: DynamicsMock[];
   targetScore?: number;
+  readOnly?: boolean;
 }) {
   const hasActivity = weeks.some((w) => w.attempts > 0);
 
@@ -75,7 +77,13 @@ export default function StudentDynamics({
     <div className="space-y-3">
       <Card
         title="Пробники ЕГЭ, баллы"
-        subtitle={targetScore ? `Пунктир — цель ${targetScore}` : "Цель не задана — её можно указать в разделе «Цель и пробники»"}
+        subtitle={
+          targetScore
+            ? `Пунктир — цель ${targetScore}`
+            : readOnly
+              ? "Цель пока не задана"
+              : "Цель не задана — её можно указать в разделе «Цель и пробники»"
+        }
       >
         {mocks.length >= 2 ? (
           <>
@@ -95,9 +103,13 @@ export default function StudentDynamics({
           </>
         ) : (
           <p className="py-6 text-center text-sm text-ink-soft">
-            {mocks.length === 1
-              ? `Пока один пробник (${mocks[0].score}). Запишите ещё один — появится график.`
-              : "Запишите хотя бы два пробника — появится график движения к цели."}
+            {readOnly
+              ? mocks.length === 1
+                ? `Пока один пробник — ${mocks[0].score} баллов. График появится после второго.`
+                : "График появится, когда будет хотя бы два пробника."
+              : mocks.length === 1
+                ? `Пока один пробник (${mocks[0].score}). Запишите ещё один — появится график.`
+                : "Запишите хотя бы два пробника — появится график движения к цели."}
           </p>
         )}
       </Card>

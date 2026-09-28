@@ -1,13 +1,26 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, getUpcomingLessonsForTeacher, getUnmarkedPastLessons } from "@/lib/queries";
+import {
+  getStudentsOfTeacher,
+  getUpcomingLessonsForTeacher,
+  getUnmarkedPastLessons,
+  getScheduledLessonById,
+} from "@/lib/queries";
+import LessonDoneBanner from "@/components/LessonDoneBanner";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import AddLessonForm from "@/components/AddLessonForm";
 import UpcomingLessons from "@/components/UpcomingLessons";
 import CollapsibleSection from "@/components/CollapsibleSection";
 
-export default async function SchedulePage() {
+export default async function SchedulePage({
+  searchParams,
+}: {
+  searchParams: { done?: string };
+}) {
   const user = (await getSessionUser())!;
+  // ?done=<id> — только что отмеченное «Провести/Было» занятие: предлагаем отчёт.
+  const doneLesson = searchParams.done ? await getScheduledLessonById(searchParams.done) : undefined;
+  const showDone = doneLesson && doneLesson.teacherId === user.id && doneLesson.status === "done";
   const [students, lessons, unmarked] = await Promise.all([
     getStudentsOfTeacher(user.id),
     // С еженедельными сериями занятий много — берём с запасом, показываем 30.
@@ -38,6 +51,13 @@ export default async function SchedulePage() {
           </div>
         ) : (
           <>
+            {showDone && (
+              <LessonDoneBanner
+                lesson={doneLesson}
+                studentName={students.find((st) => st.id === doneLesson.studentId)?.name}
+              />
+            )}
+
             {unmarked.length > 0 && (
               <section className="mb-6 rounded-card border-2 border-amber/40 bg-amber-light/30 p-4">
                 <h2 className="font-display text-lg font-black text-ink">

@@ -42,10 +42,13 @@ export default function StudentDynamicsSection({
   weekly,
   mocks,
   targetScore,
+  readOnly = false,
 }: {
   weekly: WeeklyStat[];
   mocks: MockScore[]; // новые сверху — как отдаёт getMockScores
   targetScore?: number;
+  /** для родителя: без подсказок репетитору и БЕЗ комментариев к пробникам */
+  readOnly?: boolean;
 }) {
   const weeks: DynamicsWeek[] = weekly.map((w) => ({
     axisLabel: shortLabel(w.week),
@@ -66,8 +69,9 @@ export default function StudentDynamicsSection({
     score: m.score,
     axisLabel: shortLabel(m.takenAt),
     dateLabel: fullLabel(m.takenAt),
-    note: m.note,
+    // Комментарий к пробнику репетитор писал для себя — родителю не показываем.
+    note: readOnly ? null : m.note,
   }));
 
-  return <StudentDynamics weeks={weeks} mocks={mockData} targetScore={targetScore} />;
+  return <StudentDynamics weeks={weeks} mocks={mockData} targetScore={targetScore} readOnly={readOnly} />;
 }
