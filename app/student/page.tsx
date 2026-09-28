@@ -309,6 +309,12 @@ export default async function StudentDashboard({
               </div>
             </div>
 
+            {targetScoreRec && (
+              <div className="rounded-xl bg-teal-light/60 px-4 py-3 text-[13px] text-teal-text">
+                {targetScoreRec}
+              </div>
+            )}
+
             {heroCard}
             <div className="flex gap-3">{tiles}</div>
 

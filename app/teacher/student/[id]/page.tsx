@@ -14,7 +14,17 @@ import {
   getUpcomingLessonsForStudent,
   getStudentBalance,
   getStudentPayments,
+  getMockScores,
+  getStudentNotes,
 } from "@/lib/queries";
+import { formatDateRu } from "@/lib/money";
+import GoalCard from "@/components/GoalCard";
+import {
+  TargetScoreForm,
+  AddMockScoreForm,
+  DeleteMockButton,
+  StudentNotesForm,
+} from "@/components/StudentGoalForms";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import GradeBadge from "@/components/GradeBadge";
@@ -60,6 +70,8 @@ export default async function StudentDetailPage({
     upcomingLessons,
     balance,
     payments,
+    mocks,
+    notesData,
   ] = await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
@@ -72,7 +84,19 @@ export default async function StudentDetailPage({
       getUpcomingLessonsForStudent(student.id),
       getStudentBalance(teacher.id, student.id),
       getStudentPayments(student.id),
+      getMockScores(student.id),
+      getStudentNotes(student.id),
     ]);
+  const notesUpdatedLabel = notesData.updatedAt
+    ? new Date(notesData.updatedAt).toLocaleString("ru-RU", {
+        timeZone: "Europe/Moscow",
+        day: "numeric",
+        month: "long",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  const notesPreview = notesData.notes.trim().split("\n")[0]?.slice(0, 60);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
   const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
@@ -90,11 +114,13 @@ export default async function StudentDetailPage({
           </a>
         </div>
 
-        <div className="mb-8 grid grid-cols-3 gap-3">
+        <div className="mb-4 grid grid-cols-3 gap-3">
           <StatChip label="Решено задач" value={`${stats.solvedProblems}/${stats.totalProblems}`} />
           <StatChip label="Точность ответов" value={`${stats.accuracy}%`} />
           <StatChip label="Активных дней за неделю" value={`${stats.activeDaysLast7}`} />
         </div>
+
+        <GoalCard targetScore={student.targetScore} mocks={mocks} />
 
         {pendingReviews.length > 0 && (
           <section className="mb-8">
@@ -111,6 +137,49 @@ export default async function StudentDetailPage({
             </div>
           </section>
         )}
+
+        <div id="goal" className="scroll-mt-20">
+          <CollapsibleSection
+            title="Цель и пробники"
+            summary={
+              mocks.length > 0
+                ? `${mocks.length} ${pluralRu(mocks.length, ["пробник", "пробника", "пробников"])}`
+                : undefined
+            }
+            defaultOpen={!student.targetScore}
+          >
+            <div className="card mb-4 p-4">
+              <TargetScoreForm studentId={student.id} targetScore={student.targetScore} />
+            </div>
+            <div className="mb-4">
+              <AddMockScoreForm studentId={student.id} />
+            </div>
+            {mocks.length > 0 ? (
+              <div className="space-y-2">
+                {mocks.map((m) => (
+                  <div key={m.id} className="card flex items-center gap-3 p-3.5">
+                    <span className="min-w-[44px] font-mono text-lg font-bold text-ink">{m.score}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold text-ink">{formatDateRu(m.takenAt)}</p>
+                      {m.note && <p className="truncate text-xs text-ink-soft">{m.note}</p>}
+                    </div>
+                    <DeleteMockButton mockId={m.id} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="card p-6 text-center text-sm text-ink-soft">Пробников пока не записано.</div>
+            )}
+          </CollapsibleSection>
+        </div>
+
+        <CollapsibleSection title="Заметки" summary={notesPreview || undefined}>
+          <StudentNotesForm
+            studentId={student.id}
+            notes={notesData.notes}
+            updatedLabel={notesUpdatedLabel}
+          />
+        </CollapsibleSection>
 
         <CollapsibleSection
           title="Прогресс по навыкам"

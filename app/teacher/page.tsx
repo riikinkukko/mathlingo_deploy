@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
@@ -19,7 +19,7 @@ export default async function TeacherDashboard() {
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [cards, pendingReviews, balances] = await Promise.all([
+  const [cards, pendingReviews, balances, latestMocks] = await Promise.all([
     Promise.all(
       students.map(async (s) => {
         const [stats, homeworks] = await Promise.all([
@@ -34,6 +34,7 @@ export default async function TeacherDashboard() {
     ),
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
+    getLatestMockScoresForTeacher(user.id),
   ]);
 
   // Сводка для "панели дня".
@@ -116,7 +117,17 @@ export default async function TeacherDashboard() {
               className="card flex flex-wrap items-center justify-between gap-4 p-4 transition hover:border-pine"
             >
               <div>
-                <p className="font-display text-base font-black text-ink">{s.name}</p>
+                <p className="flex flex-wrap items-center gap-2 font-display text-base font-black text-ink">
+                  {s.name}
+                  {(s.targetScore || latestMocks.has(s.id)) && (
+                    <span
+                      className="rounded-pill bg-pine-light/50 px-2 py-0.5 font-mono text-[11px] font-bold text-pine-dark"
+                      title="Последний пробник / цель по ЕГЭ"
+                    >
+                      🎯 {latestMocks.get(s.id) ?? "—"} / {s.targetScore ?? "—"}
+                    </span>
+                  )}
+                </p>
                 <p className="mt-0.5 text-xs text-ink-soft">{s.email}</p>
               </div>
               <div className="flex items-center gap-5 text-center">

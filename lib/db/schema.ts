@@ -352,6 +352,38 @@ export const studentPayments = pgTable("student_payments", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ---------------- Цель по ЕГЭ: результаты пробников (этап 4) ----------------
+// Сама цель хранится в users.targetScore (то же поле, что заполняет
+// самостоятельный ученик на онбординге). Здесь — фактические баллы за
+// пробники, которые записывает репетитор: по ним видно движение к цели.
+export const mockScores = pgTable("mock_scores", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  score: integer("score").notNull(), // тестовый балл ЕГЭ, 0–100
+  takenAt: date("taken_at", { mode: "string" }).notNull(), // YYYY-MM-DD
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Приватные заметки репетитора об ученике. Отдельная таблица, а не колонка в
+// users: объект пользователя уходит в том числе на страницы самого ученика,
+// а заметки ему показывать нельзя.
+export const studentNotes = pgTable("student_notes", {
+  studentId: text("student_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  notes: text("notes").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const notifications = pgTable("notifications", {
   id: text("id").primaryKey(),
   userId: text("user_id")

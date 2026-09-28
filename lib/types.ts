@@ -267,6 +267,17 @@ export interface StudentPayment {
   createdAt: string;
 }
 
+/** Результат пробника ЕГЭ, записанный репетитором. */
+export interface MockScore {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  score: number; // 0–100
+  takenAt: string; // YYYY-MM-DD
+  note: string | null;
+  createdAt: string;
+}
+
 /** Баланс ученика по оплатам: всё в занятиях + сумма денег. */
 export interface StudentBalance {
   studentId: string;

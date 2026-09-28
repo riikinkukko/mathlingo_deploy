@@ -812,6 +812,64 @@ export async function getIncomeBetween(teacherId: string, from: string, to: stri
   return row?.total ?? 0;
 }
 
+// ---------- Цель по ЕГЭ, пробники, заметки (этап 4) ----------
+
+function mapMockScore(r: typeof schema.mockScores.$inferSelect): import("./types").MockScore {
+  return {
+    id: r.id,
+    teacherId: r.teacherId,
+    studentId: r.studentId,
+    score: r.score,
+    takenAt: r.takenAt,
+    note: r.note,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** Пробники ученика — новые сверху. */
+export async function getMockScores(studentId: string): Promise<import("./types").MockScore[]> {
+  const rows = await db
+    .select()
+    .from(schema.mockScores)
+    .where(eq(schema.mockScores.studentId, studentId))
+    .orderBy(desc(schema.mockScores.takenAt), desc(schema.mockScores.createdAt));
+  return rows.map(mapMockScore);
+}
+
+export async function getMockScoreById(id: string): Promise<import("./types").MockScore | undefined> {
+  const rows = await db.select().from(schema.mockScores).where(eq(schema.mockScores.id, id)).limit(1);
+  return rows[0] ? mapMockScore(rows[0]) : undefined;
+}
+
+/** Последний пробник каждого ученика репетитора: studentId → балл. Для списка учеников. */
+export async function getLatestMockScoresForTeacher(teacherId: string): Promise<Map<string, number>> {
+  const rows = await db
+    .select({
+      studentId: schema.mockScores.studentId,
+      score: schema.mockScores.score,
+      takenAt: schema.mockScores.takenAt,
+      createdAt: schema.mockScores.createdAt,
+    })
+    .from(schema.mockScores)
+    .where(eq(schema.mockScores.teacherId, teacherId))
+    .orderBy(desc(schema.mockScores.takenAt), desc(schema.mockScores.createdAt));
+  const latest = new Map<string, number>();
+  for (const r of rows) if (!latest.has(r.studentId)) latest.set(r.studentId, r.score);
+  return latest;
+}
+
+/** Заметки репетитора об ученике (пустая строка, если ещё не писали). */
+export async function getStudentNotes(studentId: string): Promise<{ notes: string; updatedAt: string | null }> {
+  const rows = await db
+    .select()
+    .from(schema.studentNotes)
+    .where(eq(schema.studentNotes.studentId, studentId))
+    .limit(1);
+  return rows[0]
+    ? { notes: rows[0].notes, updatedAt: rows[0].updatedAt.toISOString() }
+    : { notes: "", updatedAt: null };
+}
+
 // ---------- Развёрнутые (DETAILED) ответы, ожидающие проверки ----------
 
 export interface PendingReview {
