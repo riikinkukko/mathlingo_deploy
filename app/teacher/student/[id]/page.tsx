@@ -16,7 +16,9 @@ import {
   getStudentPayments,
   getMockScores,
   getStudentNotes,
+  getWeeklyStats,
 } from "@/lib/queries";
+import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import { formatDateRu } from "@/lib/money";
 import GoalCard from "@/components/GoalCard";
 import {
@@ -72,6 +74,7 @@ export default async function StudentDetailPage({
     payments,
     mocks,
     notesData,
+    weekly,
   ] = await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
@@ -86,7 +89,9 @@ export default async function StudentDetailPage({
       getStudentPayments(student.id),
       getMockScores(student.id),
       getStudentNotes(student.id),
+      getWeeklyStats(student.id, 12),
     ]);
+  const solved12w = weekly.reduce((s, w) => s + w.solved, 0);
   const notesUpdatedLabel = notesData.updatedAt
     ? new Date(notesData.updatedAt).toLocaleString("ru-RU", {
         timeZone: "Europe/Moscow",
@@ -179,6 +184,14 @@ export default async function StudentDetailPage({
             notes={notesData.notes}
             updatedLabel={notesUpdatedLabel}
           />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Динамика"
+          summary={`${solved12w} ${pluralRu(solved12w, ["задача", "задачи", "задач"])} за 12 недель`}
+          defaultOpen
+        >
+          <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={student.targetScore} />
         </CollapsibleSection>
 
         <CollapsibleSection

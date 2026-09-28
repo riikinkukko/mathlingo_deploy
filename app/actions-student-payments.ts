@@ -33,24 +33,17 @@ function revalidateAll(studentId: string) {
   revalidatePath(`/teacher/student/${studentId}`);
 }
 
-export async function addStudentPaymentAction(
-  _prev: AddPaymentState,
-  formData: FormData
-): Promise<AddPaymentState> {
-  const teacher = await getSessionUser();
-  const studentId = String(formData.get("studentId") || "");
+type PaymentFields = { amountRub: number; lessonsCount: number; paidAt: string; note: string | null };
 
-  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
-  if (!studentId) return { error: "Выберите ученика" };
-  if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
-
+/** Общая проверка полей — одинаковая для добавления и редактирования. */
+function parsePaymentFields(formData: FormData): PaymentFields | { error: string } {
   const amountRaw = String(formData.get("amountRub") || "").replace(/\s/g, "");
   const amountRub = Number(amountRaw);
   if (!amountRaw || !Number.isInteger(amountRub) || amountRub <= 0 || amountRub > 1_000_000) {
     return { error: "Укажите сумму — целое число рублей больше нуля" };
   }
 
-  const lessonsRaw = String(formData.get("lessonsCount") ?? "1");
+  const lessonsRaw = String(formData.get("lessonsCount") ?? "1").trim() || "1";
   const lessonsCount = Number(lessonsRaw);
   if (!Number.isInteger(lessonsCount) || lessonsCount < 0 || lessonsCount > 100) {
     return { error: "Количество занятий — от 0 до 100" };
@@ -63,18 +56,55 @@ export async function addStudentPaymentAction(
   }
 
   const note = String(formData.get("note") || "").trim().slice(0, 200) || null;
+  return { amountRub, lessonsCount, paidAt, note };
+}
+
+export async function addStudentPaymentAction(
+  _prev: AddPaymentState,
+  formData: FormData
+): Promise<AddPaymentState> {
+  const teacher = await getSessionUser();
+  const studentId = String(formData.get("studentId") || "");
+
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (!studentId) return { error: "Выберите ученика" };
+  if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+
+  const fields = parsePaymentFields(formData);
+  if ("error" in fields) return { error: fields.error };
 
   await db.insert(schema.studentPayments).values({
     id: genId("sp"),
     teacherId: teacher.id,
     studentId,
-    amountRub,
-    lessonsCount,
-    paidAt,
-    note,
+    ...fields,
   });
 
   revalidateAll(studentId);
+  return { ok: true, at: Date.now() };
+}
+
+/** Правка существующей оплаты. Ученика у оплаты поменять нельзя — только поля. */
+export async function updateStudentPaymentAction(
+  _prev: AddPaymentState,
+  formData: FormData
+): Promise<AddPaymentState> {
+  const teacher = await getSessionUser();
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+
+  const paymentId = String(formData.get("paymentId") || "");
+  const payment = await getStudentPaymentById(paymentId);
+  if (!payment || payment.teacherId !== teacher.id) return { error: "Оплата не найдена" };
+
+  const fields = parsePaymentFields(formData);
+  if ("error" in fields) return { error: fields.error };
+
+  await db
+    .update(schema.studentPayments)
+    .set(fields)
+    .where(eq(schema.studentPayments.id, paymentId));
+
+  revalidateAll(payment.studentId);
   return { ok: true, at: Date.now() };
 }
 

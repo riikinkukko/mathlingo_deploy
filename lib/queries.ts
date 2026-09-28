@@ -870,6 +870,63 @@ export async function getStudentNotes(studentId: string): Promise<{ notes: strin
     : { notes: "", updatedAt: null };
 }
 
+// ---------- Динамика по неделям (этап 5) ----------
+
+export interface WeeklyStat {
+  week: string; // понедельник недели, YYYY-MM-DD (по Москве)
+  attempts: number; // всего ответов
+  correct: number; // верных ответов
+  solved: number; // разных задач, решённых верно за неделю
+  accuracy: number | null; // % верных; null — на неделе не занимался
+}
+
+/** Понедельник текущей недели по Москве, YYYY-MM-DD. */
+function mondayMsk(): Date {
+  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+  const day = (now.getDay() + 6) % 7; // 0 = понедельник
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate() - day));
+}
+
+/**
+ * Статистика ученика по неделям за последние `weeks` недель, включая
+ * текущую. Недели без занятий тоже возвращаются (с нулями и accuracy=null),
+ * чтобы на графике был виден перерыв, а не «склейка» соседних недель.
+ */
+export async function getWeeklyStats(studentId: string, weeks = 12): Promise<WeeklyStat[]> {
+  const firstMonday = mondayMsk();
+  firstMonday.setUTCDate(firstMonday.getUTCDate() - 7 * (weeks - 1));
+  const from = firstMonday.toISOString().slice(0, 10);
+
+  const rows = await db.execute(sql`
+    select to_char(date_trunc('week', ${schema.attempts.createdAt} at time zone 'Europe/Moscow'), 'YYYY-MM-DD') as week,
+           count(*)::int as attempts,
+           (count(*) filter (where ${schema.attempts.isCorrect}))::int as correct,
+           (count(distinct ${schema.attempts.problemId}) filter (where ${schema.attempts.isCorrect}))::int as solved
+    from ${schema.attempts}
+    where ${schema.attempts.studentId} = ${studentId}
+      and (${schema.attempts.createdAt} at time zone 'Europe/Moscow') >= ${from}::date
+    group by 1
+  `);
+  const byWeek = new Map<string, { attempts: number; correct: number; solved: number }>();
+  for (const r of rows.rows as { week: string; attempts: number; correct: number; solved: number }[]) {
+    byWeek.set(r.week, { attempts: Number(r.attempts), correct: Number(r.correct), solved: Number(r.solved) });
+  }
+
+  const out: WeeklyStat[] = [];
+  for (let i = 0; i < weeks; i++) {
+    const d = new Date(firstMonday);
+    d.setUTCDate(d.getUTCDate() + 7 * i);
+    const week = d.toISOString().slice(0, 10);
+    const w = byWeek.get(week) ?? { attempts: 0, correct: 0, solved: 0 };
+    out.push({
+      week,
+      ...w,
+      accuracy: w.attempts > 0 ? Math.round((w.correct / w.attempts) * 100) : null,
+    });
+  }
+  return out;
+}
+
 // ---------- Развёрнутые (DETAILED) ответы, ожидающие проверки ----------
 
 export interface PendingReview {
