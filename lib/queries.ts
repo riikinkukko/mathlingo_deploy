@@ -601,6 +601,84 @@ export async function getLessonLogsForStudent(studentId: string) {
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
 }
 
+// ---------- Расписание занятий (этап 2) ----------
+
+function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): import("./types").ScheduledLesson {
+  return {
+    id: r.id,
+    teacherId: r.teacherId,
+    studentId: r.studentId,
+    startsAt: r.startsAt.toISOString(),
+    durationMin: r.durationMin,
+    topic: r.topic,
+    status: r.status,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** Ближайшие запланированные занятия репетитора (со всеми учениками). */
+export async function getUpcomingLessonsForTeacher(
+  teacherId: string,
+  limit = 20
+): Promise<import("./types").ScheduledLessonWithStudent[]> {
+  const rows = await db
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .where(
+      and(
+        eq(schema.scheduledLessons.teacherId, teacherId),
+        eq(schema.scheduledLessons.status, "planned"),
+        gte(schema.scheduledLessons.startsAt, new Date())
+      )
+    )
+    .orderBy(asc(schema.scheduledLessons.startsAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
+}
+
+/** Все занятия конкретного ученика (для страницы ученика): предстоящие сверху. */
+export async function getLessonsForStudent(
+  studentId: string
+): Promise<import("./types").ScheduledLesson[]> {
+  const rows = await db
+    .select()
+    .from(schema.scheduledLessons)
+    .where(eq(schema.scheduledLessons.studentId, studentId))
+    .orderBy(asc(schema.scheduledLessons.startsAt));
+  return rows.map(mapScheduledLesson);
+}
+
+/** Предстоящие занятия ученика (planned, в будущем) — для панели ученика/родителя. */
+export async function getUpcomingLessonsForStudent(
+  studentId: string
+): Promise<import("./types").ScheduledLesson[]> {
+  const rows = await db
+    .select()
+    .from(schema.scheduledLessons)
+    .where(
+      and(
+        eq(schema.scheduledLessons.studentId, studentId),
+        eq(schema.scheduledLessons.status, "planned"),
+        gte(schema.scheduledLessons.startsAt, new Date())
+      )
+    )
+    .orderBy(asc(schema.scheduledLessons.startsAt));
+  return rows.map(mapScheduledLesson);
+}
+
+/** Одно занятие по id (для проверки владельца перед изменением статуса). */
+export async function getScheduledLessonById(
+  id: string
+): Promise<import("./types").ScheduledLesson | undefined> {
+  const rows = await db
+    .select()
+    .from(schema.scheduledLessons)
+    .where(eq(schema.scheduledLessons.id, id))
+    .limit(1);
+  return rows[0] ? mapScheduledLesson(rows[0]) : undefined;
+}
+
 // ---------- Развёрнутые (DETAILED) ответы, ожидающие проверки ----------
 
 export interface PendingReview {

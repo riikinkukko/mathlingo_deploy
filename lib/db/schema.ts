@@ -28,6 +28,7 @@ export const audienceEnum = pgEnum("audience", ["assigned", "pro_standalone"]);
 export const notificationTypeEnum = pgEnum("notification_type", [
   "assignment_created",
   "lesson_log_added",
+  "lesson_scheduled",
   "review_decided",
   "review_pending",
   "skill_completed",
@@ -303,6 +304,29 @@ export const lessonLogs = pgTable("lesson_logs", {
   date: text("date").notNull(), // YYYY-MM-DD, храним как есть, не timestamp
   topic: text("topic").notNull(),
   report: text("report").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------- Расписание занятий (этап 2 кабинета репетитора) ----------------
+// Отличается от lessonLogs: там — записи о ПРОШЕДШИХ занятиях (постфактум,
+// с отчётом), здесь — ПРЕДСТОЯЩИЕ занятия (дата+время, статус). Одно занятие
+// может позже превратиться в запись журнала, но связь необязательная.
+export const lessonStatusEnum = pgEnum("lesson_status", ["planned", "done", "cancelled"]);
+
+export const scheduledLessons = pgTable("scheduled_lessons", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  // Дата и время начала — полноценный timestamp (в отличие от журнала, где
+  // хранится только дата): нужно, чтобы сортировать ближайшие и слать напоминания.
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  durationMin: integer("duration_min").notNull().default(60),
+  topic: text("topic"), // запланированная тема (необязательно)
+  status: lessonStatusEnum("status").notNull().default("planned"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

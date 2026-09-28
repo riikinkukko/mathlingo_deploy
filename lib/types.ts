@@ -208,6 +208,7 @@ export interface LessonLog {
 export type NotificationType =
   | "assignment_created"
   | "lesson_log_added"
+  | "lesson_scheduled"
   | "review_decided"
   | "review_pending"
   | "skill_completed";
@@ -234,6 +235,24 @@ export interface Payment {
   periodDays: number;
   createdAt: string;
   paidAt?: string;
+}
+
+export type LessonStatus = "planned" | "done" | "cancelled";
+
+export interface ScheduledLesson {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  startsAt: string; // ISO
+  durationMin: number;
+  topic: string | null;
+  status: LessonStatus;
+  createdAt: string;
+}
+
+/** Занятие вместе с именем ученика — для списков в кабинете. */
+export interface ScheduledLessonWithStudent extends ScheduledLesson {
+  studentName: string;
 }
 
 export interface DB {

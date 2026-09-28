@@ -7,14 +7,14 @@ import {
 import TeacherSidebar from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown } from "./icons";
+import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar } from "./icons";
 
 export default async function TeacherShell({
   active,
   title,
   children,
 }: {
-  active: "students" | "content" | "upgrade";
+  active: "students" | "schedule" | "content" | "upgrade";
   title: string;
   children: React.ReactNode;
 }) {
@@ -67,6 +67,15 @@ export default async function TeacherShell({
           </span>
           <span className={`text-[10px] leading-none ${active === "students" ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
             Ученики
+          </span>
+        </a>
+        <a
+          href="/teacher/schedule"
+          className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5"
+        >
+          <IconCalendar className={`h-[22px] w-[22px] ${active === "schedule" ? "text-pine" : "text-line"}`} />
+          <span className={`text-[10px] leading-none ${active === "schedule" ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
+            Расписание
           </span>
         </a>
 {canEditContent && (
