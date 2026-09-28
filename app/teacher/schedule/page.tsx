@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, getUpcomingLessonsForTeacher } from "@/lib/queries";
+import { getStudentsOfTeacher, getUpcomingLessonsForTeacher, getUnmarkedPastLessons } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import AddLessonForm from "@/components/AddLessonForm";
@@ -8,9 +8,11 @@ import CollapsibleSection from "@/components/CollapsibleSection";
 
 export default async function SchedulePage() {
   const user = (await getSessionUser())!;
-  const [students, lessons] = await Promise.all([
+  const [students, lessons, unmarked] = await Promise.all([
     getStudentsOfTeacher(user.id),
-    getUpcomingLessonsForTeacher(user.id),
+    // С еженедельными сериями занятий много — берём с запасом, показываем 30.
+    getUpcomingLessonsForTeacher(user.id, 200),
+    getUnmarkedPastLessons(user.id),
   ]);
 
   return (
@@ -36,12 +38,24 @@ export default async function SchedulePage() {
           </div>
         ) : (
           <>
+            {unmarked.length > 0 && (
+              <section className="mb-6 rounded-card border-2 border-amber/40 bg-amber-light/30 p-4">
+                <h2 className="font-display text-lg font-black text-ink">
+                  Отметьте прошедшие занятия ({unmarked.length})
+                </h2>
+                <p className="mb-3 mt-0.5 text-xs text-ink-soft">
+                  Время этих занятий прошло, но они не отмечены. От «Было» зависит баланс оплат ученика.
+                </p>
+                <UpcomingLessons lessons={unmarked} showStudent from="schedule" past />
+              </section>
+            )}
+
             <CollapsibleSection title="Запланировать занятие" defaultOpen={lessons.length === 0}>
               <AddLessonForm students={students.map((s) => ({ id: s.id, name: s.name }))} from="schedule" />
             </CollapsibleSection>
 
             <div className="mt-6">
-              <UpcomingLessons lessons={lessons} showStudent from="schedule" />
+              <UpcomingLessons lessons={lessons} showStudent from="schedule" limit={30} />
             </div>
           </>
         )}

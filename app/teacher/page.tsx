@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
@@ -19,7 +19,7 @@ export default async function TeacherDashboard() {
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [cards, pendingReviews, balances, latestMocks] = await Promise.all([
+  const [cards, pendingReviews, balances, latestMocks, unmarked] = await Promise.all([
     Promise.all(
       students.map(async (s) => {
         const [stats, homeworks] = await Promise.all([
@@ -35,6 +35,7 @@ export default async function TeacherDashboard() {
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
     getLatestMockScoresForTeacher(user.id),
+    getUnmarkedPastLessons(user.id),
   ]);
 
   // Сводка для "панели дня".
@@ -57,6 +58,7 @@ export default async function TeacherDashboard() {
       .filter((b) => b.balance < 0)
       .sort((a, b) => a.balance - b.balance)
       .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance })),
+    unmarkedLessons: unmarked.length,
   };
 
   return (

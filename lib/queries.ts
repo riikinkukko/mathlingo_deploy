@@ -612,8 +612,35 @@ function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): imp
     durationMin: r.durationMin,
     topic: r.topic,
     status: r.status,
+    seriesId: r.seriesId,
     createdAt: r.createdAt.toISOString(),
   };
+}
+
+/**
+ * Прошедшие занятия, которые так и не отметили «Провести»/«Отменить».
+ * Без этого они пропадали бы из интерфейса (списки показывают только
+ * будущие), и их нельзя было бы учесть в балансе оплат.
+ * studentId — чтобы получить только занятия одного ученика.
+ */
+export async function getUnmarkedPastLessons(
+  teacherId: string,
+  studentId?: string
+): Promise<import("./types").ScheduledLessonWithStudent[]> {
+  const rows = await db
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .where(
+      and(
+        eq(schema.scheduledLessons.teacherId, teacherId),
+        eq(schema.scheduledLessons.status, "planned"),
+        lte(schema.scheduledLessons.startsAt, new Date()),
+        ...(studentId ? [eq(schema.scheduledLessons.studentId, studentId)] : [])
+      )
+    )
+    .orderBy(asc(schema.scheduledLessons.startsAt));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
 }
 
 /** Ближайшие запланированные занятия репетитора (со всеми учениками). */

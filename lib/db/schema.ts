@@ -328,6 +328,13 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   durationMin: integer("duration_min").notNull().default(60),
   topic: text("topic"), // запланированная тема (необязательно)
   status: lessonStatusEnum("status").notNull().default("planned"),
+  // Общий id у занятий, созданных одной серией «повторять каждую неделю».
+  // Каждое занятие серии — отдельная строка (своё «Провести/Отменить»);
+  // seriesId нужен только для «удалить это и все следующие».
+  seriesId: text("series_id"),
+  // Когда отправили напоминание (Telegram + уведомление). Ставится атомарно
+  // до отправки — так даже два воркера не пришлют напоминание дважды.
+  remindedAt: timestamp("reminded_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

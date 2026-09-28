@@ -24,3 +24,6 @@ jobs:
             npx drizzle-kit migrate
             npm run build
             pm2 restart planimetrika
+            pm2 delete planimetrika-tg || true
+            pm2 start npm --name planimetrika-tg -- run telegram:poll
+            pm2 save

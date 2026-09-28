@@ -247,6 +247,7 @@ export interface ScheduledLesson {
   durationMin: number;
   topic: string | null;
   status: LessonStatus;
+  seriesId: string | null; // не null — занятие из еженедельной серии
   createdAt: string;
 }
 

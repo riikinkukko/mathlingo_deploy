@@ -1,5 +1,7 @@
-import { setLessonStatusAction, deleteLessonAction } from "@/app/actions-schedule";
+import { setLessonStatusAction } from "@/app/actions-schedule";
+import LessonDeleteControl from "./LessonDeleteControl";
 import { ScheduledLesson } from "@/lib/types";
+import { pluralRu } from "@/lib/pluralize";
 
 type LessonItem = ScheduledLesson & { studentName?: string };
 
@@ -46,15 +48,23 @@ export default function UpcomingLessons({
   showStudent,
   from,
   emptyText = "Занятий пока не запланировано.",
+  limit,
+  past = false,
 }: {
   lessons: LessonItem[];
   showStudent: boolean;
   from: "student" | "schedule";
   emptyText?: string;
+  /** показать только первые N (остальные — строкой «и ещё N») */
+  limit?: number;
+  /** прошедшие неотмеченные занятия: подписи «Было / Не было» вместо «Провести / Отменить» */
+  past?: boolean;
 }) {
   if (lessons.length === 0) {
     return <div className="card p-6 text-center text-sm text-ink-soft">{emptyText}</div>;
   }
+  const hiddenCount = limit && lessons.length > limit ? lessons.length - limit : 0;
+  if (hiddenCount) lessons = lessons.slice(0, limit);
 
   // Группируем по дню (лента уже отсортирована по возрастанию времени).
   const groups: { key: string; label: string; items: LessonItem[] }[] = [];
@@ -78,7 +88,12 @@ export default function UpcomingLessons({
               <div key={l.id} className="card flex flex-wrap items-center gap-3 p-3.5">
                 <div className="flex min-w-[64px] flex-col items-center rounded-xl bg-pine-light/40 px-2.5 py-1.5">
                   <span className="font-mono text-sm font-bold text-pine-dark">{timeLabel(l.startsAt)}</span>
-                  <span className="text-[10px] text-ink-soft">{l.durationMin} мин</span>
+                  <span className="text-[10px] text-ink-soft">
+                    {l.durationMin} мин
+                    {l.seriesId && (
+                      <span title="Регулярное занятие (каждую неделю)" aria-label="регулярное"> · 🔁</span>
+                    )}
+                  </span>
                 </div>
                 <div className="min-w-0 flex-1">
                   {showStudent && l.studentName && (
@@ -97,7 +112,7 @@ export default function UpcomingLessons({
                       type="submit"
                       className="rounded-pill bg-pine px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-pine-dark"
                     >
-                      Провести
+                      {past ? "✓ Было" : "Провести"}
                     </button>
                   </form>
                   <form action={setLessonStatusAction}>
@@ -108,26 +123,21 @@ export default function UpcomingLessons({
                       type="submit"
                       className="rounded-pill bg-line-soft px-2.5 py-1 text-[11px] font-bold text-ink-soft transition hover:bg-line"
                     >
-                      Отменить
+                      {past ? "Не было" : "Отменить"}
                     </button>
                   </form>
-                  <form action={deleteLessonAction}>
-                    <input type="hidden" name="lessonId" value={l.id} />
-                    <input type="hidden" name="from" value={from} />
-                    <button
-                      type="submit"
-                      aria-label="Удалить занятие"
-                      className="rounded-pill px-2 py-1 text-[11px] font-bold text-coral transition hover:bg-coral-light"
-                    >
-                      ✕
-                    </button>
-                  </form>
+                  <LessonDeleteControl lessonId={l.id} seriesId={l.seriesId} from={from} />
                 </div>
               </div>
             ))}
           </div>
         </div>
       ))}
+      {hiddenCount > 0 && (
+        <p className="text-center text-xs font-semibold text-ink-soft">
+          и ещё {hiddenCount} {pluralRu(hiddenCount, ["занятие", "занятия", "занятий"])} дальше
+        </p>
+      )}
     </div>
   );
 }

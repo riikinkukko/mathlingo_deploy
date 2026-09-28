@@ -7,7 +7,10 @@
  * Здесь наоборот: сервер сам спрашивает у Telegram новые сообщения
  * исходящими запросами (getUpdates), которые с VPS работают стабильно.
  *
- * Запуск отдельным процессом PM2 рядом с сайтом:
+ * Заодно раз в 5 минут рассылает напоминания о занятиях (lib/lesson-reminders.ts).
+ *
+ * Запуск отдельным процессом PM2 рядом с сайтом (деплой через GitHub Actions
+ * делает это сам — см. .github/workflows/deploy.yml):
  *   pm2 start npm --name planimetrika-tg -- run telegram:poll
  *   pm2 save
  *
@@ -22,6 +25,8 @@ config({ path: path.resolve(__dirname, "../.env.local") });
 // TELEGRAM_API_BASE — только для локального теста с фейковым сервером Telegram.
 const API_BASE = process.env.TELEGRAM_API_BASE?.trim() || "https://api.telegram.org";
 const POLL_TIMEOUT_SEC = 25;
+// Как часто проверять, кому пора напомнить о занятии.
+const REMINDER_INTERVAL_MS = 5 * 60 * 1000;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -52,6 +57,22 @@ async function main() {
 
   // Импорт после dotenv: модуль тянет lib/queries -> БД.
   const { handleTelegramUpdate } = await import("../lib/telegram-updates");
+  const { sendDueLessonReminders } = await import("../lib/lesson-reminders");
+
+  // Напоминания о занятиях — отдельным циклом, параллельно опросу Telegram.
+  // Повторная отправка исключена на уровне БД (атомарная пометка reminded_at),
+  // так что лишний экземпляр воркера не приведёт к двойным сообщениям.
+  (async function reminderLoop() {
+    for (;;) {
+      try {
+        const n = await sendDueLessonReminders();
+        if (n > 0) console.log(`[telegram-poller] Напоминания о занятиях отправлены: ${n}`);
+      } catch (e) {
+        console.error("[telegram-poller] Ошибка напоминаний о занятиях:", e);
+      }
+      await sleep(REMINDER_INTERVAL_MS);
+    }
+  })();
 
   const del = await callApi(token, "deleteWebhook", { drop_pending_updates: false }, 15000).catch((e) => ({
     ok: false,

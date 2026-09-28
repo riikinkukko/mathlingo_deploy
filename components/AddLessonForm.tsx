@@ -42,12 +42,15 @@ export default function AddLessonForm({
   const [state, formAction] = useFormState<CreateLessonState, FormData>(createLessonAction, null);
   const startsAtRef = useRef<HTMLInputElement>(null);
   const topicRef = useRef<HTMLInputElement>(null);
+  const repeatRef = useRef<HTMLSelectElement>(null);
   const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     if (!state?.ok) return;
     if (startsAtRef.current) startsAtRef.current.value = "";
     if (topicRef.current) topicRef.current.value = "";
+    // Повтор сбрасываем, чтобы следующее сохранение случайно не создало ещё серию.
+    if (repeatRef.current) repeatRef.current.value = "1";
     setShowSaved(true);
     const t = setTimeout(() => setShowSaved(false), 3000);
     return () => clearTimeout(t);
@@ -102,6 +105,17 @@ export default function AddLessonForm({
       </div>
 
       <div>
+        <label className="label" htmlFor="repeatWeeks">Повторять</label>
+        <select ref={repeatRef} className="input" id="repeatWeeks" name="repeatWeeks" defaultValue="1">
+          <option value="1">Не повторять — одно занятие</option>
+          <option value="4">Каждую неделю — 4 занятия (месяц)</option>
+          <option value="8">Каждую неделю — 8 занятий (2 месяца)</option>
+          <option value="12">Каждую неделю — 12 занятий (3 месяца)</option>
+          <option value="24">Каждую неделю — 24 занятия (полгода)</option>
+        </select>
+      </div>
+
+      <div>
         <label className="label" htmlFor="topic">Тема (необязательно)</label>
         <input
           ref={topicRef}
@@ -116,7 +130,11 @@ export default function AddLessonForm({
 
       <div className="flex items-center gap-3">
         <SubmitButton />
-        {showSaved && <span className="text-sm font-bold text-pine">✓ Занятие запланировано</span>}
+        {showSaved && (
+          <span className="text-sm font-bold text-pine">
+            ✓ {state?.count && state.count > 1 ? `Запланировано занятий: ${state.count}` : "Занятие запланировано"}
+          </span>
+        )}
       </div>
     </form>
   );

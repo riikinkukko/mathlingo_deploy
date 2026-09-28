@@ -17,6 +17,7 @@ import {
   getMockScores,
   getStudentNotes,
   getWeeklyStats,
+  getUnmarkedPastLessons,
 } from "@/lib/queries";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import { formatDateRu } from "@/lib/money";
@@ -75,6 +76,7 @@ export default async function StudentDetailPage({
     mocks,
     notesData,
     weekly,
+    unmarkedLessons,
   ] = await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
@@ -90,6 +92,7 @@ export default async function StudentDetailPage({
       getMockScores(student.id),
       getStudentNotes(student.id),
       getWeeklyStats(student.id, 12),
+      getUnmarkedPastLessons(teacher.id, student.id),
     ]);
   const solved12w = weekly.reduce((s, w) => s + w.solved, 0);
   const notesUpdatedLabel = notesData.updatedAt
@@ -259,10 +262,28 @@ export default async function StudentDetailPage({
 
         <CollapsibleSection
           title="Расписание занятий"
-          summary={upcomingLessons.length > 0 ? `${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])} впереди` : undefined}
+          summary={
+            [
+              upcomingLessons.length > 0
+                ? `${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])} впереди`
+                : null,
+              unmarkedLessons.length > 0 ? `${unmarkedLessons.length} не отмечено` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+          defaultOpen={unmarkedLessons.length > 0}
         >
+          {unmarkedLessons.length > 0 && (
+            <div className="mb-4 rounded-card border-2 border-amber/40 bg-amber-light/30 p-3">
+              <p className="mb-2 text-sm font-bold text-ink">
+                Прошедшие занятия без отметки — от «Было» зависит баланс оплат
+              </p>
+              <UpcomingLessons lessons={unmarkedLessons} showStudent={false} from="student" past />
+            </div>
+          )}
           <div className="mb-4">
-            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" />
+            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" limit={6} />
           </div>
           <AddLessonForm studentId={student.id} from="student" />
         </CollapsibleSection>
