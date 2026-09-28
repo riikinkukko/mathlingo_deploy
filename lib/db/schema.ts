@@ -4,6 +4,7 @@ import {
   boolean,
   integer,
   timestamp,
+  date,
   jsonb,
   pgEnum,
   primaryKey,
@@ -327,6 +328,27 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   durationMin: integer("duration_min").notNull().default(60),
   topic: text("topic"), // запланированная тема (необязательно)
   status: lessonStatusEnum("status").notNull().default("planned"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------- Учёт оплат занятий (этап 3 кабинета репетитора) ----------------
+// НЕ путать с таблицей payments — там платежи за подписку Pro через ЮKassa.
+// Здесь — деньги, которые ученик платит репетитору за занятия (переводом и т.п.),
+// репетитор записывает их вручную. Баланс ученика в занятиях:
+//   сумма lessonsCount по оплатам − число занятий со статусом done в расписании.
+export const studentPayments = pgTable("student_payments", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  amountRub: integer("amount_rub").notNull(),
+  // Сколько занятий покрывает оплата (0 — оплата не за занятия, просто учёт суммы).
+  lessonsCount: integer("lessons_count").notNull().default(1),
+  paidAt: date("paid_at", { mode: "string" }).notNull(), // YYYY-MM-DD
+  note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

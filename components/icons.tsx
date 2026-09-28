@@ -75,6 +75,22 @@ export function IconCalendar({ className = "" }: { className?: string }) {
   );
 }
 
+export function IconWallet({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M4 7a2 2 0 0 1 2-2h11a1 1 0 0 1 1 1v2"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="3" y="8" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16.5" cy="14" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
 export function IconMap({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>

@@ -679,6 +679,139 @@ export async function getScheduledLessonById(
   return rows[0] ? mapScheduledLesson(rows[0]) : undefined;
 }
 
+// ---------- Учёт оплат занятий (этап 3) ----------
+
+function mapStudentPayment(
+  r: typeof schema.studentPayments.$inferSelect
+): import("./types").StudentPayment {
+  return {
+    id: r.id,
+    teacherId: r.teacherId,
+    studentId: r.studentId,
+    amountRub: r.amountRub,
+    lessonsCount: r.lessonsCount,
+    paidAt: r.paidAt,
+    note: r.note,
+    createdAt: r.createdAt.toISOString(),
+  };
+}
+
+/** История оплат ученика — новые сверху. */
+export async function getStudentPayments(
+  studentId: string
+): Promise<import("./types").StudentPayment[]> {
+  const rows = await db
+    .select()
+    .from(schema.studentPayments)
+    .where(eq(schema.studentPayments.studentId, studentId))
+    .orderBy(desc(schema.studentPayments.paidAt), desc(schema.studentPayments.createdAt));
+  return rows.map(mapStudentPayment);
+}
+
+export async function getStudentPaymentById(
+  id: string
+): Promise<import("./types").StudentPayment | undefined> {
+  const rows = await db
+    .select()
+    .from(schema.studentPayments)
+    .where(eq(schema.studentPayments.id, id))
+    .limit(1);
+  return rows[0] ? mapStudentPayment(rows[0]) : undefined;
+}
+
+/**
+ * Балансы всех учеников репетитора: два сгруппированных запроса (оплаты и
+ * проведённые занятия), склеенные со списком учеников. Ученики без оплат и
+ * без проведённых занятий тоже попадают в список — с нулями.
+ */
+export async function getStudentBalances(
+  teacherId: string
+): Promise<import("./types").StudentBalance[]> {
+  const [students, paidRows, doneRows] = await Promise.all([
+    getStudentsOfTeacher(teacherId),
+    db
+      .select({
+        studentId: schema.studentPayments.studentId,
+        paidLessons: sql<number>`coalesce(sum(${schema.studentPayments.lessonsCount}), 0)::int`,
+        paidRub: sql<number>`coalesce(sum(${schema.studentPayments.amountRub}), 0)::int`,
+        lastPaidAt: sql<string | null>`max(${schema.studentPayments.paidAt})::text`,
+      })
+      .from(schema.studentPayments)
+      .where(eq(schema.studentPayments.teacherId, teacherId))
+      .groupBy(schema.studentPayments.studentId),
+    db
+      .select({
+        studentId: schema.scheduledLessons.studentId,
+        doneLessons: sql<number>`count(*)::int`,
+      })
+      .from(schema.scheduledLessons)
+      .where(
+        and(
+          eq(schema.scheduledLessons.teacherId, teacherId),
+          eq(schema.scheduledLessons.status, "done")
+        )
+      )
+      .groupBy(schema.scheduledLessons.studentId),
+  ]);
+
+  const paidBy = new Map(paidRows.map((r) => [r.studentId, r]));
+  const doneBy = new Map(doneRows.map((r) => [r.studentId, r.doneLessons]));
+
+  return students.map((s) => {
+    const p = paidBy.get(s.id);
+    const paidLessons = p?.paidLessons ?? 0;
+    const doneLessons = doneBy.get(s.id) ?? 0;
+    return {
+      studentId: s.id,
+      studentName: s.name,
+      paidLessons,
+      paidRub: p?.paidRub ?? 0,
+      doneLessons,
+      balance: paidLessons - doneLessons,
+      lastPaidAt: p?.lastPaidAt ?? null,
+    };
+  });
+}
+
+/** Последние оплаты по всем ученикам репетитора — для общей страницы оплат. */
+export async function getRecentPaymentsForTeacher(
+  teacherId: string,
+  limit = 30
+): Promise<(import("./types").StudentPayment & { studentName: string })[]> {
+  const rows = await db
+    .select({ p: schema.studentPayments, studentName: schema.users.name })
+    .from(schema.studentPayments)
+    .innerJoin(schema.users, eq(schema.users.id, schema.studentPayments.studentId))
+    .where(eq(schema.studentPayments.teacherId, teacherId))
+    .orderBy(desc(schema.studentPayments.paidAt), desc(schema.studentPayments.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...mapStudentPayment(r.p), studentName: r.studentName }));
+}
+
+/** Баланс одного ученика (для страницы ученика). */
+export async function getStudentBalance(
+  teacherId: string,
+  studentId: string
+): Promise<import("./types").StudentBalance | undefined> {
+  const all = await getStudentBalances(teacherId);
+  return all.find((b) => b.studentId === studentId);
+}
+
+/** Сумма полученных оплат за период [from, to) — даты YYYY-MM-DD. */
+export async function getIncomeBetween(teacherId: string, from: string, to: string): Promise<number> {
+  const [row] = await db
+    .select({ total: sql<number>`coalesce(sum(${schema.studentPayments.amountRub}), 0)::int` })
+    .from(schema.studentPayments)
+    .where(
+      and(
+        eq(schema.studentPayments.teacherId, teacherId),
+        gte(schema.studentPayments.paidAt, from),
+        sql`${schema.studentPayments.paidAt} < ${to}`
+      )
+    );
+  return row?.total ?? 0;
+}
+
 // ---------- Развёрнутые (DETAILED) ответы, ожидающие проверки ----------
 
 export interface PendingReview {

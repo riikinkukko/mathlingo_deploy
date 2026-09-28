@@ -7,14 +7,14 @@ import {
 import TeacherSidebar from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar } from "./icons";
+import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar, IconWallet } from "./icons";
 
 export default async function TeacherShell({
   active,
   title,
   children,
 }: {
-  active: "students" | "schedule" | "content" | "upgrade";
+  active: "students" | "schedule" | "payments" | "content" | "upgrade";
   title: string;
   children: React.ReactNode;
 }) {
@@ -76,6 +76,15 @@ export default async function TeacherShell({
           <IconCalendar className={`h-[22px] w-[22px] ${active === "schedule" ? "text-pine" : "text-line"}`} />
           <span className={`text-[10px] leading-none ${active === "schedule" ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
             Расписание
+          </span>
+        </a>
+        <a
+          href="/teacher/payments"
+          className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5"
+        >
+          <IconWallet className={`h-[22px] w-[22px] ${active === "payments" ? "text-pine" : "text-line"}`} />
+          <span className={`text-[10px] leading-none ${active === "payments" ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
+            Оплаты
           </span>
         </a>
 {canEditContent && (

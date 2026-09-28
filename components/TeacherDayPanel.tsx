@@ -23,6 +23,8 @@ export interface DayPanelData {
   overdue: { id: string; name: string; count: number }[];
   /** ученики, которые давно не заходили */
   inactive: DayPanelStudent[];
+  /** ученики с долгом по оплате (lessons — сколько занятий не оплачено) */
+  debts: { id: string; name: string; lessons: number }[];
 }
 
 function daysLabel(days: number | null): string {
@@ -33,8 +35,9 @@ function daysLabel(days: number | null): string {
 }
 
 export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
-  const { reviewsCount, overdue, inactive } = data;
-  const allClear = reviewsCount === 0 && overdue.length === 0 && inactive.length === 0;
+  const { reviewsCount, overdue, inactive, debts } = data;
+  const allClear =
+    reviewsCount === 0 && overdue.length === 0 && inactive.length === 0 && debts.length === 0;
 
   if (allClear) {
     return (
@@ -43,7 +46,7 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
         <div>
           <p className="text-sm font-bold text-ink">Всё под контролем</p>
           <p className="text-xs text-ink-soft">
-            Нет работ на проверке, просроченных заданий и потерявшихся учеников.
+            Нет работ на проверке, просроченных заданий, долгов и потерявшихся учеников.
           </p>
         </div>
       </div>
@@ -53,7 +56,7 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
   return (
     <div className="mb-6">
       <h2 className="mb-3 font-display text-lg font-black text-ink">Требует внимания</h2>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         {/* Работы на проверке */}
         {reviewsCount > 0 && (
           <div className="card border-l-4 !border-l-amber p-4">
@@ -96,6 +99,42 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
               ))}
               {overdue.length > 4 && (
                 <li className="text-[11px] text-ink-soft">и ещё {overdue.length - 4}…</li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        {/* Долг по оплате */}
+        {debts.length > 0 && (
+          <div className="card border-l-4 !border-l-coral p-4">
+            <div className="flex items-center gap-2">
+              <span className="rounded-pill bg-coral px-2 py-0.5 text-sm font-black text-white">
+                {debts.length}
+              </span>
+              <p className="text-sm font-bold text-ink">
+                {debts.length === 1 ? "долг по оплате" : "долги по оплате"}
+              </p>
+            </div>
+            <ul className="mt-2 space-y-1">
+              {debts.slice(0, 4).map((s) => (
+                <li key={s.id}>
+                  <a
+                    href={`/teacher/student/${s.id}`}
+                    className="flex items-center justify-between text-xs text-ink-soft transition hover:text-coral"
+                  >
+                    <span className="truncate">{s.name}</span>
+                    <span className="ml-2 shrink-0">
+                      {s.lessons} {pluralRu(s.lessons, ["занятие", "занятия", "занятий"])}
+                    </span>
+                  </a>
+                </li>
+              ))}
+              {debts.length > 4 && (
+                <li>
+                  <a href="/teacher/payments" className="text-[11px] text-ink-soft hover:text-coral">
+                    и ещё {debts.length - 4}… → все оплаты
+                  </a>
+                </li>
               )}
             </ul>
           </div>

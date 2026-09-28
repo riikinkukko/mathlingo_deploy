@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
@@ -19,7 +19,7 @@ export default async function TeacherDashboard() {
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [cards, pendingReviews] = await Promise.all([
+  const [cards, pendingReviews, balances] = await Promise.all([
     Promise.all(
       students.map(async (s) => {
         const [stats, homeworks] = await Promise.all([
@@ -33,6 +33,7 @@ export default async function TeacherDashboard() {
       })
     ),
     getPendingReviewsForTeacher(user.id),
+    getStudentBalances(user.id),
   ]);
 
   // Сводка для "панели дня".
@@ -51,19 +52,25 @@ export default async function TeacherDashboard() {
       })
       .filter((x) => x.idleDays >= INACTIVE_DAYS)
       .map(({ id, name, days }) => ({ id, name, days })),
+    debts: balances
+      .filter((b) => b.balance < 0)
+      .sort((a, b) => a.balance - b.balance)
+      .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance })),
   };
 
   return (
     <TeacherShell active="students" title="Мои ученики">
       <main className="mx-auto max-w-3xl px-4 pt-6">
         {!user.emailVerifiedAt && (
-          <VerifyEmailReminder
-            reason={
-              !isOwner && !isPro
-                ? "Подтвердите email — без этого на бесплатном тарифе нельзя добавлять учеников."
-                : undefined
-            }
-          />
+          <div className="mb-5">
+            <VerifyEmailReminder
+              reason={
+                !isOwner && !isPro
+                  ? "Подтвердите email — без этого на бесплатном тарифе нельзя добавлять учеников."
+                  : undefined
+              }
+            />
+          </div>
         )}
         {students.length > 0 && <TeacherDayPanel data={panelData} />}
 

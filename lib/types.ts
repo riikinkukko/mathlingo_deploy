@@ -255,6 +255,29 @@ export interface ScheduledLessonWithStudent extends ScheduledLesson {
   studentName: string;
 }
 
+/** Оплата занятий учеником репетитору (не путать с Payment — подписка ЮKassa). */
+export interface StudentPayment {
+  id: string;
+  teacherId: string;
+  studentId: string;
+  amountRub: number;
+  lessonsCount: number;
+  paidAt: string; // YYYY-MM-DD
+  note: string | null;
+  createdAt: string;
+}
+
+/** Баланс ученика по оплатам: всё в занятиях + сумма денег. */
+export interface StudentBalance {
+  studentId: string;
+  studentName: string;
+  paidLessons: number; // сколько занятий оплачено
+  paidRub: number; // сколько денег всего
+  doneLessons: number; // сколько проведено (по расписанию)
+  balance: number; // paidLessons − doneLessons; < 0 — долг
+  lastPaidAt: string | null;
+}
+
 export interface DB {
   users: User[];
   parentLinks: ParentLink[];

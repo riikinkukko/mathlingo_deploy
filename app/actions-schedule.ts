@@ -45,27 +45,36 @@ function backTo(from: string, studentId: string): string {
   return from === "student" ? `/teacher/student/${studentId}` : "/teacher/schedule";
 }
 
-export async function createLessonAction(formData: FormData) {
+export type CreateLessonState = { ok?: boolean; error?: string; at?: number } | null;
+
+/**
+ * Планирование занятия. Работает через useFormState (без редиректа): так форма
+ * на клиенте узнаёт об успехе и очищает поля, а ошибку показывает на месте.
+ * Данные страниц обновляются через revalidatePath.
+ */
+export async function createLessonAction(
+  _prev: CreateLessonState,
+  formData: FormData
+): Promise<CreateLessonState> {
   const teacher = await getSessionUser();
   const studentId = String(formData.get("studentId") || "");
-  const from = String(formData.get("from") || "schedule");
-  const back = backTo(from, studentId);
 
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!(await assertOwnsStudent(teacher.id, studentId))) redirect(`${back}?error=1`);
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (!studentId) return { error: "Выберите ученика" };
+  if (!(await assertOwnsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
 
   const startsAt = parseMskDateTime(String(formData.get("startsAt") || ""));
   const durationMin = Math.max(15, Math.min(300, Number(formData.get("durationMin")) || 60));
   const topic = String(formData.get("topic") || "").trim() || null;
 
-  if (!startsAt) redirect(`${back}?error=time`);
+  if (!startsAt) return { error: "Укажите дату и время занятия" };
 
   await db.transaction(async (tx) => {
     await tx.insert(schema.scheduledLessons).values({
       id: genId("sl"),
-      teacherId: teacher!.id,
+      teacherId: teacher.id,
       studentId,
-      startsAt: startsAt!,
+      startsAt,
       durationMin,
       topic,
       status: "planned",
@@ -74,7 +83,7 @@ export async function createLessonAction(formData: FormData) {
     await pushNotification(tx, {
       userId: studentId,
       type: "lesson_scheduled",
-      title: `Занятие назначено: ${formatMsk(startsAt!)}`,
+      title: `Занятие назначено: ${formatMsk(startsAt)}`,
       body: topic ? `Тема: ${topic}` : "Не пропусти — увидимся на занятии!",
       link: `/student`,
     });
@@ -83,7 +92,9 @@ export async function createLessonAction(formData: FormData) {
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
   revalidatePath(`/teacher/student/${studentId}`);
-  redirect(`${back}?ok=lesson`);
+  // at — метка времени, чтобы два успешных сохранения подряд были разными
+  // состояниями и эффект очистки формы срабатывал каждый раз.
+  return { ok: true, at: Date.now() };
 }
 
 export async function setLessonStatusAction(formData: FormData) {

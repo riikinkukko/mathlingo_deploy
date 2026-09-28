@@ -12,6 +12,8 @@ import {
   getPendingReviewsForTeacher,
   getParentsOfStudent,
   getUpcomingLessonsForStudent,
+  getStudentBalance,
+  getStudentPayments,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
@@ -21,6 +23,9 @@ import SkillsProgressSummary from "@/components/SkillsProgressSummary";
 import RecentList from "@/components/RecentList";
 import AddLessonForm from "@/components/AddLessonForm";
 import UpcomingLessons from "@/components/UpcomingLessons";
+import AddPaymentForm from "@/components/AddPaymentForm";
+import PaymentHistory from "@/components/PaymentHistory";
+import BalanceSummary, { balanceLabel } from "@/components/BalanceSummary";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
@@ -43,8 +48,19 @@ export default async function StudentDetailPage({
     notFound();
   }
 
-  const [curriculum, progress, stats, homeworks, mistakesRaw, lessonLogs, pendingReviewsRaw, parents, upcomingLessons] =
-    await Promise.all([
+  const [
+    curriculum,
+    progress,
+    stats,
+    homeworks,
+    mistakesRaw,
+    lessonLogs,
+    pendingReviewsRaw,
+    parents,
+    upcomingLessons,
+    balance,
+    payments,
+  ] = await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
       computeOverallStats(student.id),
@@ -54,6 +70,8 @@ export default async function StudentDetailPage({
       getPendingReviewsForTeacher(teacher.id),
       getParentsOfStudent(student.id),
       getUpcomingLessonsForStudent(student.id),
+      getStudentBalance(teacher.id, student.id),
+      getStudentPayments(student.id),
     ]);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
@@ -165,6 +183,18 @@ export default async function StudentDetailPage({
             <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" />
           </div>
           <AddLessonForm studentId={student.id} from="student" />
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          title="Оплаты"
+          summary={balance ? balanceLabel(balance.balance) : undefined}
+          defaultOpen={!!balance && balance.balance < 0}
+        >
+          {balance && <BalanceSummary balance={balance} />}
+          <div className="mb-4">
+            <AddPaymentForm studentId={student.id} />
+          </div>
+          <PaymentHistory payments={payments} showStudent={false} from="student" />
         </CollapsibleSection>
 
         <CollapsibleSection

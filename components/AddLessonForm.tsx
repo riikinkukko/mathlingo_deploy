@@ -1,7 +1,8 @@
 "use client";
 
-import { useFormStatus } from "react-dom";
-import { createLessonAction } from "@/app/actions-schedule";
+import { useEffect, useRef, useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
+import { createLessonAction, CreateLessonState } from "@/app/actions-schedule";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -12,34 +13,48 @@ function SubmitButton() {
   );
 }
 
+/** Ближайший круглый час по Москве в формате datetime-local. */
+function nextHourMsk(): string {
+  const msk = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+  msk.setHours(msk.getHours() + 1, 0, 0, 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${msk.getFullYear()}-${pad(msk.getMonth() + 1)}-${pad(msk.getDate())}T${pad(
+    msk.getHours()
+  )}:${pad(msk.getMinutes())}`;
+}
+
 /**
  * Форма планирования занятия. Два режима:
  *  - на странице ученика: студент фиксирован (studentId задан, селектор скрыт);
  *  - на странице расписания: передаётся список students — репетитор выбирает.
- * `from` определяет, куда экшен вернёт после сохранения.
+ * После успешного сохранения очищаются дата/время и тема; ученик и
+ * длительность остаются — удобно планировать несколько занятий подряд.
  */
 export default function AddLessonForm({
   studentId,
   students,
-  from,
 }: {
   studentId?: string;
   students?: { id: string; name: string }[];
-  from: "student" | "schedule";
+  /** оставлено для совместимости со старыми вызовами */
+  from?: "student" | "schedule";
 }) {
-  // Значение по умолчанию для datetime-local: сегодня, ближайший круглый час
-  // в московском времени.
-  const now = new Date();
-  const msk = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
-  msk.setHours(msk.getHours() + 1, 0, 0, 0);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const defaultDT = `${msk.getFullYear()}-${pad(msk.getMonth() + 1)}-${pad(msk.getDate())}T${pad(
-    msk.getHours()
-  )}:${pad(msk.getMinutes())}`;
+  const [state, formAction] = useFormState<CreateLessonState, FormData>(createLessonAction, null);
+  const startsAtRef = useRef<HTMLInputElement>(null);
+  const topicRef = useRef<HTMLInputElement>(null);
+  const [showSaved, setShowSaved] = useState(false);
+
+  useEffect(() => {
+    if (!state?.ok) return;
+    if (startsAtRef.current) startsAtRef.current.value = "";
+    if (topicRef.current) topicRef.current.value = "";
+    setShowSaved(true);
+    const t = setTimeout(() => setShowSaved(false), 3000);
+    return () => clearTimeout(t);
+  }, [state]);
 
   return (
-    <form action={createLessonAction} className="card space-y-3 p-4">
-      <input type="hidden" name="from" value={from} />
+    <form action={formAction} className="card space-y-3 p-4">
       {studentId && <input type="hidden" name="studentId" value={studentId} />}
 
       {!studentId && students && (
@@ -62,11 +77,12 @@ export default function AddLessonForm({
         <div>
           <label className="label" htmlFor="startsAt">Дата и время (МСК)</label>
           <input
+            ref={startsAtRef}
             className="input"
             id="startsAt"
             name="startsAt"
             type="datetime-local"
-            defaultValue={defaultDT}
+            defaultValue={nextHourMsk()}
             required
           />
         </div>
@@ -87,10 +103,21 @@ export default function AddLessonForm({
 
       <div>
         <label className="label" htmlFor="topic">Тема (необязательно)</label>
-        <input className="input" id="topic" name="topic" placeholder="Например, «Стереометрия: сечения»" />
+        <input
+          ref={topicRef}
+          className="input"
+          id="topic"
+          name="topic"
+          placeholder="Например, «Стереометрия: сечения»"
+        />
       </div>
 
-      <SubmitButton />
+      {state?.error && <p className="text-sm font-semibold text-coral">{state.error}</p>}
+
+      <div className="flex items-center gap-3">
+        <SubmitButton />
+        {showSaved && <span className="text-sm font-bold text-pine">✓ Занятие запланировано</span>}
+      </div>
     </form>
   );
 }
