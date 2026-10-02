@@ -32,7 +32,7 @@ export default async function SchedulePage({
     <TeacherShell active="schedule" title="Расписание">
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6">
-          <h1 className="font-display text-2xl font-black text-ink">Расписание</h1>
+          <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Расписание</h1>
           <p className="mt-1 text-sm text-ink-soft">
             {lessons.length > 0
               ? `${lessons.length} ${pluralRu(lessons.length, ["занятие", "занятия", "занятий"])} впереди`

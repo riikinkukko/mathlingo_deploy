@@ -14,7 +14,7 @@ export default async function MistakesPage() {
     <StudentShell active="mistakes" title="Мои ошибки">
       <div className="px-4 py-6 lg:px-8">
         <div className="mx-auto max-w-2xl">
-          <h1 className="font-display text-2xl font-black text-ink">Мои ошибки</h1>
+          <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Мои ошибки</h1>
           <p className="mt-1.5 text-sm text-ink-soft">
             Задачи, где хотя бы раз ответил неверно — удобно вернуться и закрепить.
           </p>

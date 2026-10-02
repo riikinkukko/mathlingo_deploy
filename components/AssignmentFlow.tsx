@@ -56,7 +56,6 @@ export default function AssignmentFlow({
 
   const current = items[index];
   const currentState = states[current.problem.id] ?? { status: "unsolved" };
-  const stepPct = Math.round(((index + 1) / items.length) * 100);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -74,9 +73,6 @@ export default function AssignmentFlow({
             Задача {index + 1} из {items.length} · решено {solvedCount}/{items.length}
           </p>
         </div>
-      </div>
-      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-grid">
-        <div className="h-full rounded-pill bg-amber transition-all" style={{ width: `${stepPct}%` }} />
       </div>
 
       {deadlineAt && !expired && (
@@ -101,11 +97,17 @@ export default function AssignmentFlow({
                   if (i > index && currentState.status === "pending") return;
                   setIndex(i);
                 }}
-                className={`h-2.5 rounded-pill transition-all ${
-                  i === index ? "w-7 bg-pine" : st === "solved" ? "w-2.5 bg-pine/50" : "w-2.5 bg-line hover:bg-pine/30"
-                }`}
+                // Видимая точка маленькая, но нажимать можно на область 28 px.
+                className="group flex h-7 items-center px-0.5"
                 aria-label={`Задача ${i + 1}`}
-              />
+                aria-current={i === index ? "step" : undefined}
+              >
+                <span
+                  className={`block h-2.5 rounded-pill transition-all ${
+                    i === index ? "w-7 bg-pine" : st === "solved" ? "w-2.5 bg-pine/50" : "w-2.5 bg-line group-hover:bg-pine/30"
+                  }`}
+                />
+              </button>
             );
           })}
         </div>

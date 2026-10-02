@@ -36,9 +36,9 @@ export default async function PaymentsPage() {
     <TeacherShell active="payments" title="Оплаты">
       <main className="mx-auto max-w-3xl px-4 py-6">
         <div className="mb-6">
-          <h1 className="font-display text-2xl font-black text-ink">Оплаты</h1>
+          <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Оплаты</h1>
           <p className="mt-1 text-sm text-ink-soft">
-            Учёт оплат занятий от учеников. Проведённые занятия считаются по отметке «Провести» в
+            Учёт оплат занятий от учеников. Проведённые занятия считаются по отметке «Было» в
             расписании.
           </p>
         </div>

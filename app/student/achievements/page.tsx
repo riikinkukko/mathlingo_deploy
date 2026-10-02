@@ -16,7 +16,7 @@ export default async function AchievementsPage() {
     <StudentShell active="profile" title="Достижения">
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-2xl">
-        <h1 className="mb-1 font-display text-2xl font-black text-ink">Достижения</h1>
+        <h1 className="sr-only lg:not-sr-only mb-1 font-display text-2xl font-black text-ink">Достижения</h1>
         <p className="mb-6 text-sm text-ink-soft">
           Получено {earnedTiers} из {totalTiers} {pluralRu(totalTiers, ["уровня", "уровней", "уровней"])}
         </p>

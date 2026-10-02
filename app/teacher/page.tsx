@@ -185,11 +185,13 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
                       </span>
                     )}
                   </span>
-                  <span className="mt-0.5 block truncate text-[12px] text-ink-soft">
-                    решено {stats.solvedProblems} · точность {stats.accuracy}% ·{" "}
+                  <span className="mt-0.5 block text-[12px] leading-snug text-ink-soft">
+                    {stats.attemptsCount > 0
+                      ? `решено ${stats.solvedProblems} · точность ${stats.accuracy}% · `
+                      : "ещё не начинал(а) · "}
                     <span className={overdue ? "font-bold text-coral-text" : ""}>
                       ДЗ {pendingCount}
-                      {overdue ? " (просрочено)" : ""}
+                      {overdue ? ", есть просроченное" : ""}
                     </span>
                   </span>
                 </span>

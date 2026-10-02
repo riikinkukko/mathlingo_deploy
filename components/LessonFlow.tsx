@@ -137,8 +137,10 @@ export default function LessonFlow({
         <ComboBadge combo={combo} />
       </LessonTopBar>
 
-      <p className="mb-3 truncate text-[13px] font-bold text-ink-soft">
-        {skillTitle} · задача {index + 1} из {problems.length}
+      {/* Название навыка обрезается, а «N из M» видно всегда. */}
+      <p className="mb-3 flex min-w-0 gap-1 text-[13px] font-bold text-ink-soft">
+        <span className="truncate">{skillTitle}</span>
+        <span className="shrink-0">· {index + 1} из {problems.length}</span>
       </p>
 
       <ProblemCard

@@ -203,12 +203,12 @@ export default async function ProfilePage({
         <div className="mb-6 grid grid-cols-3 gap-3">
           <StatChip label="Решено задач" value={`${stats.solvedProblems}`} />
           <StatChip label="Точность" value={`${stats.accuracy}%`} />
-          <StatChip label="Дней подряд" value={`${streak}`} />
+          <StatChip label="Опыт, XP" value={`${xp}`} />
         </div>
 
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-display text-lg font-black text-ink">Достижения</h2>
-          <a href="/student/achievements" className="text-xs font-bold text-pine hover:underline">
+          <a href="/student/achievements" className="-my-2 py-3 pl-3 text-xs font-bold text-pine hover:underline">
             Все ({earnedCount}/{progress.length}) →
           </a>
         </div>

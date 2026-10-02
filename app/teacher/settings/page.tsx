@@ -11,7 +11,7 @@ export default async function TeacherSettingsPage({ searchParams }: { searchPara
     <TeacherShell active="settings" title="Настройки">
       <main className="mx-auto max-w-2xl space-y-6 px-4 py-6">
         <div>
-          <h1 className="font-display text-2xl font-black text-ink">Настройки</h1>
+          <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Настройки</h1>
           <p className="mt-1 text-sm text-ink-soft">{user.name} · {user.email}</p>
         </div>
 
@@ -30,7 +30,7 @@ export default async function TeacherSettingsPage({ searchParams }: { searchPara
         </TelegramConnectCard>
 
         <form action={logoutAction}>
-          <button type="submit" className="btn-secondary !text-coral">
+          <button type="submit" className="btn-secondary !border-coral/30 !text-coral hover:!border-coral">
             Выйти из аккаунта
           </button>
         </form>

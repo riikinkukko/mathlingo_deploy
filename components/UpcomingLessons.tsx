@@ -102,30 +102,30 @@ export default function UpcomingLessons({
                   {showStudent && l.studentName && (
                     <p className="font-display text-sm font-black text-ink">{l.studentName}</p>
                   )}
-                  <p className="truncate text-sm text-ink-soft">
+                  <p className="line-clamp-2 text-sm text-ink-soft">
                     {l.topic || <span className="italic">Тема не указана</span>}
                   </p>
                 </div>
                 {!readOnly && (
-                <div className="flex shrink-0 gap-1.5">
-                  <form action={setLessonStatusAction}>
+                <div className="flex basis-full gap-2 lg:basis-auto lg:shrink-0">
+                  <form action={setLessonStatusAction} className="flex-1 lg:flex-none">
                     <input type="hidden" name="lessonId" value={l.id} />
                     <input type="hidden" name="status" value="done" />
                     <input type="hidden" name="from" value={from} />
                     <button
                       type="submit"
-                      className="rounded-pill bg-pine px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-pine-dark"
+                      className="h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
                     >
                       {past ? "✓ Было" : "Провести"}
                     </button>
                   </form>
-                  <form action={setLessonStatusAction}>
+                  <form action={setLessonStatusAction} className="flex-1 lg:flex-none">
                     <input type="hidden" name="lessonId" value={l.id} />
                     <input type="hidden" name="status" value="cancelled" />
                     <input type="hidden" name="from" value={from} />
                     <button
                       type="submit"
-                      className="rounded-pill bg-line-soft px-2.5 py-1 text-[11px] font-bold text-ink-soft transition hover:bg-line"
+                      className="h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
                     >
                       {past ? "Не было" : "Отменить"}
                     </button>

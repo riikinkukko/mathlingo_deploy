@@ -19,7 +19,7 @@ export default function DeletePaymentButton({
         onClick={(e) => {
           if (!window.confirm("Удалить эту запись об оплате?")) e.preventDefault();
         }}
-        className="rounded-pill px-2 py-1 text-[11px] font-bold text-coral transition hover:bg-coral-light"
+        className="flex h-10 w-10 items-center justify-center rounded-pill text-[15px] font-bold text-coral transition hover:bg-coral-light lg:h-8 lg:w-8"
       >
         ✕
       </button>

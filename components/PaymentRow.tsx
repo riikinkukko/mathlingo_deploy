@@ -132,7 +132,7 @@ export default function PaymentRow({
           aria-label="Редактировать оплату"
           title="Редактировать"
           onClick={() => setEditing(true)}
-          className="rounded-pill px-2 py-1 text-[13px] font-bold text-ink-soft transition hover:bg-line-soft hover:text-ink"
+          className="flex h-10 w-10 items-center justify-center rounded-pill text-[16px] font-bold text-ink-soft transition hover:bg-line-soft hover:text-ink lg:h-8 lg:w-8"
         >
           ✎
         </button>

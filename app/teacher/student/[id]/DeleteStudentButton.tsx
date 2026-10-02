@@ -18,7 +18,7 @@ function Button({ studentName }: { studentName: string }) {
           e.preventDefault();
         }
       }}
-      className="text-sm font-bold text-coral transition hover:underline disabled:opacity-50"
+      className="min-h-[44px] rounded-pill border-2 border-coral/30 px-4 text-sm font-bold text-coral transition hover:border-coral hover:bg-coral-light disabled:opacity-50"
     >
       {pending ? "Удаляем…" : "Удалить ученика"}
     </button>

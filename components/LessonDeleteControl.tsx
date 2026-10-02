@@ -4,8 +4,9 @@ import { useState } from "react";
 import { deleteLessonAction, deleteLessonSeriesFromAction } from "@/app/actions-schedule";
 
 /**
- * Кнопка удаления занятия. Для разового — сразу удаляет. Для занятия из
- * еженедельной серии — спрашивает: только это или это и все следующие.
+ * Кнопка удаления занятия. Сначала открывается подтверждение (раньше разовое
+ * удалялось с одного нажатия — легко промахнуться на телефоне). Для занятия
+ * из еженедельной серии — выбор: только это или это и все следующие.
  */
 export default function LessonDeleteControl({
   lessonId,
@@ -25,21 +26,6 @@ export default function LessonDeleteControl({
     </>
   );
 
-  if (!seriesId) {
-    return (
-      <form action={deleteLessonAction}>
-        {hidden}
-        <button
-          type="submit"
-          aria-label="Удалить занятие"
-          className="rounded-pill px-2 py-1 text-[11px] font-bold text-coral transition hover:bg-coral-light"
-        >
-          ✕
-        </button>
-      </form>
-    );
-  }
-
   return (
     <div className="relative">
       <button
@@ -47,30 +33,32 @@ export default function LessonDeleteControl({
         aria-label="Удалить занятие"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="rounded-pill px-2 py-1 text-[11px] font-bold text-coral transition hover:bg-coral-light"
+        className="flex h-10 w-10 items-center justify-center rounded-pill text-[15px] font-bold text-coral transition hover:bg-coral-light lg:h-8 lg:w-8"
       >
         ✕
       </button>
       {open && (
-        <div className="absolute right-0 top-8 z-20 w-56 rounded-xl border border-line bg-white p-1.5 shadow-soft">
+        <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-line bg-white p-1.5 shadow-soft">
           <form action={deleteLessonAction}>
             {hidden}
             <button
               type="submit"
-              className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-ink hover:bg-line-soft"
+              className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-coral hover:bg-coral-light"
             >
-              Только это занятие
+              {seriesId ? "Только это занятие" : "Удалить занятие"}
             </button>
           </form>
-          <form action={deleteLessonSeriesFromAction}>
-            {hidden}
-            <button
-              type="submit"
-              className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-coral hover:bg-coral-light"
-            >
-              Это и все следующие
-            </button>
-          </form>
+          {seriesId && (
+            <form action={deleteLessonSeriesFromAction}>
+              {hidden}
+              <button
+                type="submit"
+                className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-coral hover:bg-coral-light"
+              >
+                Это и все следующие
+              </button>
+            </form>
+          )}
           <button
             type="button"
             onClick={() => setOpen(false)}
