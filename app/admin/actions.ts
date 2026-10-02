@@ -8,7 +8,10 @@ export async function grantProAction(formData: FormData) {
   await requireAdmin();
   const userId = String(formData.get("userId") || "");
   const daysRaw = String(formData.get("days") || "").trim();
-  const days = daysRaw ? Math.max(1, parseInt(daysRaw, 10)) : null; // пусто = бессрочно
+  const parsed = parseInt(daysRaw, 10);
+  // Пусто — бессрочно. Мусор в поле раньше давал NaN и тоже бессрочный Pro.
+  if (daysRaw && !Number.isFinite(parsed)) return;
+  const days = daysRaw ? Math.max(1, parsed) : null;
   if (!userId) return;
 
   await setUserPlanManually(userId, "pro", days);

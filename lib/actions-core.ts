@@ -11,6 +11,10 @@ import {
   canStudentAccessProblem,
   updateSrsState,
   genId,
+  getHomeworksForStudent,
+  homeworkStatus,
+  getAssignmentDeadline,
+  getOrCreateAssignmentSession,
 } from "./queries";
 import { User } from "./types";
 import { notifyHomeworkIfFinished } from "./teacher-telegram";
@@ -69,6 +73,46 @@ export function answersMatch(userAnswer: string, correctAnswer: string): boolean
 }
 
 /**
+ * Правила контрольных и пробников на сервере (раньше их держала только
+ * страница, а экшен и /api/attempts можно вызвать напрямую):
+ *  • в задании с лимитом времени после конца отсчёта ответы не принимаются
+ *    (отсчёт стартует и при первом ответе через API, без открытия страницы);
+ *  • если в задании подсказки выключены, сервер их не отдаёт;
+ *  • пока контрольная не сдана, её задачу можно решать и в уроке (иначе
+ *    застрял бы «Путь»), но без подсказок — а в результат контрольной
+ *    засчитываются только ответы из неё самой (см. homeworkStatus).
+ */
+async function assignmentRules(
+  user: User,
+  problemId: string,
+  source: "lesson" | "assignment" | "review"
+): Promise<{ error?: string; withholdHints: boolean; note?: string }> {
+  const containing = (await getHomeworksForStudent(user.id)).filter((h) => h.problemIds.includes(problemId));
+  let withholdHints = false;
+  let note: string | undefined;
+  for (const hw of containing) {
+    const isTest = hw.kind !== "homework";
+    if (!isTest && hw.allowHints) continue;
+    const status = await homeworkStatus(hw, user.id);
+    if (status.complete) continue;
+    let deadline = await getAssignmentDeadline(hw, user.id);
+    if (source === "assignment" && hw.timeLimitMinutes && !deadline) {
+      const s = await getOrCreateAssignmentSession(hw.id, user.id);
+      deadline = new Date(new Date(s.startedAt).getTime() + hw.timeLimitMinutes * 60000);
+    }
+    const expired = !!deadline && Date.now() > deadline.getTime();
+    if (source === "assignment") {
+      if (expired) return { error: "Время на это задание вышло", withholdHints: true };
+      if (!hw.allowHints) withholdHints = true;
+    } else if (isTest && !expired) {
+      withholdHints = true;
+      note = `Эта задача есть в твоём задании «${hw.title}», поэтому подсказок к ней пока нет.`;
+    }
+  }
+  return { withholdHints, note };
+}
+
+/**
  * Вся бизнес-логика отправки попытки решения — без ничего специфичного для
  * транспорта (никаких revalidatePath/redirect/NextResponse). Server Action
  * в app/actions.ts и API-роут /api/attempts вызывают ЭТУ функцию и просто
@@ -90,6 +134,8 @@ export async function performSubmitAttempt(
   if (!(await canStudentAccessProblem(user, problem, source))) {
     return { error: "Задача недоступна" as const };
   }
+  const rules = await assignmentRules(user, problemId, source);
+  if (rules.error) return { error: rules.error };
 
   const existingAttempts = await db
     .select({ id: schema.attempts.id })
@@ -231,6 +277,9 @@ export async function performSubmitAttempt(
   const wrongCount = wrongRows.length;
   const hintIndex = Math.min(wrongCount - 1, problem.hints.length - 1);
 
+  if (rules.withholdHints) {
+    return { kind: "wrong" as const, hint: rules.note ?? "", wrongCount, canRevealSolution: false };
+  }
   return {
     kind: "wrong" as const,
     hint: problem.hints[hintIndex] ?? "Попробуйте перечитать теорию по этому навыку ещё раз.",

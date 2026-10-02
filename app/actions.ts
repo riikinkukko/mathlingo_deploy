@@ -35,6 +35,7 @@ import {
   isLoginRateLimited,
   recordLoginFailure,
   clearLoginFailures,
+  isAuthEmailRateLimited,
 } from "@/lib/queries";
 import { performSubmitAttempt } from "@/lib/actions-core";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
@@ -449,7 +450,8 @@ export async function createHomeworkAction(formData: FormData) {
   const kind = (String(formData.get("kind") || "homework") as AssignmentKind);
   const allowHints = formData.get("allowHints") === "on";
   const timeLimitRaw = String(formData.get("timeLimitMinutes") || "").trim();
-  const timeLimitMinutes = timeLimitRaw ? Math.max(1, parseInt(timeLimitRaw, 10)) : undefined;
+  const tl = parseInt(timeLimitRaw, 10);
+  const timeLimitMinutes = timeLimitRaw && Number.isFinite(tl) ? Math.min(600, Math.max(1, tl)) : undefined;
 
   // Свои задачи, написанные учителем прямо в форме (не из банка навыков) —
   // создаём как обычные Problem без skillId, только для этого задания.
@@ -809,6 +811,7 @@ export async function verifyEmailAction(token: string): Promise<{ success: boole
 export async function resendVerificationEmailAction() {
   const user = await getSessionUser();
   if (!user || user.emailVerifiedAt) return;
+  if (await isAuthEmailRateLimited(user.id, "email_verification")) return;
   const token = await createAuthToken(user.id, "email_verification", 24 * 3600 * 1000);
   await sendVerificationEmail(user.email, token).catch((e) =>
     console.error("Не удалось повторно отправить письмо верификации:", e)
@@ -827,7 +830,9 @@ export async function requestPasswordResetAction(_prevState: unknown, formData: 
   if (!email) return { error: "Введите email" };
 
   const user = await getUserByEmail(email);
-  if (user) {
+  // Ответ одинаковый в любом случае (не выдаём, есть ли аккаунт), но писем —
+  // не больше трёх в час на аккаунт.
+  if (user && !(await isAuthEmailRateLimited(user.id, "password_reset"))) {
     const token = await createAuthToken(user.id, "password_reset", 3600 * 1000);
     await sendPasswordResetEmail(email, token).catch((e) =>
       console.error("Не удалось отправить письмо сброса пароля:", e)

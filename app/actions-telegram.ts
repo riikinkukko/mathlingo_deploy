@@ -26,7 +26,8 @@ export async function disconnectTelegramAction(formData?: FormData) {
   await unlinkTelegramAccount(user!.id);
   // Куда вернуться — только внутренний путь (не открытый редирект).
   const raw = String(formData?.get("returnTo") || "");
-  const back = raw.startsWith("/") && !raw.startsWith("//") ? raw : DEFAULT_BACK[user!.role] ?? "/";
+  // «/\evil.com» браузер понимает как «//evil.com», поэтому обратный слэш тоже запрещён.
+  const back = /^\/(?![\/\\])[^\\]*$/.test(raw) ? raw : DEFAULT_BACK[user!.role] ?? "/";
   redirect(`${back}${back.includes("?") ? "&" : "?"}telegram=disconnected`);
 }
 

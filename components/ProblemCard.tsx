@@ -62,6 +62,9 @@ export default function ProblemCard({
   const [noEnergy, setNoEnergy] = useState(false);
   const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
+  // Отказ сервера (задача в идущей контрольной, время вышло и т. п.) — раньше
+  // молча игнорировался, и кнопка «Проверить» просто ничего не делала.
+  const [serverError, setServerError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const answerInputRef = useRef<HTMLInputElement>(null);
 
@@ -70,7 +73,11 @@ export default function ProblemCard({
     if (!answer.trim()) return;
     startTransition(async () => {
       const res = await submitAttemptAction(problem.id, answer, source);
-      if ("error" in res) return;
+      if ("error" in res) {
+        setServerError(typeof res.error === "string" ? res.error : "Не удалось отправить ответ");
+        return;
+      }
+      setServerError(null);
 
       if (res.kind === "no_energy") {
         setNoEnergy(true);
@@ -105,7 +112,10 @@ export default function ProblemCard({
   function handleReveal() {
     startTransition(async () => {
       const res = await revealSolutionAction(problem.id);
-      if ("error" in res) return;
+      if ("error" in res) {
+        setServerError(res.error ?? null);
+        return;
+      }
       setSolution(res);
     });
   }
@@ -339,6 +349,11 @@ export default function ProblemCard({
         </div>
       )}
 
+      {serverError && (
+        <p role="alert" className="mt-3 rounded-xl bg-coral-light px-3 py-2.5 text-sm font-bold text-coral-text">
+          {serverError}
+        </p>
+      )}
       {wrongState && !correctResult && (
         <div className="mt-4 flex animate-slide-up-fade items-start gap-2.5 rounded-2xl border-2 border-amber-light bg-amber-light p-3.5 text-sm leading-relaxed">
           {allowHints && <Mascot mood="thinking" size={40} float={false} className="mt-0.5 shrink-0" />}

@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
@@ -469,12 +469,39 @@ export async function getChildrenOfParent(parentId: string): Promise<User[]> {
   return rows.map(mapUser);
 }
 
+/** Конец отведённого времени на задание с лимитом (null — лимита нет или
+ * ученик ещё не открывал задание, отсчёт не начат). */
+export async function getAssignmentDeadline(hw: Homework, studentId: string): Promise<Date | null> {
+  if (!hw.timeLimitMinutes) return null;
+  const rows = await db
+    .select({ startedAt: schema.assignmentSessions.startedAt })
+    .from(schema.assignmentSessions)
+    .where(and(eq(schema.assignmentSessions.homeworkId, hw.id), eq(schema.assignmentSessions.studentId, studentId)))
+    .limit(1);
+  return rows[0] ? new Date(rows[0].startedAt.getTime() + hw.timeLimitMinutes * 60000) : null;
+}
+
 export async function homeworkStatus(hw: Homework, studentId: string) {
+  // Контрольная/пробник засчитываются только по ответам из самого задания:
+  // задачу, решённую раньше в уроке (с подсказками), нельзя «принести» в
+  // контрольную. Обычная домашка — по любому верному ответу, как и раньше.
+  const isTest = hw.kind !== "homework";
   const correctRows = await db
-    .select({ problemId: schema.attempts.problemId })
+    .select({ problemId: schema.attempts.problemId, createdAt: schema.attempts.createdAt })
     .from(schema.attempts)
-    .where(and(eq(schema.attempts.studentId, studentId), eq(schema.attempts.isCorrect, true)));
-  const correctIds = new Set(correctRows.map((r) => r.problemId));
+    .where(
+      and(
+        eq(schema.attempts.studentId, studentId),
+        eq(schema.attempts.isCorrect, true),
+        ...(isTest ? [eq(schema.attempts.source, "assignment")] : [])
+      )
+    );
+  // У задания с лимитом времени засчитываются только ответы до конца отсчёта —
+  // иначе после «Время вышло» задачу можно было дорешать (например, в уроке).
+  const deadline = await getAssignmentDeadline(hw, studentId);
+  const correctIds = new Set(
+    correctRows.filter((r) => !deadline || r.createdAt <= deadline).map((r) => r.problemId)
+  );
   const done = hw.problemIds.filter((id) => correctIds.has(id)).length;
   const total = hw.problemIds.length;
   const overdue = !!hw.dueDate && new Date(hw.dueDate) < new Date() && done < total;
@@ -1253,7 +1280,12 @@ const REGISTRATION_WINDOW_HOURS = 24;
 // перебирать пароли к одному аккаунту с разных IP, ни перебирать много
 // аккаунтов с одного IP. Успешный вход сбрасывает счётчик по email.
 const LOGIN_WINDOW_MIN = 15;
-const LOGIN_FAILS_PER_EMAIL = 8;
+// Ошибки считаем по паре «email + IP»: раньше 8 неверных паролей с ЛЮБОГО
+// адреса блокировали вход владельцу аккаунта — так можно было намеренно не
+// пускать человека в его аккаунт. Общий потолок на email оставлен, но выше —
+// он против перебора пароля с многих адресов.
+const LOGIN_FAILS_PER_EMAIL_IP = 8;
+const LOGIN_FAILS_PER_EMAIL = 50;
 const LOGIN_FAILS_PER_IP = 30;
 
 export async function isLoginRateLimited(ip: string, email: string): Promise<boolean> {
@@ -1265,6 +1297,7 @@ export async function isLoginRateLimited(ip: string, email: string): Promise<boo
       .where(and(eq(schema.loginFailures.key, key), gte(schema.loginFailures.createdAt, since)));
     return Number(rows[0]?.c ?? 0);
   };
+  if (email && ip && (await count(`emailip:${email}|${ip}`)) >= LOGIN_FAILS_PER_EMAIL_IP) return true;
   if (email && (await count(`email:${email}`)) >= LOGIN_FAILS_PER_EMAIL) return true;
   if (ip && (await count(`ip:${ip}`)) >= LOGIN_FAILS_PER_IP) return true;
   return false;
@@ -1273,12 +1306,16 @@ export async function isLoginRateLimited(ip: string, email: string): Promise<boo
 export async function recordLoginFailure(ip: string, email: string): Promise<void> {
   const rows = [];
   if (email) rows.push({ id: genId("lf"), key: `email:${email}` });
+  if (email && ip) rows.push({ id: genId("lf"), key: `emailip:${email}|${ip}` });
   if (ip) rows.push({ id: genId("lf"), key: `ip:${ip}` });
   if (rows.length) await db.insert(schema.loginFailures).values(rows);
 }
 
 export async function clearLoginFailures(email: string): Promise<void> {
-  if (email) await db.delete(schema.loginFailures).where(eq(schema.loginFailures.key, `email:${email}`));
+  if (email)
+    await db
+      .delete(schema.loginFailures)
+      .where(or(eq(schema.loginFailures.key, `email:${email}`), sql`${schema.loginFailures.key} like ${`emailip:${email}|%`}`));
 }
 
 export async function isRegistrationRateLimited(ip: string, role: "STUDENT" | "TEACHER"): Promise<boolean> {
@@ -1308,6 +1345,21 @@ export async function recordRegistrationAttempt(ip: string, role: "STUDENT" | "T
 /** Создаёт одноразовый токен (для email-верификации или сброса пароля) и
  * возвращает его — вызывающий код сам решает, что с ним делать (обычно
  * сразу отправляет ссылку по email, см. lib/email.ts). */
+/** Не больше AUTH_EMAILS_PER_HOUR писем одного типа на аккаунт в час —
+ * иначе формой «забыл пароль» можно было завалить письмами чужой ящик. */
+const AUTH_EMAILS_PER_HOUR = 3;
+export async function isAuthEmailRateLimited(
+  userId: string,
+  type: "email_verification" | "password_reset"
+): Promise<boolean> {
+  const since = new Date(Date.now() - 3600 * 1000);
+  const rows = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(schema.authTokens)
+    .where(and(eq(schema.authTokens.userId, userId), eq(schema.authTokens.type, type), gte(schema.authTokens.createdAt, since)));
+  return Number(rows[0]?.c ?? 0) >= AUTH_EMAILS_PER_HOUR;
+}
+
 export async function createAuthToken(
   userId: string,
   type: "email_verification" | "password_reset",
@@ -1338,8 +1390,13 @@ export async function consumeAuthToken(
   if (!row || row.type !== type || row.usedAt) return null;
   if (row.expiresAt.getTime() < Date.now()) return null;
 
-  await db.update(schema.authTokens).set({ usedAt: new Date() }).where(eq(schema.authTokens.id, row.id));
-  return row.userId;
+  // Атомарно: два одновременных запроса с одной ссылкой не пройдут оба.
+  const used = await db
+    .update(schema.authTokens)
+    .set({ usedAt: new Date() })
+    .where(and(eq(schema.authTokens.id, row.id), isNull(schema.authTokens.usedAt)))
+    .returning({ id: schema.authTokens.id });
+  return used.length ? row.userId : null;
 }
 
 /** Ученики репетитора (с teacherId) и все не-ученики — вне системы планов,
@@ -1731,10 +1788,17 @@ export async function markPaymentSucceeded(
   if (payment.status === "succeeded") return true; // уже обработан — не продлеваем повторно
 
   await db.transaction(async (tx) => {
-    await tx
+    // Атомарно «забираем» платёж: ЮKassa может прислать одно уведомление
+    // несколько раз, в том числе одновременно. Проверка статуса выше и
+    // UPDATE были разными шагами — два параллельных запроса оба проходили
+    // проверку и продлевали Pro дважды. Теперь продлевает только тот, чей
+    // UPDATE реально сменил статус.
+    const claimed = await tx
       .update(schema.payments)
       .set({ status: "succeeded", paidAt: new Date() })
-      .where(eq(schema.payments.id, payment.id));
+      .where(and(eq(schema.payments.id, payment.id), sql`${schema.payments.status} <> 'succeeded'`))
+      .returning({ id: schema.payments.id });
+    if (claimed.length === 0) return;
 
     const userRows = await tx.select().from(schema.users).where(eq(schema.users.id, payment.userId)).limit(1);
     const user = userRows[0] ? mapUser(userRows[0]) : undefined;
@@ -1775,7 +1839,8 @@ export async function markPaymentCanceled(yookassaPaymentId: string) {
   await db
     .update(schema.payments)
     .set({ status: "canceled" })
-    .where(eq(schema.payments.yookassaPaymentId, yookassaPaymentId));
+    // Уже оплаченный платёж отменой не перезаписываем.
+    .where(and(eq(schema.payments.yookassaPaymentId, yookassaPaymentId), sql`${schema.payments.status} <> 'succeeded'`));
 }
 
 // ---------- SRS (интервальное повторение, коробки Лейтнера) ----------
@@ -2117,9 +2182,14 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
              jsonb_array_length(h.problem_ids)::int as total,
              (select count(*)::int from jsonb_array_elements_text(h.problem_ids) pid
                where exists (select 1 from ${schema.attempts} a
-                             where a.student_id = h.student_id and a.problem_id = pid and a.is_correct)) as done
+                             where a.student_id = h.student_id and a.problem_id = pid and a.is_correct
+                               and (h.kind = 'homework' or a.source = 'assignment')
+                               -- лимит времени: как в homeworkStatus, только ответы до конца отсчёта
+                               and (h.time_limit_minutes is null or s.started_at is null
+                                    or a.created_at <= s.started_at + h.time_limit_minutes * interval '1 minute'))) as done
       from ${schema.homeworks} h
       join ${schema.users} u on u.id = h.student_id
+      left join ${schema.assignmentSessions} s on s.homework_id = h.id and s.student_id = h.student_id
       where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
     `),
   ]);
