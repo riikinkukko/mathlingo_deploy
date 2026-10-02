@@ -1,4 +1,7 @@
+import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/auth";
+import RememberTopic from "@/components/RememberTopic";
+import { TOPIC_COOKIE } from "@/lib/topic-cookie";
 import {
   getCurriculum,
   computeStudentProgress,
@@ -87,9 +90,14 @@ export default async function StudentDashboard({
   // вероятности в одну общую последовательность. По умолчанию (без ?topic=
   // в URL) — просто первая тема, чтобы все существующие ссылки на /student
   // продолжали работать как раньше.
+  // Без ?topic= берём последний выбранный предмет из cookie (RememberTopic),
+  // иначе после перехода по вкладкам «Путь» сбрасывался на первый предмет.
   const defaultTopic = curriculum[0];
+  const savedTopicId = cookies().get(TOPIC_COOKIE)?.value;
   const selectedTopic =
-    curriculum.find((t) => t.topic.id === searchParams.topic) ?? defaultTopic;
+    curriculum.find((t) => t.topic.id === searchParams.topic) ??
+    curriculum.find((t) => t.topic.id === savedTopicId) ??
+    defaultTopic;
   const curriculumFull = curriculum;
   const curriculumFiltered = selectedTopic ? [selectedTopic] : [];
   const targetScoreRec = targetScoreRecommendation(user.targetScore);
@@ -237,6 +245,7 @@ export default async function StudentDashboard({
           energy={energy}
           energyMax={FREE_MAX_ENERGY}
         />
+        {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
           <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} />
           {targetScoreRec && (

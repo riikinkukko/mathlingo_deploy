@@ -14,15 +14,51 @@ export type MascotMood =
   | "love"
   | "hint";
 
-// Палитра из брендбука «Гео» — держимся её буквально, а не палитры
-// приложения (они близки, но это принципиально ЕГО цвета).
+// Гео 2.0 — цвета совпадают с приложением (pine / pine-mint / pine-dark),
+// плюс тёплые акценты: антенна-треугольник (amber) и румянец.
 const C = {
-  body: "#22C55E",
-  bodyLight: "#6EE7B7",
-  face: "#EFFFF7",
-  dark: "#0F5132",
+  body: "#1CAE6B",
+  bodyLight: "#8FD9B4",
+  feet: "#13804F",
+  face: "#F2FFF8",
+  dark: "#0F4D33",
   white: "#FFFFFF",
+  amber: "#F0A93C",
+  blush: "#FF8FA0",
 };
+
+/** Рука с тёмным контуром: сначала толстая тёмная линия, поверх — зелёная. */
+function Arm({ d }: { d: string }) {
+  return (
+    <>
+      <path d={d} fill="none" stroke={C.dark} strokeWidth="15" strokeLinecap="round" />
+      <path d={d} fill="none" stroke={C.body} strokeWidth="9" strokeLinecap="round" />
+    </>
+  );
+}
+
+/** Брови — главный источник «живости»: одна и та же мордочка с разными
+ * бровями читается как радость, удивление, тревога или задумчивость. */
+function Brows({ mood }: { mood: MascotMood }) {
+  const d: [string, string] =
+    mood === "thinking" || mood === "hint"
+      ? ["M37 39 L53 38", "M67 33 Q75 28 83 33"]
+      : mood === "worried"
+        ? ["M37 41 L53 35", "M67 35 L83 41"]
+        : mood === "surprised"
+          ? ["M37 32 Q45 26 53 31", "M67 31 Q75 26 83 32"]
+          : mood === "sleepy"
+            ? ["M38 40 L52 40", "M68 40 L82 40"]
+            : ["M37 37 Q45 32 53 36", "M67 36 Q75 32 83 37"];
+  return (
+    <>
+      <path d={d[0]} fill="none" stroke={C.dark} strokeWidth="3" strokeLinecap="round" />
+      <path d={d[1]} fill="none" stroke={C.dark} strokeWidth="3" strokeLinecap="round" />
+    </>
+  );
+}
+
+const BLUSH_MOODS: MascotMood[] = ["idle", "happy", "celebrating", "wink", "love", "hint"];
 
 interface MoodConfig {
   eyes: "open" | "closed" | "wink" | "heart" | "wide" | "happy";
@@ -196,16 +232,22 @@ export default function Mascot({
       >
         <svg viewBox="0 0 120 132" className="h-full w-full overflow-visible select-none">
           {/* тень-гало под ногами — намёк на парение */}
-          <ellipse cx="60" cy="120" rx="24" ry="5.5" fill={C.body} opacity="0.22" />
+          <ellipse cx="60" cy="125" rx="28" ry="5" fill={C.dark} opacity="0.14" />
 
           {/* орбитирующие геометрические спутники */}
           <g className="geo-orbit-group">
             <rect x="93" y="18" width="10" height="10" rx="2.5" fill={C.bodyLight} transform="rotate(18 98 23)" />
             <circle cx="14" cy="40" r="5" fill={C.bodyLight} />
-            <polygon points="60,4 66,15 54,15" fill={C.bodyLight} />
+
           </g>
 
           <g className="geo-breathe">
+            {/* ножки — под телом */}
+            <ellipse cx="44" cy="115" rx="12" ry="6.5" fill={C.feet} stroke={C.dark} strokeWidth="3" />
+            <ellipse cx="76" cy="115" rx="12" ry="6.5" fill={C.feet} stroke={C.dark} strokeWidth="3" />
+            {/* антенна-треугольник — «геометрическая» деталь персонажа */}
+            <path d="M60 25 L60 12" stroke={C.dark} strokeWidth="3" strokeLinecap="round" />
+            <path d="M52 13 L60 0 L68 13 Z" fill={C.amber} stroke={C.dark} strokeWidth="2.5" strokeLinejoin="round" />
             {/* тело */}
             <path
               d="M60 24
@@ -222,28 +264,35 @@ export default function Mascot({
             {/* левая рука */}
             <g className={armWave ? "geo-wave-arm" : armUp ? "geo-up-arm-l" : ""}>
               {armChin ? (
-                <path d="M26 84 Q8 72 24 58 Q34 50 43 64" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M26 84 Q8 72 24 58 Q34 50 43 64" />
               ) : armUp ? (
-                <path d="M26 84 Q10 76 12 54" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M26 84 Q10 76 12 54" />
               ) : (
-                <path d="M24 80 Q14 88 18 100" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M24 80 Q14 88 18 100" />
               )}
             </g>
 
             {/* правая рука */}
             <g className={armUp ? "geo-up-arm-r" : ""}>
               {armPoint ? (
-                <path d="M96 82 Q112 74 110 56" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M96 82 Q112 74 110 56" />
               ) : armUp ? (
-                <path d="M94 84 Q110 76 108 54" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M94 84 Q110 76 108 54" />
               ) : (
-                <path d="M96 80 Q106 88 102 100" fill="none" stroke={C.body} strokeWidth="10" strokeLinecap="round" />
+                <Arm d="M96 80 Q106 88 102 100" />
               )}
             </g>
             {armPoint && <circle cx="110" cy="54" r="4.5" fill={C.dark} />}
 
             {/* лицо */}
             <ellipse cx="60" cy="58" rx="34" ry="32" fill={C.face} />
+            <Brows mood={mood} />
+            {BLUSH_MOODS.includes(mood) && (
+              <>
+                <ellipse cx="34" cy="68" rx="6" ry="3.5" fill={C.blush} opacity="0.6" />
+                <ellipse cx="86" cy="68" rx="6" ry="3.5" fill={C.blush} opacity="0.6" />
+              </>
+            )}
 
             <g className={blinkNow ? "geo-blinking" : ""} style={{ transformOrigin: "60px 52px" }}>
               <Eye cx={46} state={cfg.eyes === "wink" ? "open" : cfg.eyes} />
