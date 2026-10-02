@@ -14,6 +14,9 @@ import { isTelegramConfigured, buildTelegramLinkUrl } from "@/lib/telegram";
 import { generateTelegramLinkCode, getMockScores, computeWeekActivity, getExamMapForStudent } from "@/lib/queries";
 import GoalCard from "@/components/GoalCard";
 import ExamMap from "@/components/ExamMap";
+import ExamPlanCard from "@/components/ExamPlanCard";
+import { computeExamPlan, perDayLabel, EXAM_DATE, EXAM_DATE_IS_ESTIMATE } from "@/lib/exam-plan";
+import { computeStudentProgress } from "@/lib/queries";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
@@ -36,11 +39,14 @@ export default async function ProfilePage({
   const progress = computeAchievementProgress(achievementStats);
   const earnedCount = progress.filter((p) => p.tierIndex >= 0).length;
   const topAchievements = [...progress].sort((a, b) => b.tierIndex - a.tierIndex).slice(0, 4);
-  const [mocksRaw, week, examMap] = await Promise.all([
+  const [mocksRaw, week, examMap, skillProgress] = await Promise.all([
     getMockScores(user.id),
     computeWeekActivity(user.id),
     getExamMapForStudent(user.id),
+    computeStudentProgress(user.id),
   ]);
+  const plan = computeExamPlan(skillProgress);
+  const examDateLabel = new Date(`${EXAM_DATE}T12:00:00Z`).toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
   // Комментарии к пробникам репетитор пишет для себя — ученику только балл и дату.
   const mocks = mocksRaw.map((m) => ({ ...m, note: null }));
   const weekDays = week.filter((d) => d.done).length;
@@ -122,6 +128,21 @@ export default async function ProfilePage({
           </div>
         </div>
 
+        <ExamPlanCard
+          dream={user.dreamUniversity}
+          targetScore={user.targetScore}
+          canEditTarget={!user.teacherId}
+          daysLeft={plan.daysLeft}
+          remaining={plan.remainingSkills}
+          total={plan.totalSkills}
+          perWeek={plan.perWeek}
+          perDayText={perDayLabel(plan.perDay)}
+          estimateNote={
+            EXAM_DATE_IS_ESTIMATE
+              ? `* Считаем до ${examDateLabel} — ориентировочно: официальное расписание ЕГЭ-2027 ещё не опубликовано.`
+              : `* ЕГЭ по профильной математике — ${examDateLabel}.`
+          }
+        />
         {/* Прогресс к экзамену: цель и пробники, неделя, карта номеров ЕГЭ. */}
         {(user.targetScore || mocks.length > 0) && <GoalCard targetScore={user.targetScore} mocks={mocks} readOnly />}
         <section className="mb-4 rounded-[20px] border border-line-soft bg-white p-4">

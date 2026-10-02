@@ -38,6 +38,7 @@ export interface User {
   yookassaCardType?: string;
   grade?: number;
   targetScore?: number;
+  dreamUniversity?: string;
   paymentRemindersEnabled?: boolean;
   paymentInstructions?: string;
   tgNotifyHomework?: boolean;

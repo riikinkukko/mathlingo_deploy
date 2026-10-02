@@ -49,6 +49,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     yookassaCardType: row.yookassaCardType ?? undefined,
     grade: row.grade ?? undefined,
     targetScore: row.targetScore ?? undefined,
+    dreamUniversity: row.dreamUniversity ?? undefined,
     paymentRemindersEnabled: row.paymentRemindersEnabled,
     paymentInstructions: row.paymentInstructions ?? undefined,
     tgNotifyHomework: row.tgNotifyHomework,

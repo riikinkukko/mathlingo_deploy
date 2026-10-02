@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/auth";
 import RememberTopic from "@/components/RememberTopic";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
+import { computeExamPlan, perDayLabel } from "@/lib/exam-plan";
 import {
   getCurriculum,
   computeStudentProgress,
@@ -248,6 +249,21 @@ export default async function StudentDashboard({
         {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
           <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} />
+          {(() => {
+            const plan = computeExamPlan(progress);
+            return (
+              <a
+                href="/student/profile"
+                className="flex items-center justify-between gap-3 rounded-2xl bg-pine-light/60 px-4 py-2.5 text-[13px] font-bold text-pine-dark"
+              >
+                <span className="min-w-0 truncate">
+                  {user.dreamUniversity ? `${user.dreamUniversity} · ` : ""}до ЕГЭ ~{plan.daysLeft} дн. ·{" "}
+                  {plan.remainingSkills > 0 ? `план: ${perDayLabel(plan.perDay)} в день` : "программа пройдена"}
+                </span>
+                <span aria-hidden>›</span>
+              </a>
+            );
+          })()}
           {heroCard}
           <div className="flex gap-2.5">{tiles}</div>
           {currentChapter && !chapterLockedByPlan && (

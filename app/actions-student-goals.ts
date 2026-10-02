@@ -134,3 +134,29 @@ export async function saveStudentNotesAction(
   revalidatePath(`/teacher/student/${studentId}`);
   return { ok: true, at: Date.now() };
 }
+
+export type DreamState = { ok?: boolean; at?: number; error?: string } | null;
+
+/**
+ * «Вуз мечты» на странице ученика. Цель по баллам ученик меняет сам, только
+ * если у него нет репетитора: у ученика репетитора цель ставит репетитор.
+ */
+export async function saveDreamAction(_prev: DreamState, formData: FormData): Promise<DreamState> {
+  const user = await getSessionUser();
+  if (!user || user.role !== "STUDENT") return { error: "Нет доступа" };
+  const dream = String(formData.get("dreamUniversity") ?? "").trim().slice(0, 120) || null;
+  const set: { dreamUniversity: string | null; targetScore?: number | null } = { dreamUniversity: dream };
+  if (!user.teacherId && formData.has("targetScore")) {
+    const raw = String(formData.get("targetScore") ?? "").trim();
+    if (raw === "") set.targetScore = null;
+    else {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 100) return { error: "Цель — число от 1 до 100" };
+      set.targetScore = n;
+    }
+  }
+  await db.update(schema.users).set(set).where(eq(schema.users.id, user.id));
+  revalidatePath("/student/profile");
+  revalidatePath("/student");
+  return { ok: true, at: Date.now() };
+}

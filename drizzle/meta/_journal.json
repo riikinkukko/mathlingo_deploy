@@ -141,6 +141,13 @@
       "when": 1790969143406,
       "tag": "0019_jittery_war_machine",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790969850716,
+      "tag": "0020_nappy_magus",
+      "breakpoints": true
     }
   ]
 }
