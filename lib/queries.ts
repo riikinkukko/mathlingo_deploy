@@ -396,6 +396,29 @@ export async function computeWeekActivity(
   return result;
 }
 
+/** Карта экзамена: по каждому номеру ЕГЭ — сколько задач в банке и сколько
+ * из них ученик решил верно (в любом режиме). */
+export async function getExamMapForStudent(
+  studentId: string
+): Promise<{ n: number; total: number; solved: number }[]> {
+  const rows = await db.execute(sql`
+    select p.ege_task_number as n,
+           count(*)::int as total,
+           count(*) filter (where exists (
+             select 1 from ${schema.attempts} a
+             where a.problem_id = p.id and a.student_id = ${studentId} and a.is_correct
+           ))::int as solved
+    from ${schema.problems} p
+    where p.ege_task_number is not null
+    group by 1
+  `);
+  return (rows.rows as { n: number; total: number; solved: number }[]).map((r) => ({
+    n: Number(r.n),
+    total: Number(r.total),
+    solved: Number(r.solved),
+  }));
+}
+
 export type PathState = "done" | "current" | "locked";
 
 // ---------- Цель дня — новая концепция из редизайна ----------

@@ -11,7 +11,9 @@ import {
 } from "@/lib/queries";
 import { computeAchievementProgress } from "@/lib/achievements";
 import { isTelegramConfigured, buildTelegramLinkUrl } from "@/lib/telegram";
-import { generateTelegramLinkCode } from "@/lib/queries";
+import { generateTelegramLinkCode, getMockScores, computeWeekActivity, getExamMapForStudent } from "@/lib/queries";
+import GoalCard from "@/components/GoalCard";
+import ExamMap from "@/components/ExamMap";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
@@ -34,6 +36,14 @@ export default async function ProfilePage({
   const progress = computeAchievementProgress(achievementStats);
   const earnedCount = progress.filter((p) => p.tierIndex >= 0).length;
   const topAchievements = [...progress].sort((a, b) => b.tierIndex - a.tierIndex).slice(0, 4);
+  const [mocksRaw, week, examMap] = await Promise.all([
+    getMockScores(user.id),
+    computeWeekActivity(user.id),
+    getExamMapForStudent(user.id),
+  ]);
+  // Комментарии к пробникам репетитор пишет для себя — ученику только балл и дату.
+  const mocks = mocksRaw.map((m) => ({ ...m, note: null }));
+  const weekDays = week.filter((d) => d.done).length;
 
   // Ссылку на бота строим прямо здесь, на сервере, и рендерим обычным <a
   // href>, а не через серверный экшен с redirect() на внешний домен —
@@ -85,13 +95,16 @@ export default async function ProfilePage({
         </div>
 
         {!user.emailVerifiedAt && (
-          <VerifyEmailReminder
-            reason={
-              isEnergyRechargeBlocked(user)
-                ? "Подтвердите email — без этого энергия не восстанавливается."
-                : undefined
-            }
-          />
+          <div className="mb-4">
+            <VerifyEmailReminder
+              compact
+              reason={
+                isEnergyRechargeBlocked(user)
+                  ? "Подтвердите email — без этого энергия не восстанавливается"
+                  : undefined
+              }
+            />
+          </div>
         )}
 
         <div className="card mb-6 p-5">
@@ -107,6 +120,33 @@ export default async function ProfilePage({
               style={{ width: `${level.progressPct}%` }}
             />
           </div>
+        </div>
+
+        {/* Прогресс к экзамену: цель и пробники, неделя, карта номеров ЕГЭ. */}
+        {(user.targetScore || mocks.length > 0) && <GoalCard targetScore={user.targetScore} mocks={mocks} readOnly />}
+        <section className="mb-4 rounded-[20px] border border-line-soft bg-white p-4">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-display text-[16px] font-black text-ink">Эта неделя</h2>
+            <span className="text-[12px] font-bold text-ink-soft">
+              {weekDays} из 7 дней · серия {streak}
+            </span>
+          </div>
+          <ul className="mt-3 grid grid-cols-7 gap-1.5">
+            {week.map((d) => (
+              <li key={d.label} className="flex flex-col items-center gap-1">
+                <span
+                  aria-label={`${d.label}: ${d.done ? "занимался" : "нет"}`}
+                  className={`h-9 w-full rounded-[10px] ${
+                    d.done ? "bg-pine-dark" : d.isToday ? "border-2 border-dashed border-pine-mint bg-white" : "bg-grid"
+                  }`}
+                />
+                <span className={`text-[11px] font-black ${d.isToday ? "text-ink" : "text-ink-soft"}`}>{d.label}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+        <div className="mb-6">
+          <ExamMap rows={examMap} />
         </div>
 
         <div className="mb-6 grid grid-cols-3 gap-3">
