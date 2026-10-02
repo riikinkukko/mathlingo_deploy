@@ -8,6 +8,7 @@ import {
   jsonb,
   pgEnum,
   primaryKey,
+  index,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -164,7 +165,9 @@ export const users = pgTable("users", {
   // У УЧЕНИКА: когда репетитор последний раз нажал «Напомнить» (не чаще раза в сутки).
   nudgedAt: timestamp("nudged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byTeacher: index("users_teacher_idx").on(t.teacherId),
+}));
 
 // Анти-абуз: попытки регистрации по IP-адресу — по отзыву внешнего
 // ревью, без этого легко создать 10 бесплатных аккаунтов репетитора
@@ -307,7 +310,12 @@ export const attempts = pgTable("attempts", {
   reviewStatus: reviewStatusEnum("review_status"),
   teacherFeedback: text("teacher_feedback"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // Почти все запросы к попыткам — «попытки ученика X» (серия, статистика,
+  // статус домашки). Без индекса каждый такой запрос читал всю таблицу.
+  byStudentTime: index("attempts_student_created_idx").on(t.studentId, t.createdAt),
+  byStudentProblem: index("attempts_student_problem_idx").on(t.studentId, t.problemId),
+}));
 
 export const homeworks = pgTable("homeworks", {
   id: text("id").primaryKey(),
@@ -322,7 +330,10 @@ export const homeworks = pgTable("homeworks", {
   problemIds: jsonb("problem_ids").notNull().$type<string[]>(),
   dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byStudent: index("homeworks_student_idx").on(t.studentId),
+  byTeacher: index("homeworks_teacher_idx").on(t.teacherId),
+}));
 
 export const assignmentSessions = pgTable("assignment_sessions", {
   id: text("id").primaryKey(),
@@ -333,7 +344,9 @@ export const assignmentSessions = pgTable("assignment_sessions", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byHomeworkStudent: index("assignment_sessions_hw_student_idx").on(t.homeworkId, t.studentId),
+}));
 
 export const lessonLogs = pgTable("lesson_logs", {
   id: text("id").primaryKey(),
@@ -347,7 +360,10 @@ export const lessonLogs = pgTable("lesson_logs", {
   topic: text("topic").notNull(),
   report: text("report").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byStudent: index("lesson_logs_student_idx").on(t.studentId, t.createdAt),
+  byTeacher: index("lesson_logs_teacher_idx").on(t.teacherId),
+}));
 
 // ---------------- Расписание занятий (этап 2 кабинета репетитора) ----------------
 // Отличается от lessonLogs: там — записи о ПРОШЕДШИХ занятиях (постфактум,
@@ -380,7 +396,10 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // кнопками в Telegram. Ставится атомарно, как remindedAt.
   teacherPromptedAt: timestamp("teacher_prompted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byTeacherTime: index("scheduled_lessons_teacher_starts_idx").on(t.teacherId, t.startsAt),
+  byStudentTime: index("scheduled_lessons_student_starts_idx").on(t.studentId, t.startsAt),
+}));
 
 // ---------------- Учёт оплат занятий (этап 3 кабинета репетитора) ----------------
 // НЕ путать с таблицей payments — там платежи за подписку Pro через ЮKassa.
@@ -401,7 +420,9 @@ export const studentPayments = pgTable("student_payments", {
   paidAt: date("paid_at", { mode: "string" }).notNull(), // YYYY-MM-DD
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byTeacherStudent: index("student_payments_teacher_student_idx").on(t.teacherId, t.studentId),
+}));
 
 // ---------------- Цель по ЕГЭ: результаты пробников (этап 4) ----------------
 // Сама цель хранится в users.targetScore (то же поле, что заполняет
@@ -419,7 +440,9 @@ export const mockScores = pgTable("mock_scores", {
   takenAt: date("taken_at", { mode: "string" }).notNull(), // YYYY-MM-DD
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byStudent: index("mock_scores_student_idx").on(t.studentId),
+}));
 
 // Приватные заметки репетитора об ученике. Отдельная таблица, а не колонка в
 // users: объект пользователя уходит в том числе на страницы самого ученика,
@@ -433,7 +456,9 @@ export const studentNotes = pgTable("student_notes", {
     .references(() => users.id, { onDelete: "cascade" }),
   notes: text("notes").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byStudent: index("student_notes_student_idx").on(t.studentId),
+}));
 
 // Вопрос ученика репетитору из задачи («Не понял»): условие + ответ ученика +
 // его сообщение; репетитор отвечает текстом. answeredAt/answer — NULL, пока
@@ -454,7 +479,10 @@ export const studentQuestions = pgTable("student_questions", {
   answer: text("answer"),
   answeredAt: timestamp("answered_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byTeacher: index("student_questions_teacher_idx").on(t.teacherId, t.createdAt),
+  byStudent: index("student_questions_student_idx").on(t.studentId),
+}));
 
 export const notifications = pgTable("notifications", {
   id: text("id").primaryKey(),
@@ -467,7 +495,9 @@ export const notifications = pgTable("notifications", {
   link: text("link").notNull(),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  byUserTime: index("notifications_user_created_idx").on(t.userId, t.createdAt),
+}));
 
 // ---------------- SRS (интервальное повторение, коробки Лейтнера) ----------------
 // Отдельная таблица от attempts: attempts — неизменяемый журнал всех попыток,

@@ -169,6 +169,13 @@
       "when": 1790972620140,
       "tag": "0023_puzzling_radioactive_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790980900952,
+      "tag": "0024_lumpy_jane_foster",
+      "breakpoints": true
     }
   ]
 }

@@ -2080,3 +2080,67 @@ export async function getOpenQuestionsCount(teacherId: string): Promise<number> 
     .where(and(eq(schema.studentQuestions.teacherId, teacherId), isNull(schema.studentQuestions.answeredAt)));
   return Number(rows[0]?.c ?? 0);
 }
+
+// ---------- Главная репетитора: всё по ученикам двумя запросами ----------
+
+/** Сводка по каждому ученику репетитора для главной: статистика попыток и
+ * статус домашек. Раньше это было ~(2 + число домашек) запросов на ученика,
+ * каждый читал все попытки ученика, — на 30 учениках главная грузилась секунду. */
+export async function getTeacherHomeStats(teacherId: string): Promise<
+  Map<
+    string,
+    {
+      attemptsCount: number;
+      solvedProblems: number;
+      accuracy: number;
+      lastActiveAt: string | null;
+      pendingCount: number;
+      overdueCount: number;
+    }
+  >
+> {
+  const [statRows, hwRows] = await Promise.all([
+    db.execute(sql`
+      select u.id as student_id,
+             count(a.id)::int as attempts,
+             count(distinct a.problem_id) filter (where a.is_correct)::int as solved,
+             count(a.id) filter (where a.is_correct)::int as correct,
+             max(a.created_at) as last_at
+      from ${schema.users} u
+      left join ${schema.attempts} a on a.student_id = u.id
+      where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
+      group by u.id
+    `),
+    db.execute(sql`
+      select h.student_id,
+             h.due_date,
+             jsonb_array_length(h.problem_ids)::int as total,
+             (select count(*)::int from jsonb_array_elements_text(h.problem_ids) pid
+               where exists (select 1 from ${schema.attempts} a
+                             where a.student_id = h.student_id and a.problem_id = pid and a.is_correct)) as done
+      from ${schema.homeworks} h
+      join ${schema.users} u on u.id = h.student_id
+      where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
+    `),
+  ]);
+  const out = new Map<string, { attemptsCount: number; solvedProblems: number; accuracy: number; lastActiveAt: string | null; pendingCount: number; overdueCount: number }>();
+  for (const r of statRows.rows as { student_id: string; attempts: number; solved: number; correct: number; last_at: Date | string | null }[]) {
+    const attempts = Number(r.attempts);
+    out.set(r.student_id, {
+      attemptsCount: attempts,
+      solvedProblems: Number(r.solved),
+      accuracy: attempts ? Math.round((Number(r.correct) / attempts) * 100) : 0,
+      lastActiveAt: r.last_at ? new Date(r.last_at).toISOString() : null,
+      pendingCount: 0,
+      overdueCount: 0,
+    });
+  }
+  const now = Date.now();
+  for (const h of hwRows.rows as { student_id: string; due_date: Date | string; total: number; done: number }[]) {
+    const s = out.get(h.student_id);
+    if (!s || Number(h.done) >= Number(h.total)) continue;
+    s.pendingCount++;
+    if (new Date(h.due_date).getTime() < now) s.overdueCount++;
+  }
+  return out;
+}

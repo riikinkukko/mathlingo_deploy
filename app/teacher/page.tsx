@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
+import { getStudentsOfTeacher, getTeacherHomeStats, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import { nudgedRecently } from "@/lib/nudge";
 import TeacherShell from "@/components/TeacherShell";
@@ -25,19 +25,8 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [cards, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions] = await Promise.all([
-    Promise.all(
-      students.map(async (s) => {
-        const [stats, homeworks] = await Promise.all([
-          computeOverallStats(s.id),
-          getHomeworksForStudent(s.id),
-        ]);
-        const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, s.id)));
-        const pendingCount = statuses.filter((st) => !st.complete).length;
-        const overdueCount = statuses.filter((st) => !st.complete && st.overdue).length;
-        return { s, stats, pendingCount, overdue: overdueCount > 0, overdueCount };
-      })
-    ),
+  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions] = await Promise.all([
+    getTeacherHomeStats(user.id),
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
     getLatestMockScoresForTeacher(user.id),
@@ -45,6 +34,11 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
     getTodayLessonsForTeacher(user.id),
     getOpenQuestionsCount(user.id),
   ]);
+  const EMPTY = { attemptsCount: 0, solvedProblems: 0, accuracy: 0, lastActiveAt: null, pendingCount: 0, overdueCount: 0 };
+  const cards = students.map((s) => {
+    const st = homeStats.get(s.id) ?? EMPTY;
+    return { s, stats: st, pendingCount: st.pendingCount, overdue: st.overdueCount > 0, overdueCount: st.overdueCount };
+  });
   const todayLabel = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", weekday: "short", day: "numeric", month: "long" });
   // В «Нужно внимание» — только прошлые дни: сегодняшние отмечаются в карточке «Сегодня».
   const todayIds = new Set(todayLessons.map((l) => l.id));
@@ -144,8 +138,9 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
               {students.length} {pluralRu(students.length, ["ученик", "ученика", "учеников"])}
             </p>
           </div>
-          {/* На телефоне «+ Ученик» уже есть в быстрых кнопках выше. */}
-          <div className={`gap-2 ${students.length > 0 ? "hidden lg:flex" : "flex"}`}>
+          {/* «+ Ученик» уже есть в быстрых кнопках выше, «Контент» — в боковом меню:
+              кнопки здесь нужны только пока учеников нет. */}
+          <div className={`gap-2 ${students.length > 0 ? "hidden" : "flex"}`}>
             {(isOwner || user.isAdmin) && (
               <a href="/teacher/content" className="btn-secondary">
                 Контент программы

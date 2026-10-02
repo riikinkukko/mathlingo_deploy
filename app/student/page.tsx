@@ -32,7 +32,6 @@ import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
 import BottomTabBar from "@/components/BottomTabBar";
 import { targetScoreRecommendation } from "@/lib/curriculum-recommendations";
-import NotificationBell from "@/components/NotificationBell";
 import Mascot from "@/components/Mascot";
 import VerticalSkillPath from "@/components/VerticalSkillPath";
 import HorizontalSkillPath from "@/components/HorizontalSkillPath";
@@ -328,10 +327,14 @@ export default async function StudentDashboard({
                 <span className="rounded-pill bg-amber-light px-3 py-1.5 text-[13px] font-black text-amber-text">
                   ⚡ {xp} XP
                 </span>
-                <span className="rounded-pill bg-coral-light px-3 py-1.5 text-[13px] font-black text-coral-text">
+                {/* Серия 0 — нейтрально, как в мобильной шапке. Колокольчик уже есть в боковой панели. */}
+                <span
+                  className={`rounded-pill px-3 py-1.5 text-[13px] font-black ${
+                    streak > 0 ? "bg-coral-light text-coral-text" : "border border-line bg-white text-ink-soft"
+                  }`}
+                >
                   🔥 {streak}
                 </span>
-                <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
               </div>
             </div>
 
