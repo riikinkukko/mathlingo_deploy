@@ -2,7 +2,7 @@ import { getSessionUser } from "@/lib/auth";
 import {
   computeOverallStats,
   computeXp,
-  computeStreak,
+  settleStreak,
   getLevelInfo,
   getAchievementStats,
   isStandaloneStudent,
@@ -19,6 +19,7 @@ import { computeExamPlan, perDayLabel, EXAM_DATE, EXAM_DATE_IS_ESTIMATE } from "
 import { computeStudentProgress } from "@/lib/queries";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
 import StudentRemindersToggle from "@/components/StudentRemindersToggle";
+import { MAX_FREEZES, FREEZE_EVERY_DAYS } from "@/lib/streak";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
@@ -33,7 +34,7 @@ export default async function ProfilePage({
 }) {
   const user = (await getSessionUser())!;
   const xp = await computeXp(user.id);
-  const streak = await computeStreak(user.id);
+  const { streak, freezes } = await settleStreak(user.id);
   const level = getLevelInfo(xp);
   const stats = await computeOverallStats(user.id);
   const achievementStats = await getAchievementStats(user.id);
@@ -157,15 +158,34 @@ export default async function ProfilePage({
             {week.map((d) => (
               <li key={d.label} className="flex flex-col items-center gap-1">
                 <span
-                  aria-label={`${d.label}: ${d.done ? "занимался" : "нет"}`}
-                  className={`h-9 w-full rounded-[10px] ${
-                    d.done ? "bg-pine-dark" : d.isToday ? "border-2 border-dashed border-pine-mint bg-white" : "bg-grid"
+                  aria-label={`${d.label}: ${d.done ? "занимался" : d.frozen ? "заморозка" : "нет"}`}
+                  className={`flex h-9 w-full items-center justify-center rounded-[10px] text-[15px] ${
+                    d.done
+                      ? "bg-pine-dark"
+                      : d.frozen
+                        ? "bg-teal-light"
+                        : d.isToday
+                          ? "border-2 border-dashed border-pine-mint bg-white"
+                          : "bg-grid"
                   }`}
-                />
+                >
+                  {d.frozen && <span aria-hidden>❄️</span>}
+                </span>
                 <span className={`text-[11px] font-black ${d.isToday ? "text-ink" : "text-ink-soft"}`}>{d.label}</span>
               </li>
             ))}
           </ul>
+          <div className="mt-3 flex items-center gap-3 rounded-2xl bg-teal-light/50 px-3 py-2.5">
+            <span className="flex shrink-0 gap-0.5 text-[18px]" aria-label={`Заморозок: ${freezes} из ${MAX_FREEZES}`}>
+              {Array.from({ length: MAX_FREEZES }, (_, i) => (
+                <span key={i} aria-hidden className={i < freezes ? "" : "opacity-25 grayscale"}>❄️</span>
+              ))}
+            </span>
+            <p className="text-[12px] leading-snug text-ink-soft">
+              <span className="font-extrabold text-ink">Заморозки: {freezes} из {MAX_FREEZES}.</span>{" "}
+              Пропустишь день — заморозка сохранит серию. Новая — за каждые {FREEZE_EVERY_DAYS} дней подряд.
+            </p>
+          </div>
         </section>
         <div className="mb-6">
           <ExamMap rows={examMap} />

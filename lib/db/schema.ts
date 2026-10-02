@@ -37,6 +37,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "review_decided",
   "review_pending",
   "skill_completed",
+  "streak_frozen",
   "weekly_report",
 ]);
 
@@ -154,6 +155,11 @@ export const users = pgTable("users", {
   // ДЗ»). eveningRemindedOn — дата последнего напоминания (YYYY-MM-DD, МСК).
   tgStudentReminders: boolean("tg_student_reminders").notNull().default(true),
   eveningRemindedOn: text("evening_reminded_on"),
+  // Заморозки серии (как в Duolingo): копятся до 2, по одной за каждые 7 дней
+  // подряд (одна стартовая); пропущенный день тратит заморозку вместо обнуления серии.
+  // freezeAwardedOn — день (МСК), когда выдали последнюю, чтобы не выдать дважды.
+  streakFreezes: integer("streak_freezes").notNull().default(1),
+  freezeAwardedOn: text("freeze_awarded_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -499,3 +505,16 @@ export const problemsRelations = relations(problems, ({ one, many }) => ({
   skill: one(skills, { fields: [problems.skillId], references: [skills.id] }),
   attempts: many(attempts),
 }));
+
+// Дни, «спасённые» заморозкой серии: считаются в серии как дни занятий.
+export const streakFreezeDays = pgTable(
+  "streak_freeze_days",
+  {
+    studentId: text("student_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    day: text("day").notNull(), // YYYY-MM-DD по Москве
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.studentId, t.day] }) })
+);

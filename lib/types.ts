@@ -224,6 +224,7 @@ export type NotificationType =
   | "review_decided"
   | "review_pending"
   | "skill_completed"
+  | "streak_frozen"
   | "weekly_report";
 
 export interface Notification {

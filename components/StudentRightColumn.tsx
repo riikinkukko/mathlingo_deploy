@@ -10,7 +10,7 @@ export default function StudentRightColumn({
 }: {
   level: LevelInfo;
   nextLevelTitle: string | null;
-  weekActivity: { label: string; done: boolean; isToday: boolean }[];
+  weekActivity: { label: string; done: boolean; frozen?: boolean; isToday: boolean }[];
   weakSkills: WeakSkillEntry[];
   tip: string;
 }) {
@@ -37,16 +37,18 @@ export default function StudentRightColumn({
       <div className="card p-4">
         <div className="mb-3 flex items-center justify-between">
           <p className="text-[11px] font-black uppercase tracking-wide text-ink-soft">Неделя</p>
-          <p className="text-[11px] font-extrabold text-pine">{streakDays} дней подряд</p>
+          <p className="text-[11px] font-extrabold text-pine">{streakDays} из 7 дней</p>
         </div>
         <div className="flex gap-1.5">
           {weekActivity.map((d) => (
             <div key={d.label} className="flex flex-1 flex-col items-center gap-1.5">
               <div
-                className={`h-9 w-full rounded-lg ${
-                  d.done ? "bg-pine" : d.isToday ? "bg-pine-mint" : "bg-grid"
+                className={`flex h-9 w-full items-center justify-center rounded-lg text-[14px] ${
+                  d.done ? "bg-pine" : d.frozen ? "bg-teal-light" : d.isToday ? "bg-pine-mint" : "bg-grid"
                 }`}
-              />
+              >
+                {d.frozen && <span aria-hidden>❄️</span>}
+              </div>
               <span className="text-[9.5px] font-bold text-ink-soft">{d.label}</span>
             </div>
           ))}

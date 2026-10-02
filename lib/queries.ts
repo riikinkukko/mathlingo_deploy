@@ -2,6 +2,7 @@ import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { eq, and, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
+import { settleStreak, loadStreakDays, mskDayKey, addDays } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
 import { secureToken, secureCode } from "./secure-random";
 import {
@@ -351,52 +352,28 @@ export function getLevelInfo(xp: number): LevelInfo {
   };
 }
 
+/** Серия дней подряд (по Москве, с учётом заморозок). Попутно тратит
+ * заморозки на пропущенные дни и выдаёт новые — см. lib/streak.ts. */
 export async function computeStreak(studentId: string) {
-  const attempts = await db
-    .select({ createdAt: schema.attempts.createdAt })
-    .from(schema.attempts)
-    .where(eq(schema.attempts.studentId, studentId));
-  const days = new Set(attempts.map((a) => a.createdAt.toISOString().slice(0, 10)));
-  if (days.size === 0) return 0;
-
-  const cursor = new Date();
-  const todayStr = cursor.toISOString().slice(0, 10);
-  if (!days.has(todayStr)) cursor.setDate(cursor.getDate() - 1);
-
-  let streak = 0;
-  while (days.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return streak;
+  return (await settleStreak(studentId)).streak;
 }
 
-/** Активность по дням текущей недели (Пн-Вс) — для визуализации серии в
- * правой колонке дашборда. today=true отмечает сегодняшний день отдельно
- * (даже если он ещё не "done" — цель дня могла не закрыться). */
+export { settleStreak } from "./streak";
+
+/** Активность по дням текущей недели (Пн–Вс, по Москве). frozen — день
+ * спасён заморозкой серии. isToday отмечает сегодняшний день. */
 export async function computeWeekActivity(
   studentId: string
-): Promise<{ label: string; done: boolean; isToday: boolean }[]> {
-  const attempts = await db
-    .select({ createdAt: schema.attempts.createdAt })
-    .from(schema.attempts)
-    .where(eq(schema.attempts.studentId, studentId));
-  const days = new Set(attempts.map((a) => a.createdAt.toISOString().slice(0, 10)));
-
-  const today = new Date();
-  const dow = (today.getDay() + 6) % 7; // 0=Пн..6=Вс
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - dow);
-
+): Promise<{ label: string; done: boolean; frozen: boolean; isToday: boolean }[]> {
+  const { active, frozen } = await loadStreakDays(studentId);
+  const today = mskDayKey();
+  const dow = (new Date(`${today}T12:00:00Z`).getUTCDay() + 6) % 7; // 0=Пн..6=Вс
+  const monday = addDays(today, -dow);
   const labels = ["ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"];
-  const result = [];
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = d.toISOString().slice(0, 10);
-    result.push({ label: labels[i], done: days.has(key), isToday: i === dow });
-  }
-  return result;
+  return labels.map((label, i) => {
+    const key = addDays(monday, i);
+    return { label, done: active.has(key), frozen: !active.has(key) && frozen.has(key), isToday: i === dow };
+  });
 }
 
 /** Карта экзамена: по каждому номеру ЕГЭ — сколько задач в банке и сколько
