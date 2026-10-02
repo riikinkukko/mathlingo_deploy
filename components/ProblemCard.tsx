@@ -162,13 +162,8 @@ export default function ProblemCard({
         </div>
       </div>
 
-      {(solved || pendingReview) && (
+      {pendingReview && (
         <div className="mb-3">
-          {solved && (
-            <span className="rounded-pill bg-pine px-2.5 py-1 text-[11px] font-extrabold text-white">
-              Решено ✓
-            </span>
-          )}
           {pendingReview && (
             <span className="rounded-pill bg-amber px-2.5 py-1 text-[11px] font-extrabold text-white">
               На проверке

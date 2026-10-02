@@ -7,6 +7,7 @@ import ProblemCard from "./ProblemCard";
 import TheoryCards from "./TheoryCards";
 import ComboBadge from "./ComboBadge";
 import CompletionCelebration from "./CompletionCelebration";
+import { IconClose } from "./icons";
 
 export default function LessonFlow({
   skillTitle,
@@ -78,19 +79,12 @@ export default function LessonFlow({
   if (phase === "theory") {
     return (
       <div className="mx-auto w-full max-w-2xl">
-        <div className="mb-4 flex items-center gap-3">
-          <a
-            href={backHref}
-            aria-label="Назад к пути обучения"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
-          >
-            ←
-          </a>
+        <LessonTopBar backHref={backHref}>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate font-display text-[17px] font-black text-ink">{skillTitle}</h1>
+            <p className="truncate font-display text-[16px] font-black text-ink">{skillTitle}</p>
             <p className="text-[12px] font-bold text-ink-soft">Сначала — коротко о теме</p>
           </div>
-        </div>
+        </LessonTopBar>
         <TheoryCards
           cards={theoryCards}
           completeLabel="Начать задачи →"
@@ -100,62 +94,44 @@ export default function LessonFlow({
     );
   }
 
-  return (
-    <div className="mx-auto w-full max-w-2xl">
-      <div className="mb-4 flex items-center gap-3">
-        <a
-          href={backHref}
-          aria-label="Назад к пути обучения"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
-        >
-          ←
-        </a>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-[17px] font-black text-ink">{skillTitle}</h1>
-          <p className="text-[12px] font-bold text-ink-soft">
-            Задача {index + 1} из {problems.length}
-            {current.egeTaskNumber ? ` · ЕГЭ №${current.egeTaskNumber}` : ""}
-          </p>
-        </div>
-      </div>
-      <div className="mb-4 h-1.5 w-full overflow-hidden rounded-pill bg-grid">
-        <div className="h-full rounded-pill bg-pine transition-all" style={{ width: `${stepPct}%` }} />
-      </div>
+  const isLast = index === problems.length - 1;
+  const canGoNext = currentState.status === "solved";
 
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+  return (
+    <div className="mx-auto w-full max-w-2xl pb-28">
+      {/* Верх урока: закрыть · один сегментированный прогресс · комбо.
+          Раньше было три индикатора подряд (полоса, точки, «Решено 2/4»). */}
+      <LessonTopBar backHref={backHref}>
+        <div className="flex min-w-0 flex-1 gap-1.5" role="group" aria-label={`Решено ${solvedCount} из ${problems.length}`}>
           {problems.map((p, i) => {
             const st = states[p.id]?.status;
             return (
               <button
                 key={p.id}
+                type="button"
                 onClick={() => {
-                  // Прыгать назад к уже пройденным задачам можно всегда —
-                  // это не открывает ничего нового. Вперёд, мимо текущей
-                  // задачи, которая ждёт проверки учителем — нельзя, тот
-                  // же принцип, что и у кнопки "Далее" ниже.
+                  // Назад — всегда; вперёд мимо задачи на проверке — нельзя.
                   if (i > index && currentState.status === "pending") return;
                   setIndex(i);
                 }}
-                className={`h-2.5 rounded-pill transition-all ${
-                  i === index
-                    ? "w-7 bg-pine"
-                    : st === "solved"
-                      ? "w-2.5 bg-pine/50"
-                      : "w-2.5 bg-line hover:bg-pine/30"
-                }`}
-                aria-label={`Задача ${i + 1}`}
-              />
+                aria-label={`Задача ${i + 1}${st === "solved" ? ", решена" : ""}`}
+                aria-current={i === index ? "step" : undefined}
+                className="flex h-11 flex-1 items-center"
+              >
+                <span
+                  className={`block h-3 w-full rounded-pill transition-all ${
+                    st === "solved" ? "bg-pine" : st === "pending" ? "bg-amber" : "bg-grid"
+                  } ${i === index ? "ring-2 ring-pine-dark ring-offset-2 ring-offset-paper" : ""}`}
+                />
+              </button>
             );
           })}
         </div>
-        <div className="flex items-center gap-2">
-          <ComboBadge combo={combo} />
-        </div>
-      </div>
+        <ComboBadge combo={combo} />
+      </LessonTopBar>
 
-      <p className="mb-3 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
-        Решено {solvedCount}/{problems.length}
+      <p className="mb-3 truncate text-[13px] font-bold text-ink-soft">
+        {skillTitle} · задача {index + 1} из {problems.length}
       </p>
 
       <ProblemCard
@@ -171,22 +147,33 @@ export default function LessonFlow({
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
       />
 
-      <div className="mt-4 flex gap-2">
-        <button
-          onClick={() => setIndex((i) => Math.max(0, i - 1))}
-          disabled={index === 0}
-          className="btn-secondary flex-1 disabled:opacity-30"
-        >
-          ← Назад
-        </button>
-        <button
-          onClick={() => setIndex((i) => Math.min(problems.length - 1, i + 1))}
-          disabled={index === problems.length - 1 || currentState.status === "pending"}
-          className="btn-secondary flex-1 disabled:opacity-30"
-        >
-          Далее →
-        </button>
-      </div>
+      {/* Одна большая кнопка внизу, под большим пальцем: появляется, когда
+          с задачей можно двигаться дальше. Вместо пары «← Назад / Далее →». */}
+      {canGoNext && !showCelebration && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line-soft bg-white px-4 pb-[max(16px,var(--app-sab))] pt-3">
+          <div className="mx-auto max-w-2xl">
+            {isLast ? (
+              solvedCount === problems.length ? (
+                <a href={nextHref} className="btn-primary !h-14 w-full !text-base">
+                  {nextLabel}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIndex(problems.findIndex((p) => states[p.id]?.status !== "solved"))}
+                  className="btn-primary !h-14 w-full !text-base"
+                >
+                  К нерешённой задаче
+                </button>
+              )
+            ) : (
+              <button type="button" onClick={() => setIndex(index + 1)} className="btn-primary !h-14 w-full !text-base">
+                Дальше
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {currentState.status === "pending" && (
         <p className="mt-2 text-center text-xs text-ink-soft">
@@ -216,6 +203,24 @@ export default function LessonFlow({
           isLastSubtopic={isLastSkill}
         />
       )}
+    </div>
+  );
+}
+
+/** Закреплённая верхняя строка урока (с отступом под статус-бар). */
+function LessonTopBar({ backHref, children }: { backHref: string; children: React.ReactNode }) {
+  return (
+    <div className="sticky top-0 z-20 -mx-4 mb-3 bg-paper px-2 pt-[var(--app-sat)]">
+      <div className="flex h-14 items-center gap-2 pr-2">
+        <a
+          href={backHref}
+          aria-label="Выйти из урока"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink-soft transition hover:text-ink"
+        >
+          <IconClose className="h-6 w-6" />
+        </a>
+        {children}
+      </div>
     </div>
   );
 }
