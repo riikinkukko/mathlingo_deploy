@@ -38,6 +38,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "review_pending",
   "skill_completed",
   "streak_frozen",
+  "teacher_nudge",
   "weekly_report",
 ]);
 
@@ -160,6 +161,8 @@ export const users = pgTable("users", {
   // freezeAwardedOn — день (МСК), когда выдали последнюю, чтобы не выдать дважды.
   streakFreezes: integer("streak_freezes").notNull().default(1),
   freezeAwardedOn: text("freeze_awarded_on"),
+  // У УЧЕНИКА: когда репетитор последний раз нажал «Напомнить» (не чаще раза в сутки).
+  nudgedAt: timestamp("nudged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

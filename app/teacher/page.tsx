@@ -1,6 +1,7 @@
 import { getSessionUser } from "@/lib/auth";
 import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
+import { nudgedRecently } from "@/lib/nudge";
 import TeacherShell from "@/components/TeacherShell";
 import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
@@ -60,10 +61,11 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
         const ref = c.stats.lastActiveAt ?? c.s.createdAt;
         const days = c.stats.lastActiveAt ? daysSince(c.stats.lastActiveAt) : null;
         const idleDays = daysSince(ref);
-        return { id: c.s.id, name: c.s.name, days, idleDays };
+        return { id: c.s.id, name: c.s.name, days, idleDays, nudged: nudgedRecently(c.s.nudgedAt) };
       })
       .filter((x) => x.idleDays >= INACTIVE_DAYS)
-      .map(({ id, name, days }) => ({ id, name, days })),
+      .sort((a, b) => b.idleDays - a.idleDays)
+      .map(({ id, name, days, nudged }) => ({ id, name, days, nudged })),
     debts: balances
       .filter((b) => b.balance < 0)
       .sort((a, b) => a.balance - b.balance)

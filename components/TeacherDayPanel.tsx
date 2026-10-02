@@ -1,4 +1,5 @@
 import { pluralRu } from "@/lib/pluralize";
+import NudgeButton from "./NudgeButton";
 
 /**
  * "Панель дня" — сводка вверху дашборда репетитора. Показывает только то, что
@@ -14,6 +15,8 @@ export interface DayPanelStudent {
   name: string;
   /** сколько дней назад заходил; null — не заходил ни разу */
   days: number | null;
+  /** репетитор уже нажимал «Напомнить» за последние сутки */
+  nudged?: boolean;
 }
 
 export interface DayPanelData {
@@ -100,23 +103,7 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
       title: "Просрочена домашка",
       sub: names(overdue),
     });
-  if (inactive.length > 0)
-    rows.push({
-      key: "inactive",
-      href: inactive.length === 1 ? `/teacher/student/${inactive[0].id}` : "/teacher#students",
-      badge: String(inactive.length),
-      tone: "bg-grid text-ink-soft",
-      title: "Давно не занимались",
-      sub:
-        inactive.length === 1
-          ? `${inactive[0].name}: ${daysLabel(inactive[0].days)}`
-          : inactive
-              .slice(0, 2)
-              .map((s) => `${s.name.split(" ")[0]} — ${daysLabel(s.days)}`)
-              .join(" · ") + (inactive.length > 2 ? ` · ещё ${inactive.length - 2}` : ""),
-    });
-
-  if (rows.length === 0 && openQuestions === 0) {
+  if (rows.length === 0 && inactive.length === 0) {
     return (
       <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3">
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pine-light font-black text-pine-dark">✓</span>
@@ -143,6 +130,32 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
             </a>
           </li>
         ))}
+        {inactive.length > 0 && (
+          // «Давно не занимались» — по строке на ученика с кнопкой «Напомнить»:
+          // одно нажатие, и ученику уходит уведомление (и в Telegram, если привязан).
+          <li className={rows.length > 0 ? "border-t border-line-soft" : ""}>
+            <p className="flex items-center gap-2 px-4 pt-3 text-[13px] font-extrabold text-ink-soft">
+              <span className="flex h-6 min-w-6 items-center justify-center rounded-[8px] bg-grid px-1 text-[12px] font-black">
+                {inactive.length}
+              </span>
+              Давно не занимались
+            </p>
+            <ul className="pb-1">
+              {inactive.slice(0, 5).map((st) => (
+                <li key={st.id} className="flex min-h-[52px] items-center gap-3 px-4 py-1.5">
+                  <a href={`/teacher/student/${st.id}`} className="min-w-0 flex-1">
+                    <span className="block truncate text-[15px] font-extrabold text-ink">{st.name}</span>
+                    <span className="block truncate text-[12px] text-ink-soft">{daysLabel(st.days)}</span>
+                  </a>
+                  <NudgeButton studentId={st.id} already={st.nudged} />
+                </li>
+              ))}
+              {inactive.length > 5 && (
+                <li className="px-4 pb-2 text-[12px] text-ink-soft">и ещё {inactive.length - 5}</li>
+              )}
+            </ul>
+          </li>
+        )}
       </ul>
     </section>
   );

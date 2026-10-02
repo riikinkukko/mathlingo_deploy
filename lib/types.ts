@@ -46,6 +46,8 @@ export interface User {
   tgDailyDigest?: boolean;
   tgWeeklyReport?: boolean;
   tgStudentReminders?: boolean;
+  /** Когда репетитор последний раз нажал «Напомнить» (ISO). */
+  nudgedAt?: string | null;
   createdAt: string;
 }
 
@@ -225,6 +227,7 @@ export type NotificationType =
   | "review_pending"
   | "skill_completed"
   | "streak_frozen"
+  | "teacher_nudge"
   | "weekly_report";
 
 export interface Notification {

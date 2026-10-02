@@ -58,6 +58,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     tgDailyDigest: row.tgDailyDigest,
     tgWeeklyReport: row.tgWeeklyReport,
     tgStudentReminders: row.tgStudentReminders,
+    nudgedAt: row.nudgedAt ? row.nudgedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };
 }

@@ -25,6 +25,7 @@ import { sendTelegramMessage, callTelegram, escapeTelegramHtml as esc, InlineKey
 import { applyLessonStatus, LessonMark } from "./lesson-status";
 import { isQuietHours } from "./lesson-reminders";
 import { pluralRu } from "./pluralize";
+import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 
 const TZ = "Europe/Moscow";
@@ -227,6 +228,25 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
   const messageId: number | undefined = cq?.message?.message_id;
   const answer = (text: string) => callTelegram("answerCallbackQuery", { callback_query_id: cq.id, text });
 
+  const nd = /^nd:(.+)$/.exec(data);
+  if (nd && chatId) {
+    const t = await findTeacherByChat(chatId);
+    if (!t) {
+      await answer("Этот Telegram не привязан к кабинету репетитора");
+      return;
+    }
+    const r = await nudgeStudent(t.id, nd[1]);
+    const first = (r.studentName ?? "").split(" ")[0];
+    await answer(
+      r.ok
+        ? `Напомнили: ${first}${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
+        : r.reason === "too_soon"
+          ? `Уже напоминали за последние сутки: ${first}`
+          : "Ученик не найден"
+    );
+    return;
+  }
+
   const m = /^ls:([dc]):(.+)$/.exec(data);
   if (!m || !chatId) {
     await answer("Кнопка устарела");
@@ -271,12 +291,16 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
 
 /** Текст «что сегодня»: для утренней сводки и для команды /today.
  * null — если сказать нечего (нет занятий, проверок, долгов). */
-export async function buildTodayText(teacherId: string, now: Date = new Date(), { greeting = false } = {}) {
+export async function buildTodayText(
+  teacherId: string,
+  now: Date = new Date(),
+  { greeting = false } = {}
+): Promise<{ text: string; replyMarkup?: InlineKeyboard } | null> {
   const { day } = mskParts(now);
   const dayStart = new Date(`${day}T00:00:00+03:00`);
   const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
 
-  const [lessons, pending, unmarked, balances] = await Promise.all([
+  const [lessons, pending, unmarked, balances, inactive] = await Promise.all([
     db
       .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
       .from(schema.scheduledLessons)
@@ -293,12 +317,14 @@ export async function buildTodayText(teacherId: string, now: Date = new Date(), 
     getPendingReviewsForTeacher(teacherId),
     getUnmarkedPastLessons(teacherId),
     getStudentBalances(teacherId),
+    getInactiveStudents(teacherId, 3, now),
   ]);
   // Неотмеченные — только прошлых дней: сегодняшние и так в списке занятий.
   const unmarkedOld = unmarked.filter((l) => new Date(l.startsAt) < dayStart);
   const debtors = balances.filter((b) => b.balance < 0).sort((a, b) => a.balance - b.balance);
 
-  if (lessons.length === 0 && pending.length === 0 && unmarkedOld.length === 0 && debtors.length === 0) return null;
+  if (lessons.length === 0 && pending.length === 0 && unmarkedOld.length === 0 && debtors.length === 0 && inactive.length === 0)
+    return null;
 
   const lines: string[] = [];
   lines.push(`<b>${greeting ? "Доброе утро! " : ""}Сегодня, ${esc(mskDateLong(now))}</b>`);
@@ -325,7 +351,19 @@ export async function buildTodayText(teacherId: string, now: Date = new Date(), 
       .join(", ");
     lines.push(`💸 Долги по занятиям: ${names}${debtors.length > 3 ? ` и ещё ${debtors.length - 3}` : ""}`);
   }
-  return lines.join("\n") + openLink("/teacher", "Открыть кабинет →");
+  if (inactive.length) {
+    const names = inactive
+      .slice(0, 3)
+      .map((s) => `${esc(s.name.split(" ")[0])} (${s.neverActive ? "не начинал(а)" : `${s.idleDays} дн.`})`)
+      .join(", ");
+    lines.push(`😴 Давно не занимались: ${names}${inactive.length > 3 ? ` и ещё ${inactive.length - 3}` : ""}`);
+  }
+  // Кнопки «Напомнить» — тем, кому ещё не напоминали за сутки.
+  const toNudge = inactive.filter((s) => !s.nudgedRecently).slice(0, 3);
+  const replyMarkup: InlineKeyboard | undefined = toNudge.length
+    ? { inline_keyboard: toNudge.map((s) => [{ text: `👋 Напомнить: ${s.name.split(" ")[0]}`, callback_data: `nd:${s.id}` }]) }
+    : undefined;
+  return { text: lines.join("\n") + openLink("/teacher", "Открыть кабинет →"), replyMarkup };
 }
 
 /** Раз в несколько минут из воркера: утренняя сводка, не чаще раза в день. */
@@ -350,8 +388,8 @@ export async function sendTeacherDigests(now: Date = new Date()): Promise<number
   let sent = 0;
   for (const t of claimed) {
     try {
-      const text = await buildTodayText(t.id, now, { greeting: true });
-      if (text && t.chatId && (await sendTelegramMessage(t.chatId, text))) sent++;
+      const r = await buildTodayText(t.id, now, { greeting: true });
+      if (r && t.chatId && (await sendTelegramMessage(t.chatId, r.text, { replyMarkup: r.replyMarkup }))) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось отправить сводку", t.id, e);
     }
@@ -366,6 +404,7 @@ export async function replyToday(chatId: string): Promise<void> {
     await sendTelegramMessage(chatId, "Команда /today — для репетиторов. Подключите Telegram в кабинете репетитора.");
     return;
   }
-  const text = await buildTodayText(teacher.id);
-  await sendTelegramMessage(chatId, text ?? `<b>Сегодня, ${esc(mskDateLong(new Date()))}</b>\n\nЗанятий нет, проверять нечего 🎉`);
+  const r = await buildTodayText(teacher.id);
+  if (r) await sendTelegramMessage(chatId, r.text, { replyMarkup: r.replyMarkup });
+  else await sendTelegramMessage(chatId, `<b>Сегодня, ${esc(mskDateLong(new Date()))}</b>\n\nЗанятий нет, проверять нечего 🎉`);
 }
