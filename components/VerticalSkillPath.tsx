@@ -1,4 +1,5 @@
-import { IconCheck, IconLock } from "./icons";
+import { IconCheck, IconLock, IconStar } from "./icons";
+import Mascot from "./Mascot";
 
 export interface VerticalPathItem {
   id: string;
@@ -9,118 +10,105 @@ export interface VerticalPathItem {
   solvedCount: number;
 }
 
+// Смещение кружков влево-вправо от центра — «змейка», как в Duolingo.
+const OFFSETS = [0, 52, 78, 52, 0, -52, -78, -52];
+
+/**
+ * Путь главы на телефоне: кружки-уроки змейкой, Гео рядом с текущим уроком.
+ * Кликаются пройденные (повторить) и текущий; закрытые — нет. Следующий
+ * после текущего показывает номер вместо замка — видно, что ждёт дальше.
+ */
 export default function VerticalSkillPath({ skills }: { skills: VerticalPathItem[] }) {
   const currentIdx = skills.findIndex((s) => s.state === "current");
 
   return (
-    <div className="space-y-0">
+    <ol className="relative flex flex-col items-center gap-3 py-2">
       {skills.map((s, i) => {
         const isDone = s.state === "done";
         const isCurrent = s.state === "current";
-        // "Доступный" — визуальный анонс следующего шага сразу после текущего
-        // (полное описание вместо "Откроется после X"), но НЕ кликабелен —
-        // кликается только текущий навык. Держим принцип "ровно одно
-        // очевидное следующее действие", просто даём заглянуть вперёд.
         const isNextPreview = s.state === "locked" && currentIdx >= 0 && i === currentIdx + 1;
-        const prevTitle = i > 0 ? skills[i - 1].title : null;
-        const connectorDone = isDone || isCurrent;
+        const offset = OFFSETS[i % OFFSETS.length];
+        const left = s.problemsCount - s.solvedCount;
 
-        const circle = (
+        const node = (
           <span
-            className={`relative z-10 flex shrink-0 items-center justify-center rounded-full ${
+            className={`relative flex items-center justify-center rounded-full transition active:translate-y-1 ${
               isCurrent
-                ? "h-12 w-12 border-4 border-pine bg-white"
+                ? "h-[76px] w-[76px] bg-pine text-white shadow-[0_6px_0_#12583A]"
                 : isDone
-                  ? "h-11 w-11 bg-pine text-white"
-                  : "h-11 w-11 bg-grid text-ink-soft"
+                  ? "h-[68px] w-[68px] bg-pine text-white shadow-[0_5px_0_#12583A]"
+                  : "h-[68px] w-[68px] bg-grid text-ink-soft shadow-[0_5px_0_#C9DED2]"
             }`}
           >
+            {isCurrent && (
+              // Кольцо прогресса текущего урока: сколько задач уже решено.
+              <span
+                aria-hidden
+                className="absolute -inset-[7px] rounded-full"
+                style={{
+                  background: `conic-gradient(#1CAE6B 0 ${Math.round((s.solvedCount / Math.max(1, s.problemsCount)) * 100)}%, #DCEEE3 0 100%)`,
+                  WebkitMask: "radial-gradient(circle, transparent 41px, #000 42px)",
+                  mask: "radial-gradient(circle, transparent 41px, #000 42px)",
+                }}
+              />
+            )}
             {isDone ? (
-              <IconCheck className="h-5 w-5" />
+              <IconCheck className="h-8 w-8" />
             ) : isCurrent ? (
-              <span className="font-display text-sm font-black text-pine-dark">
-                {s.solvedCount}/{s.problemsCount}
-              </span>
+              <IconStar className="h-8 w-8" />
             ) : isNextPreview ? (
-              <span className="font-display text-base font-black">{i + 1}</span>
+              <span className="font-display text-xl font-black">{i + 1}</span>
             ) : (
-              <IconLock className="h-4 w-4" />
+              <IconLock className="h-6 w-6" />
             )}
           </span>
         );
 
-        const content = (
-          <div className="min-w-0 flex-1 py-0.5">
-            <p
-              className={`${
-                isCurrent
-                  ? "font-display text-[15.5px] font-black text-ink"
-                  : isDone
-                    ? "text-[14px] font-bold text-ink-soft"
-                    : isNextPreview
-                      ? "text-[14px] font-extrabold text-ink"
-                      : "text-[14px] font-extrabold text-ink-soft"
-              }`}
-            >
-              {s.title}
-            </p>
-            {isCurrent && (
-              <p className="mt-0.5 text-[12px] font-extrabold text-pine">
-                СЕЙЧАС · {s.problemsCount - s.solvedCount}{" "}
-                {s.problemsCount - s.solvedCount === 1 ? "задача осталась" : "задач осталось"}
-              </p>
-            )}
-            {isNextPreview && (
-              <p className="mt-0.5 text-[12px] text-ink-soft">
-                {s.problemsCount} задач · {s.factsCount} карточки теории
-              </p>
-            )}
-            {s.state === "locked" && !isNextPreview && (
-              <p className="mt-0.5 text-[12px] text-ink-soft">
-                {prevTitle ? `Откроется после «${prevTitle}»` : "Пока закрыто"}
-              </p>
-            )}
-          </div>
+        const label = (
+          <span
+            className={`mt-2 block max-w-[170px] text-center text-[13px] leading-tight ${
+              isCurrent ? "font-black text-ink" : isDone ? "font-bold text-ink-soft" : "font-bold text-ink-soft/80"
+            }`}
+          >
+            {s.title}
+          </span>
         );
 
-        const row = (
-          <div className={`flex items-start gap-3.5 ${s.state === "locked" && !isNextPreview ? "opacity-75" : ""}`}>
-            <div className="flex flex-col items-center">
-              {circle}
-              {i < skills.length - 1 && (
-                <span
-                  className={`my-0.5 h-4 w-1 rounded-pill ${connectorDone ? "bg-pine" : "bg-grid"}`}
-                />
-              )}
-            </div>
-            {content}
-          </div>
-        );
+        const ariaLabel = isCurrent
+          ? `${s.title} — сейчас, осталось ${left}`
+          : isDone
+            ? `${s.title} — пройден, повторить`
+            : `${s.title} — закрыт`;
 
-        if (isCurrent) {
-          return (
-            <a
-              key={s.id}
-              href={`/student/skill/${s.id}`}
-              className="mb-1 block rounded-[18px] border-2 border-pine bg-white p-3.5 shadow-[0_6px_18px_-12px_rgba(19,42,32,0.4)]"
-            >
-              {row}
-            </a>
-          );
-        }
-        if (isDone) {
-          return (
-            <a key={s.id} href={`/student/skill/${s.id}`} className="block py-1">
-              {row}
-            </a>
-          );
-        }
         return (
-          <div key={s.id} className="py-1">
-            {row}
-          </div>
+          <li key={s.id} className="relative flex flex-col items-center" style={{ transform: `translateX(${offset}px)` }}>
+            {isCurrent && (
+              // Гео стоит с той стороны, где больше места, и подсказывает, что делать.
+              <div
+                className={`pointer-events-none absolute top-0 flex flex-col items-center ${
+                  offset >= 0 ? "right-full mr-3" : "left-full ml-3"
+                }`}
+              >
+                <span className="mb-1 whitespace-nowrap rounded-xl bg-ink px-2.5 py-1 text-[12px] font-extrabold text-white">
+                  {s.solvedCount === 0 ? "Начнём!" : `Ещё ${left}!`}
+                </span>
+                <Mascot mood="happy" size={64} float={false} />
+              </div>
+            )}
+            {isCurrent || isDone ? (
+              <a href={`/student/skill/${s.id}`} aria-label={ariaLabel} className="flex flex-col items-center">
+                {node}
+                {label}
+              </a>
+            ) : (
+              <div aria-label={ariaLabel} className="flex flex-col items-center">
+                {node}
+                {label}
+              </div>
+            )}
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }

@@ -248,11 +248,6 @@ export default async function StudentDashboard({
         {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
           <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} />
-          {targetScoreRec && (
-            <div className="rounded-xl bg-teal-light/60 px-3.5 py-2.5 text-[12px] text-teal-text">
-              {targetScoreRec}
-            </div>
-          )}
           {heroCard}
           <div className="flex gap-2.5">{tiles}</div>
           {currentChapter && !chapterLockedByPlan && (
@@ -275,6 +270,12 @@ export default async function StudentDashboard({
                   solvedCount: progress[s.id]?.solved ?? 0,
                 }))}
               />
+            </div>
+          )}
+          {/* Совет по целевому баллу — под путём, а не над главной кнопкой. */}
+          {targetScoreRec && (
+            <div className="rounded-xl bg-teal-light/60 px-3.5 py-2.5 text-[12px] text-teal-text">
+              {targetScoreRec}
             </div>
           )}
           {programTeaser}
