@@ -297,7 +297,7 @@ export async function createLessonLogAction(formData: FormData) {
   });
 
   revalidatePath(`/teacher/student/${studentId}`);
-  redirect(`/teacher/student/${studentId}`);
+  redirect(`/teacher/student/${studentId}?tab=lessons`);
 }
 
 // ---------- TEACHER: управление учениками ----------
@@ -521,7 +521,7 @@ export async function createHomeworkAction(formData: FormData) {
   });
 
   revalidatePath(`/teacher/student/${studentId}`);
-  redirect(`/teacher/student/${studentId}`);
+  redirect(`/teacher/student/${studentId}?tab=hw`);
 }
 
 // ---------- Уведомления ----------

@@ -58,7 +58,7 @@ export default async function StudentDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { done?: string; log?: string };
+  searchParams: { done?: string; log?: string; tab?: string; ok?: string; hw?: string };
 }) {
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
@@ -86,6 +86,23 @@ export default async function StudentDetailPage({
         topic: logLesson.topic ?? "",
       }
     : undefined;
+
+  // Вкладки карточки (как в макете): ?tab=. Ссылки из уведомлений и
+  // редиректы после действий сами открывают нужную вкладку.
+  const TABS = [
+    { key: "overview", label: "Обзор" },
+    { key: "lessons", label: "Занятия" },
+    { key: "payments", label: "Оплаты" },
+    { key: "hw", label: "ДЗ" },
+  ] as const;
+  type TabKey = (typeof TABS)[number]["key"];
+  const tab: TabKey =
+    (TABS.find((t) => t.key === searchParams.tab)?.key as TabKey | undefined) ??
+    (searchParams.done || searchParams.log || searchParams.ok === "lesson"
+      ? "lessons"
+      : searchParams.hw
+        ? "hw"
+        : "overview");
 
   const [
     curriculum,
@@ -137,27 +154,94 @@ export default async function StudentDetailPage({
 
   return (
     <TeacherShell active="students" title={student.name}>
-      <main className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="font-display text-2xl font-black text-ink">{student.name}</h1>
-            <p className="mt-1 text-sm text-ink-soft">{student.email}</p>
+      <main className="mx-auto max-w-3xl px-4 pb-8 pt-4">
+        <div className="mb-3 flex items-center gap-3">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-pine-light font-display text-[17px] font-black text-pine-dark">
+            {student.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-display text-[22px] font-black text-ink">{student.name}</h1>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {balance && balance.balance < 0 && (
+                <span className="rounded-pill bg-coral-light px-2.5 py-0.5 text-[12px] font-black text-coral-text">
+                  Долг {-balance.balance} {pluralRu(-balance.balance, ["занятие", "занятия", "занятий"])}
+                </span>
+              )}
+              {student.targetScore && (
+                <span className="rounded-pill border border-line-soft bg-white px-2.5 py-0.5 text-[12px] font-bold text-ink-soft">
+                  Цель {student.targetScore}
+                </span>
+              )}
+              {upcomingLessons[0] && (
+                <span className="rounded-pill border border-line-soft bg-white px-2.5 py-0.5 text-[12px] font-bold text-ink-soft">
+                  {new Date(upcomingLessons[0].startsAt).toLocaleString("ru-RU", {
+                    timeZone: "Europe/Moscow",
+                    weekday: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+              )}
+              {pendingReviews.length > 0 && (
+                <span className="rounded-pill bg-violet-light px-2.5 py-0.5 text-[12px] font-black text-violet-text">
+                  На проверке {pendingReviews.length}
+                </span>
+              )}
+            </div>
           </div>
-          <a href={`/teacher/homework/new?studentId=${student.id}`} className="btn-primary">
-            + Задать задание
-          </a>
+          {/* Обёртка: класс btn-primary перебивает hidden у самой ссылки. */}
+          <div className="hidden lg:block">
+            <a href={`/teacher/homework/new?studentId=${student.id}`} className="btn-primary">
+              + Задать задание
+            </a>
+          </div>
         </div>
 
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <StatChip label="Решено задач" value={`${stats.solvedProblems}/${stats.totalProblems}`} />
-          <StatChip label="Точность ответов" value={`${stats.accuracy}%`} />
-          <StatChip label="Активных дней за неделю" value={`${stats.activeDaysLast7}`} />
-        </div>
+        <nav
+          aria-label="Разделы ученика"
+          className="sticky top-[calc(var(--app-sat)+57px)] z-20 -mx-4 mb-4 bg-paper px-4 py-2 lg:top-0"
+        >
+          <div className="grid grid-cols-4 rounded-2xl bg-grid p-1">
+            {TABS.map((t) => (
+              <a
+                key={t.key}
+                href={`/teacher/student/${student.id}${t.key === "overview" ? "" : `?tab=${t.key}`}`}
+                aria-current={tab === t.key ? "page" : undefined}
+                className={`flex h-10 items-center justify-center rounded-xl text-[14px] transition ${
+                  tab === t.key ? "bg-white font-black text-ink shadow-soft" : "font-bold text-ink-soft"
+                }`}
+              >
+                {t.label}
+              </a>
+            ))}
+          </div>
+        </nav>
 
+        {tab === "overview" && (
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <StatChip label="решено задач" value={`${stats.solvedProblems}`} />
+            <StatChip label="точность" value={`${stats.accuracy}%`} />
+            <StatChip label="дней за неделю" value={`${stats.activeDaysLast7}/7`} />
+          </div>
+        )}
+        {tab === "overview" && (
+          <div className="mb-5 grid grid-cols-2 gap-2 lg:!hidden">
+            <a href={`/teacher/homework/new?studentId=${student.id}`} className="btn-primary !h-12 !normal-case !tracking-normal !text-[15px]">
+              Задать ДЗ
+            </a>
+            <a href={`/teacher/student/${student.id}?tab=payments`} className="btn-secondary !h-12 !normal-case !tracking-normal !text-[15px]">
+              Записать оплату
+            </a>
+          </div>
+        )}
+
+        {tab === "lessons" && (<>
         {doneLesson && doneLesson.status === "done" && (
           <LessonDoneBanner lesson={doneLesson} onStudentPage />
         )}
+        </>)}
 
+        {tab === "overview" && (<>
         <GoalCard targetScore={student.targetScore} mocks={mocks} />
 
         {pendingReviews.length > 0 && (
@@ -226,7 +310,9 @@ export default async function StudentDetailPage({
         >
           <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={student.targetScore} />
         </CollapsibleSection>
+        </>)}
 
+        {tab === "hw" && (<>
         <CollapsibleSection
           title="Прогресс по навыкам"
           summary={`${stats.solvedProblems}/${stats.totalProblems} задач`}
@@ -236,6 +322,7 @@ export default async function StudentDetailPage({
 
         <CollapsibleSection
           title="Разбор ошибок"
+          defaultOpen
           summary={mistakes.length > 0 ? `${mistakes.length} ${pluralRu(mistakes.length, ["ошибка", "ошибки", "ошибок"])}` : undefined}
         >
           <RecentList
@@ -289,7 +376,9 @@ export default async function StudentDetailPage({
             })}
           />
         </CollapsibleSection>
+        </>)}
 
+        {tab === "lessons" && (<>
         <CollapsibleSection
           title="Расписание занятий"
           summary={
@@ -302,7 +391,7 @@ export default async function StudentDetailPage({
               .filter(Boolean)
               .join(" · ") || undefined
           }
-          defaultOpen={unmarkedLessons.length > 0}
+          defaultOpen
         >
           {unmarkedLessons.length > 0 && (
             <div className="mb-4 rounded-card border-2 border-amber/40 bg-amber-light/30 p-3">
@@ -317,11 +406,13 @@ export default async function StudentDetailPage({
           </div>
           <AddLessonForm studentId={student.id} from="student" />
         </CollapsibleSection>
+        </>)}
 
+        {tab === "payments" && (<>
         <CollapsibleSection
           title="Оплаты"
           summary={balance ? balanceLabel(balance.balance) : undefined}
-          defaultOpen={!!balance && balance.balance < 0}
+          defaultOpen
         >
           {balance && <BalanceSummary balance={balance} />}
           <PaymentReminderControls
@@ -339,7 +430,9 @@ export default async function StudentDetailPage({
           </div>
           <PaymentHistory payments={payments} showStudent={false} from="student" />
         </CollapsibleSection>
+        </>)}
 
+        {tab === "lessons" && (<>
         <div id="journal" className="scroll-mt-20">
         <CollapsibleSection
           title="Журнал занятий"
@@ -371,7 +464,9 @@ export default async function StudentDetailPage({
           />
         </CollapsibleSection>
         </div>
+        </>)}
 
+        {tab === "overview" && (<>
         <section>
           <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>
           {parents.length > 0 && (
@@ -402,6 +497,7 @@ export default async function StudentDetailPage({
             <DeleteStudentButton studentId={student.id} studentName={student.name} />
           </div>
         </section>
+        </>)}
       </main>
     </TeacherShell>
   );

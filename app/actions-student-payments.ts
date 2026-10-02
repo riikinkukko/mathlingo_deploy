@@ -124,7 +124,7 @@ export async function deleteStudentPaymentAction(formData: FormData) {
   await db.delete(schema.studentPayments).where(eq(schema.studentPayments.id, paymentId));
 
   revalidateAll(payment.studentId);
-  redirect(back);
+  redirect(from === "student" ? `${back}?tab=payments` : back);
 }
 
 // ---------- Напоминания родителям об оплате ----------
