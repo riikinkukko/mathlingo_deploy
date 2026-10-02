@@ -41,6 +41,7 @@ import UpcomingLessons from "@/components/UpcomingLessons";
 import AddPaymentForm from "@/components/AddPaymentForm";
 import PaymentHistory from "@/components/PaymentHistory";
 import BalanceSummary, { balanceLabel } from "@/components/BalanceSummary";
+import { PaymentReminderControls } from "@/components/PaymentReminderControls";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
@@ -323,6 +324,16 @@ export default async function StudentDetailPage({
           defaultOpen={!!balance && balance.balance < 0}
         >
           {balance && <BalanceSummary balance={balance} />}
+          <PaymentReminderControls
+            studentId={student.id}
+            enabled={!!student.paymentRemindersEnabled}
+            recipientsLabel={
+              parents.length > 0
+                ? parents.map((p) => p.name).join(", ")
+                : `${student.name} (родители не приглашены)`
+            }
+            hasInstructions={!!teacher.paymentInstructions}
+          />
           <div className="mb-4">
             <AddPaymentForm studentId={student.id} />
           </div>

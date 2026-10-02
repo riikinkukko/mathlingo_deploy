@@ -55,7 +55,13 @@ export function buildTelegramLinkUrl(code: string): string | null {
  * же входящий запрос — если этот fetch зависал, вебхук не успевал вовремя
  * ответить 200 OK, и Telegram фиксировал у себя "Connection timed out",
  * переставая доставлять новые обновления вовсе. */
-export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
+export type InlineKeyboard = { inline_keyboard: { text: string; callback_data?: string; url?: string }[][] };
+
+export async function sendTelegramMessage(
+  chatId: string,
+  text: string,
+  opts: { replyMarkup?: InlineKeyboard } = {}
+): Promise<boolean> {
   const token = getBotToken();
   if (!token) return false;
   const controller = new AbortController();
@@ -69,6 +75,7 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
         text,
         parse_mode: "HTML",
         disable_web_page_preview: true,
+        ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
       }),
       signal: controller.signal,
     });
@@ -83,6 +90,37 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Любой другой метод Bot API (answerCallbackQuery, editMessageText…) с тем
+ * же таймаутом и тем же «не бросать исключений». */
+export async function callTelegram(method: string, body: object): Promise<boolean> {
+  const token = getBotToken();
+  if (!token) return false;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${API_BASE}/bot${token}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      console.error(`Telegram ${method} вернул ошибку:`, res.status, await res.text().catch(() => ""));
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`Ошибка вызова Telegram ${method}:`, e);
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function escapeTelegramHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 /** Регистрирует вебхук в Telegram — вызывается ОДИН РАЗ вручную после

@@ -7,6 +7,7 @@ import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, getStudentPaymentById } from "@/lib/queries";
+import { sendPaymentReminder } from "@/lib/payment-reminders";
 
 // Учёт оплат занятий: деньги, которые ученик платит репетитору напрямую.
 // Отдельно от actions-payments.ts (там подписка Pro через ЮKassa).
@@ -124,4 +125,58 @@ export async function deleteStudentPaymentAction(formData: FormData) {
 
   revalidateAll(payment.studentId);
   redirect(back);
+}
+
+// ---------- Напоминания родителям об оплате ----------
+
+export type ReminderState = { ok?: boolean; error?: string; at?: number; sent?: number } | null;
+
+/** Включить/выключить автонапоминания родителям для конкретного ученика. */
+export async function setPaymentRemindersAction(
+  _prev: ReminderState,
+  formData: FormData
+): Promise<ReminderState> {
+  const teacher = await getSessionUser();
+  const studentId = String(formData.get("studentId") || "");
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+
+  const enabled = formData.get("enabled") === "on";
+  await db
+    .update(schema.users)
+    .set({ paymentRemindersEnabled: enabled })
+    .where(eq(schema.users.id, studentId));
+  revalidatePath(`/teacher/student/${studentId}`);
+  return { ok: true, at: Date.now() };
+}
+
+/** «Как оплатить» — реквизиты репетитора, их видят родители в напоминаниях. */
+export async function savePaymentInstructionsAction(
+  _prev: ReminderState,
+  formData: FormData
+): Promise<ReminderState> {
+  const teacher = await getSessionUser();
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  const text = String(formData.get("paymentInstructions") ?? "").trim();
+  if (text.length > 300) return { error: "Слишком длинно — до 300 символов" };
+  await db
+    .update(schema.users)
+    .set({ paymentInstructions: text || null })
+    .where(eq(schema.users.id, teacher.id));
+  revalidatePath("/teacher/payments");
+  return { ok: true, at: Date.now() };
+}
+
+/** Кнопка «Напомнить об оплате» — отправляет сразу, по текущему балансу. */
+export async function sendPaymentReminderNowAction(
+  _prev: ReminderState,
+  formData: FormData
+): Promise<ReminderState> {
+  const teacher = await getSessionUser();
+  const studentId = String(formData.get("studentId") || "");
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+  const sent = await sendPaymentReminder(teacher.id, studentId, "manual");
+  if (sent === 0) return { error: "Не удалось отправить напоминание" };
+  return { ok: true, at: Date.now(), sent };
 }

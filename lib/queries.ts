@@ -49,6 +49,11 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     yookassaCardType: row.yookassaCardType ?? undefined,
     grade: row.grade ?? undefined,
     targetScore: row.targetScore ?? undefined,
+    paymentRemindersEnabled: row.paymentRemindersEnabled,
+    paymentInstructions: row.paymentInstructions ?? undefined,
+    tgNotifyHomework: row.tgNotifyHomework,
+    tgNotifyLessons: row.tgNotifyLessons,
+    tgDailyDigest: row.tgDailyDigest,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -1066,7 +1071,15 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
  * бизнес-логику. */
 export async function pushNotification(
   tx: Tx,
-  params: { userId: string; type: Notification["type"]; title: string; body: string; link: string }
+  params: {
+    userId: string;
+    type: Notification["type"];
+    title: string;
+    body: string;
+    link: string;
+    /** false — только в приложении, без дубля в Telegram. */
+    telegram?: boolean;
+  }
 ) {
   await tx.insert(schema.notifications).values({
     id: genId("n"),
@@ -1077,6 +1090,8 @@ export async function pushNotification(
     link: params.link,
     read: false,
   });
+
+  if (params.telegram === false) return;
 
   const userRows = await tx
     .select({ telegramChatId: schema.users.telegramChatId })

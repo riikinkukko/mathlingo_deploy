@@ -38,6 +38,11 @@ export interface User {
   yookassaCardType?: string;
   grade?: number;
   targetScore?: number;
+  paymentRemindersEnabled?: boolean;
+  paymentInstructions?: string;
+  tgNotifyHomework?: boolean;
+  tgNotifyLessons?: boolean;
+  tgDailyDigest?: boolean;
   createdAt: string;
 }
 
@@ -207,8 +212,10 @@ export interface LessonLog {
 
 export type NotificationType =
   | "assignment_created"
+  | "homework_completed"
   | "lesson_log_added"
   | "lesson_scheduled"
+  | "payment_reminder"
   | "review_decided"
   | "review_pending"
   | "skill_completed";

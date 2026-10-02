@@ -75,6 +75,20 @@ export default async function TeacherDashboard() {
             />
           </div>
         )}
+        {students.length > 0 && !user.telegramChatId && (
+          <a
+            href="/teacher/settings#telegram"
+            className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3 text-sm transition hover:border-pine"
+          >
+            <span className="flex-1">
+              <span className="block font-bold text-ink">Подключите Telegram</span>
+              <span className="block text-xs text-ink-soft">
+                Бот сообщит о сданной домашке и даст отметить занятие «было / не было» прямо из чата.
+              </span>
+            </span>
+            <span className="font-black text-pine-dark">→</span>
+          </a>
+        )}
         {students.length > 0 && <TeacherDayPanel data={panelData} />}
 
         {!isOwner && !isPro && (

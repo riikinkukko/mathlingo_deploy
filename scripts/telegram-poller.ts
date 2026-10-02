@@ -7,7 +7,8 @@
  * Здесь наоборот: сервер сам спрашивает у Telegram новые сообщения
  * исходящими запросами (getUpdates), которые с VPS работают стабильно.
  *
- * Заодно раз в 5 минут рассылает напоминания о занятиях (lib/lesson-reminders.ts).
+ * Заодно раз в 5 минут рассылает напоминания о занятиях (lib/lesson-reminders.ts),
+ * а репетиторам — вопросы «было ли занятие» и утреннюю сводку (lib/teacher-telegram.ts).
  *
  * Запуск отдельным процессом PM2 рядом с сайтом (деплой через GitHub Actions
  * делает это сам — см. .github/workflows/deploy.yml):
@@ -58,6 +59,7 @@ async function main() {
   // Импорт после dotenv: модуль тянет lib/queries -> БД.
   const { handleTelegramUpdate } = await import("../lib/telegram-updates");
   const { sendDueLessonReminders } = await import("../lib/lesson-reminders");
+  const { sendLessonStatusPrompts, sendTeacherDigests } = await import("../lib/teacher-telegram");
 
   // Напоминания о занятиях — отдельным циклом, параллельно опросу Telegram.
   // Повторная отправка исключена на уровне БД (атомарная пометка reminded_at),
@@ -69,6 +71,15 @@ async function main() {
         if (n > 0) console.log(`[telegram-poller] Напоминания о занятиях отправлены: ${n}`);
       } catch (e) {
         console.error("[telegram-poller] Ошибка напоминаний о занятиях:", e);
+      }
+      // Репетитору: «занятие прошло — было или не было?» и утренняя сводка.
+      try {
+        const p = await sendLessonStatusPrompts();
+        if (p > 0) console.log(`[telegram-poller] Вопросов «было ли занятие» отправлено: ${p}`);
+        const d = await sendTeacherDigests();
+        if (d > 0) console.log(`[telegram-poller] Утренних сводок отправлено: ${d}`);
+      } catch (e) {
+        console.error("[telegram-poller] Ошибка уведомлений репетитору:", e);
       }
       await sleep(REMINDER_INTERVAL_MS);
     }
@@ -87,7 +98,7 @@ async function main() {
       const data = await callApi(
         token,
         "getUpdates",
-        { offset, timeout: POLL_TIMEOUT_SEC, allowed_updates: ["message"] },
+        { offset, timeout: POLL_TIMEOUT_SEC, allowed_updates: ["message", "callback_query"] },
         (POLL_TIMEOUT_SEC + 10) * 1000
       );
       if (!data.ok) {

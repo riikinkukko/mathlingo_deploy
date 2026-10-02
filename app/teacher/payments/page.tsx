@@ -11,6 +11,7 @@ import AddPaymentForm from "@/components/AddPaymentForm";
 import PaymentHistory from "@/components/PaymentHistory";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import { balanceLabel, balanceColor } from "@/components/BalanceSummary";
+import { PaymentInstructionsForm } from "@/components/PaymentReminderControls";
 
 export default async function PaymentsPage() {
   const user = (await getSessionUser())!;
@@ -82,6 +83,8 @@ export default async function PaymentsPage() {
           </div>
         ) : (
           <>
+            <PaymentInstructionsForm value={user.paymentInstructions} />
+
             <CollapsibleSection title="Записать оплату" defaultOpen={recent.length === 0}>
               <AddPaymentForm students={balances.map((b) => ({ id: b.studentId, name: b.studentName }))} />
             </CollapsibleSection>

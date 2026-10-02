@@ -12,6 +12,7 @@ import {
   getScheduledLessonById,
   pushNotification,
 } from "@/lib/queries";
+import { applyLessonStatus } from "@/lib/lesson-status";
 
 // Все ученики платформы — российские (ЕГЭ), поэтому наивное время из
 // <input type="datetime-local"> трактуем как московское, а не как локальное
@@ -154,10 +155,8 @@ export async function setLessonStatusAction(formData: FormData) {
   if (!lesson || lesson.teacherId !== teacher.id) redirect(`${back}?error=1`);
   if (status !== "done" && status !== "cancelled") redirect(`${back}?error=1`);
 
-  await db
-    .update(schema.scheduledLessons)
-    .set({ status })
-    .where(eq(schema.scheduledLessons.id, lessonId));
+  // Та же логика, что у кнопок «Было / Не было» в Telegram.
+  await applyLessonStatus(teacher.id, lessonId, status);
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");

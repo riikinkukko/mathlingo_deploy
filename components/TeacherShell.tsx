@@ -7,14 +7,14 @@ import {
 import TeacherSidebar from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar, IconWallet } from "./icons";
+import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar, IconWallet, IconSettings } from "./icons";
 
 export default async function TeacherShell({
   active,
   title,
   children,
 }: {
-  active: "students" | "schedule" | "payments" | "content" | "upgrade";
+  active: "students" | "schedule" | "payments" | "content" | "upgrade" | "settings";
   title: string;
   children: React.ReactNode;
 }) {
@@ -35,7 +35,16 @@ export default async function TeacherShell({
           <Mascot mood="idle" size={32} float={false} />
           <span className="font-display text-[16px] font-black text-ink">{title}</span>
         </a>
-        <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
+        <div className="flex items-center gap-1">
+          <a
+            href="/teacher/settings"
+            aria-label="Настройки"
+            className={`flex h-11 w-11 items-center justify-center rounded-full ${active === "settings" ? "text-pine-dark" : "text-ink-soft"}`}
+          >
+            <IconSettings className="h-[22px] w-[22px]" />
+          </a>
+          <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
+        </div>
       </header>
 
       <TeacherSidebar

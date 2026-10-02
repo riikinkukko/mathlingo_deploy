@@ -13,6 +13,17 @@ import {
   genId,
 } from "./queries";
 import { User } from "./types";
+import { notifyHomeworkIfFinished } from "./teacher-telegram";
+
+/** Сбой уведомления репетитору не должен ломать отправку ответа. */
+async function safeNotifyHomework(user: User, problemId: string, source: string) {
+  if (source !== "assignment") return;
+  try {
+    await notifyHomeworkIfFinished(user, problemId);
+  } catch (e) {
+    console.error("[teacher-telegram] notifyHomeworkIfFinished:", e);
+  }
+}
 
 /**
  * Сравнение ответа ученика с эталоном. Раньше это была наивная строковая
@@ -95,6 +106,14 @@ export async function performSubmitAttempt(
   if (problem.answerType === "DETAILED") {
     if (user.teacherId) {
       const skill = problem.skillId ? await getSkill(problem.skillId) : undefined;
+      // В Telegram — по одному сообщению на решение только вне ДЗ: решения из
+      // задания придут одним сообщением «сдал ДЗ, на проверке N».
+      const teacherRow = await db
+        .select({ tgNotifyHomework: schema.users.tgNotifyHomework })
+        .from(schema.users)
+        .where(eq(schema.users.id, user.teacherId))
+        .limit(1);
+      const telegram = source !== "assignment" && teacherRow[0]?.tgNotifyHomework !== false;
       await db.transaction(async (tx) => {
         await tx.insert(schema.attempts).values({
           id: genId("a"),
@@ -111,8 +130,10 @@ export async function performSubmitAttempt(
           title: `${user.name}: решение ждёт проверки`,
           body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку.`,
           link: `/teacher/student/${user.id}`,
+          telegram,
         });
       });
+      await safeNotifyHomework(user, problemId, source);
       return { kind: "pending" as const };
     }
 
@@ -125,6 +146,7 @@ export async function performSubmitAttempt(
       source,
       reviewStatus: "self_checked",
     });
+    await safeNotifyHomework(user, problemId, source);
     return {
       kind: "correct" as const,
       explanation: problem.explanation,
@@ -143,6 +165,7 @@ export async function performSubmitAttempt(
     isCorrect,
     source,
   });
+  await safeNotifyHomework(user, problemId, source);
 
   // SRS обновляем только для "обучающих" источников (обычный урок и само
   // повторение) — попытки из ДЗ/контрольных на график повторения не влияют,

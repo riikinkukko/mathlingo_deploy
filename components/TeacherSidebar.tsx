@@ -1,7 +1,7 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
 import { logoutAction } from "@/app/actions";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconStar, IconCalendar, IconWallet } from "./icons";
+import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconStar, IconCalendar, IconWallet, IconSettings } from "./icons";
 import { Notification } from "@/lib/types";
 
 export default function TeacherSidebar({
@@ -12,7 +12,7 @@ export default function TeacherSidebar({
   notifications,
   unreadCount,
 }: {
-  active: "students" | "schedule" | "payments" | "content" | "upgrade";
+  active: "students" | "schedule" | "payments" | "content" | "upgrade" | "settings";
   pendingReviewCount: number;
   isAdmin: boolean;
   canEditContent: boolean;
@@ -25,6 +25,7 @@ export default function TeacherSidebar({
     { key: "payments", label: "Оплаты", href: "/teacher/payments", icon: IconWallet, badge: 0 },
     { key: "content", label: "Контент программы", href: "/teacher/content", icon: IconContent, badge: 0 },
     { key: "upgrade", label: "Тариф", href: "/teacher/upgrade", icon: IconStar, badge: 0 },
+    { key: "settings", label: "Настройки", href: "/teacher/settings", icon: IconSettings, badge: 0 },
   ] as const;
   // Редактор общего курса — только владельцу платформы и админам.
   const items = allItems.filter((i) => i.key !== "content" || canEditContent);

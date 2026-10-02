@@ -6,8 +6,9 @@ import {
   homeworkStatus,
 } from "@/lib/queries";
 import ParentShell from "@/components/ParentShell";
+import TelegramConnectCard from "@/components/TelegramConnectCard";
 
-export default async function ParentDashboard() {
+export default async function ParentDashboard({ searchParams }: { searchParams: { telegram?: string } }) {
   const user = (await getSessionUser())!;
   const children = await getChildrenOfParent(user.id);
 
@@ -71,6 +72,18 @@ export default async function ParentDashboard() {
             </div>
           )}
         </div>
+
+        {children.length > 0 && (
+          <div className="mt-8">
+            <TelegramConnectCard
+              user={user}
+              returnTo="/parent"
+              disconnected={searchParams.telegram === "disconnected"}
+              pitch="Напоминания о занятиях, отчёты репетитора после урока, пройденные темы и напоминания об оплате — прямо в Telegram, без входа в приложение."
+              connectedNote="Уведомления о ребёнке дублируются сюда."
+            />
+          </div>
+        )}
       </main>
     </ParentShell>
   );

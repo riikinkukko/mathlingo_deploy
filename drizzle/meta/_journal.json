@@ -113,6 +113,20 @@
       "when": 1790557925108,
       "tag": "0015_optimal_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790601754750,
+      "tag": "0016_dry_revanche",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790941726096,
+      "tag": "0017_next_madripoor",
+      "breakpoints": true
     }
   ]
 }

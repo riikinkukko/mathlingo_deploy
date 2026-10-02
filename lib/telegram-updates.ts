@@ -1,5 +1,6 @@
 import { sendTelegramMessage } from "./telegram";
 import { linkTelegramAccountByCode } from "./queries";
+import { handleCallbackQuery, replyToday } from "./teacher-telegram";
 
 /**
  * Общая обработка одного апдейта от Telegram. Используется в двух местах:
@@ -14,12 +15,23 @@ import { linkTelegramAccountByCode } from "./queries";
  * сервера к api.telegram.org работают (getMe в diagnose-telegram.ts проходит).
  */
 export async function handleTelegramUpdate(update: any): Promise<void> {
+  // Кнопки «Было / Не было» под вопросом о прошедшем занятии.
+  if (update?.callback_query) {
+    await handleCallbackQuery(update.callback_query);
+    return;
+  }
+
   const message = update?.message;
   const text: string | undefined = message?.text;
   const chatId: string | undefined = message?.chat?.id?.toString();
   console.log("[telegram] Входящее сообщение:", { chatId, text });
 
-  if (!text || !chatId || !text.startsWith("/start")) return;
+  if (!text || !chatId) return;
+  if (/^\/today(@\w+)?$/.test(text.trim())) {
+    await replyToday(chatId);
+    return;
+  }
+  if (!text.startsWith("/start")) return;
 
   const code = text.replace("/start", "").trim();
   let replyText: string;
@@ -32,7 +44,7 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
       linked ? "успех" : "код не найден в БД (устарел/уже использован)"
     );
     replyText = linked
-      ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда."
+      ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда.\n\nРепетиторам: /today — занятия и дела на сегодня."
       : "Не нашли код привязки. Вернитесь в приложение, обновите страницу профиля и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая.";
   } else {
     replyText =

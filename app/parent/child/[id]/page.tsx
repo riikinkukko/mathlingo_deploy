@@ -12,7 +12,9 @@ import {
   getMockScores,
   getWeeklyStats,
   getUpcomingLessonsForStudent,
+  getStudentBalance,
 } from "@/lib/queries";
+import { balanceLabel, balanceColor } from "@/components/BalanceSummary";
 import GoalCard from "@/components/GoalCard";
 import UpcomingLessons from "@/components/UpcomingLessons";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
@@ -59,6 +61,12 @@ export default async function ChildDetailPage({
   // балл и дату. Обнуляем сразу, чтобы текст не попал ни в HTML, ни в данные.
   const mocks = mocksRaw.map((m) => ({ ...m, note: null }));
   const solved12w = weekly.reduce((sum, w) => sum + w.solved, 0);
+  // Баланс оплат показываем родителю, только если репетитор сам включил для
+  // этого ученика напоминания об оплате (значит, ведёт оплаты в приложении).
+  const balance =
+    child.paymentRemindersEnabled && child.teacherId
+      ? await getStudentBalance(child.teacherId, child.id)
+      : undefined;
 
   return (
     <ParentShell title={child.name}>
@@ -77,6 +85,23 @@ export default async function ChildDetailPage({
         <GoalCard targetScore={child.targetScore} mocks={mocks} readOnly />
         {/* У GoalCard свой нижний отступ; если карточки нет — держим ритм страницы. */}
         {!child.targetScore && mocks.length === 0 && <div className="mb-4" />}
+
+        {balance && (
+          <div className={`card mb-6 p-4 ${balance.balance < 0 ? "border-2 !border-coral bg-coral-light/30" : ""}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-ink">Оплата занятий</p>
+              <p className={`text-sm font-bold ${balanceColor(balance.balance)}`}>{balanceLabel(balance.balance)}</p>
+            </div>
+            <p className="mt-1 text-xs text-ink-soft">
+              Оплачено занятий: {balance.paidLessons} · проведено: {balance.doneLessons}
+            </p>
+            {teacher?.paymentInstructions && (
+              <p className="mt-2 text-xs text-ink">
+                <span className="font-bold">Как оплатить:</span> {teacher.paymentInstructions}
+              </p>
+            )}
+          </div>
+        )}
 
         {upcomingLessons.length > 0 && (
           <CollapsibleSection

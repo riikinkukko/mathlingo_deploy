@@ -28,8 +28,10 @@ export const assignmentKindEnum = pgEnum("assignment_kind", ["homework", "test",
 export const audienceEnum = pgEnum("audience", ["assigned", "pro_standalone"]);
 export const notificationTypeEnum = pgEnum("notification_type", [
   "assignment_created",
+  "homework_completed",
   "lesson_log_added",
   "lesson_scheduled",
+  "payment_reminder",
   "review_decided",
   "review_pending",
   "skill_completed",
@@ -122,6 +124,21 @@ export const users = pgTable("users", {
   // не просто хранится для отчётности. См. lib/curriculum-recommendations.ts.
   grade: integer("grade"), // 7-11, null — не заполнено (ученики репетитора, старые аккаунты)
   targetScore: integer("target_score"), // цель по баллам ЕГЭ, 0-100
+  // Напоминания об оплате (учёт оплат репетитора). У УЧЕНИКА: включил ли
+  // репетитор автонапоминания родителям. По умолчанию выключено — иначе
+  // родители учеников, чьи оплаты репетитор в приложении не ведёт, получали
+  // бы ложные «есть неоплаченные занятия».
+  paymentRemindersEnabled: boolean("payment_reminders_enabled").notNull().default(false),
+  // У РЕПЕТИТОРА: как ему заплатить (СБП по номеру, банк…) — добавляется в
+  // напоминания родителям.
+  paymentInstructions: text("payment_instructions"),
+  // Telegram у РЕПЕТИТОРА: что слать (по умолчанию всё включено, но пока
+  // Telegram не привязан, ничего не уходит). digestSentOn — дата (МСК,
+  // YYYY-MM-DD) последней утренней сводки, чтобы не прислать её дважды.
+  tgNotifyHomework: boolean("tg_notify_homework").notNull().default(true),
+  tgNotifyLessons: boolean("tg_notify_lessons").notNull().default(true),
+  tgDailyDigest: boolean("tg_daily_digest").notNull().default(true),
+  digestSentOn: text("digest_sent_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -335,6 +352,9 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // Когда отправили напоминание (Telegram + уведомление). Ставится атомарно
   // до отправки — так даже два воркера не пришлют напоминание дважды.
   remindedAt: timestamp("reminded_at", { withTimezone: true }),
+  // Когда репетитору ушёл вопрос «Занятие прошло — было или не было?» с
+  // кнопками в Telegram. Ставится атомарно, как remindedAt.
+  teacherPromptedAt: timestamp("teacher_prompted_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
