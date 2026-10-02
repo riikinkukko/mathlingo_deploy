@@ -13,6 +13,9 @@ export default function CompletionCelebration({
   nextLabel,
   isLastSubtopic = false,
   eyebrow,
+  stats,
+  secondaryHref,
+  secondaryLabel,
 }: {
   subtopicTitle: string;
   xpEarned: number;
@@ -21,6 +24,11 @@ export default function CompletionCelebration({
   nextLabel: string;
   isLastSubtopic?: boolean;
   eyebrow?: string;
+  /** Точность (% задач без ошибок) и время урока — показываются плитками. */
+  stats?: { accuracy?: number; seconds?: number };
+  /** Вторая, тихая ссылка под главной кнопкой (например, «Разобрать ошибки»). */
+  secondaryHref?: string;
+  secondaryLabel?: string;
 }) {
   const [displayedXp, setDisplayedXp] = useState(0);
   const totalXp = xpEarned + bonusXp;
@@ -60,33 +68,66 @@ export default function CompletionCelebration({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in items-center justify-center bg-ink/40 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm animate-scale-in rounded-card bg-white p-8 text-center shadow-soft">
-        <div className="mx-auto mb-2 flex h-24 items-center justify-center">
-          <Mascot mood="celebrating" size={88} />
-        </div>
-        <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">
-          {eyebrow ?? (isLastSubtopic ? "Модуль пройден 🎉" : "Тема пройдена")}
-        </p>
-        <h2 className="mt-1 font-display text-2xl font-black text-ink">{subtopicTitle}</h2>
+  const time =
+    stats?.seconds !== undefined
+      ? `${Math.floor(stats.seconds / 60)}:${String(Math.round(stats.seconds % 60)).padStart(2, "0")}`
+      : null;
 
-        <div className="mx-auto mt-5 inline-flex items-center gap-2 rounded-pill bg-amber-light px-5 py-2.5">
-          <span className="font-display text-2xl font-black text-amber">+{displayedXp}</span>
-          <span className="text-sm font-extrabold uppercase tracking-wide text-amber">XP</span>
+  // Полноэкранный итог (как в макете): тёмно-зелёный фон, празднующий Гео,
+  // плитки «опыт / точность / время», одна большая кнопка внизу.
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Итог урока"
+      className="fixed inset-0 z-50 flex animate-fade-in flex-col items-center overflow-y-auto bg-pine-darker px-6 pb-[max(24px,var(--app-sab))] pt-[calc(var(--app-sat)+40px)] text-white"
+    >
+      <div className="flex w-full max-w-sm flex-1 flex-col items-center">
+        {/* Светлый круг за Гео — тёмный контур персонажа иначе теряется на тёмном фоне. */}
+        <div className="flex h-48 w-48 animate-scale-in items-center justify-center rounded-full bg-white/10">
+          <Mascot mood="celebrating" size={160} />
+        </div>
+        <p className="mt-4 text-[13px] font-extrabold uppercase tracking-widest text-pine-mint">
+          {eyebrow ?? (isLastSubtopic ? "Модуль пройден" : "Урок пройден")}
+        </p>
+        <h2 className="mt-1 text-center font-display text-[26px] font-black leading-tight">{subtopicTitle}</h2>
+
+        <div className={`mt-7 grid w-full gap-2.5 ${stats ? "grid-cols-3" : "grid-cols-1"}`}>
+          <Tile label="Опыт" value={`+${displayedXp}`} tone="text-amber-dark" />
+          {stats?.accuracy !== undefined && <Tile label="Точность" value={`${stats.accuracy}%`} tone="text-pine-dark" />}
+          {time && <Tile label="Время" value={time} tone="text-violet-dark" />}
         </div>
 
         {bonusXp > 0 && (
-          <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-extrabold text-pine">
-            <IconStar className="h-3.5 w-3.5" />
-            Идеально! Ни одной ошибки — бонус +{bonusXp} XP
+          <p className="mt-4 flex items-center justify-center gap-1.5 rounded-pill bg-white/10 px-4 py-2 text-[13px] font-extrabold">
+            <IconStar className="h-4 w-4 text-amber" />
+            Без единой ошибки — бонус +{bonusXp} XP
           </p>
         )}
 
-        <a href={nextHref} className="btn-primary mt-7 w-full">
+        <div className="min-h-8 flex-1" />
+
+        <a
+          href={nextHref}
+          className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-white px-5 py-3 text-center font-display text-[17px] font-black leading-snug text-pine-darker shadow-[0_4px_0_rgba(0,0,0,0.25)] transition active:translate-y-0.5"
+        >
           {nextLabel}
         </a>
+        {secondaryHref && secondaryLabel && (
+          <a href={secondaryHref} className="mt-2 flex min-h-[44px] items-center justify-center text-[15px] font-bold text-pine-mint">
+            {secondaryLabel}
+          </a>
+        )}
       </div>
+    </div>
+  );
+}
+
+function Tile({ label, value, tone }: { label: string; value: string; tone: string }) {
+  return (
+    <div className="rounded-2xl bg-white px-2 py-3 text-center text-ink">
+      <p className={`text-[11px] font-black uppercase tracking-wide ${tone}`}>{label}</p>
+      <p className="mt-1 font-display text-[24px] font-black leading-none">{value}</p>
     </div>
   );
 }

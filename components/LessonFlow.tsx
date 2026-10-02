@@ -50,6 +50,9 @@ export default function LessonFlow({
   const [hadMistake, setHadMistake] = useState(false);
   const [wasAlreadyComplete] = useState(allSolvedInitially);
   const [showCelebration, setShowCelebration] = useState(false);
+  // Для итога урока: когда начали и в каких задачах ошибались.
+  const [startedAt] = useState(() => Date.now());
+  const [mistakeIds, setMistakeIds] = useState<Set<string>>(new Set());
 
   const solvedCount = Object.values(states).filter((s) => s.status === "solved").length;
 
@@ -64,9 +67,10 @@ export default function LessonFlow({
     }
   }
 
-  function handleWrong() {
+  function handleWrong(problemId: string) {
     setCombo(0);
     setHadMistake(true);
+    setMistakeIds((prev) => new Set(prev).add(problemId));
   }
 
   const current = problems[index];
@@ -143,7 +147,7 @@ export default function LessonFlow({
         previousAnswer={currentState.previousAnswer}
         source="lesson"
         onSolved={() => handleSolved(current.id)}
-        onWrong={handleWrong}
+        onWrong={() => handleWrong(current.id)}
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
       />
 
@@ -201,6 +205,13 @@ export default function LessonFlow({
           nextHref={nextHref}
           nextLabel={nextLabel}
           isLastSubtopic={isLastSkill}
+          eyebrow={isLastSkill ? "Модуль пройден" : "Урок пройден"}
+          stats={{
+            accuracy: Math.round(((problems.length - mistakeIds.size) / Math.max(1, problems.length)) * 100),
+            seconds: (Date.now() - startedAt) / 1000,
+          }}
+          secondaryHref={mistakeIds.size > 0 ? "/student/mistakes" : undefined}
+          secondaryLabel={mistakeIds.size > 0 ? "Разобрать ошибки" : undefined}
         />
       )}
     </div>
