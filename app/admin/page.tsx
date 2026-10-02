@@ -15,9 +15,14 @@ export default async function AdminPage() {
             <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Admin</p>
             <h1 className="font-display text-xl font-black text-ink">Самостоятельные пользователи</h1>
           </div>
-          <a href="/admin/payments" className="btn-secondary !text-xs">
-            Все платежи
-          </a>
+          <div className="flex gap-2">
+            <a href="/admin/metrics" className="btn-primary !text-xs">
+              Метрики
+            </a>
+            <a href="/admin/payments" className="btn-secondary !text-xs">
+              Все платежи
+            </a>
+          </div>
         </div>
       </header>
 
