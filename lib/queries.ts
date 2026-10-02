@@ -669,6 +669,30 @@ export async function getUpcomingLessonsForTeacher(
   return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
 }
 
+/** Занятия репетитора на сегодня (по Москве): запланированные и проведённые. */
+export async function getTodayLessonsForTeacher(
+  teacherId: string,
+  now: Date = new Date()
+): Promise<import("./types").ScheduledLessonWithStudent[]> {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(now); // YYYY-MM-DD
+  const start = new Date(`${day}T00:00:00+03:00`);
+  const end = new Date(start.getTime() + 24 * 3600 * 1000);
+  const rows = await db
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .where(
+      and(
+        eq(schema.scheduledLessons.teacherId, teacherId),
+        sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        gte(schema.scheduledLessons.startsAt, start),
+        sql`${schema.scheduledLessons.startsAt} < ${end}`
+      )
+    )
+    .orderBy(asc(schema.scheduledLessons.startsAt));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
+}
+
 /** Все занятия конкретного ученика (для страницы ученика): предстоящие сверху. */
 export async function getLessonsForStudent(
   studentId: string

@@ -66,7 +66,9 @@ async function assertOwnsStudent(teacherId: string, studentId: string): Promise<
 
 /** Куда вернуться после действия: на страницу ученика или в общее расписание. */
 function backTo(from: string, studentId: string): string {
-  return from === "student" ? `/teacher/student/${studentId}` : "/teacher/schedule";
+  if (from === "student") return `/teacher/student/${studentId}`;
+  if (from === "home") return "/teacher";
+  return "/teacher/schedule";
 }
 
 export type CreateLessonState = { ok?: boolean; error?: string; at?: number; count?: number } | null;

@@ -36,161 +36,102 @@ function daysLabel(days: number | null): string {
   return `не заходил ${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
 }
 
+type Row = { key: string; href: string; badge: string; tone: string; title: string; sub?: string };
+
+/**
+ * «Нужно внимание» — одна компактная карточка со строками вместо пяти
+ * больших карточек: на телефоне раньше приходилось листать, чтобы дойти
+ * до занятий и учеников. Каждая строка ведёт туда, где это решается.
+ */
 export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
   const { reviewsCount, overdue, inactive, debts, unmarkedLessons } = data;
-  const allClear =
-    reviewsCount === 0 &&
-    overdue.length === 0 &&
-    inactive.length === 0 &&
-    debts.length === 0 &&
-    unmarkedLessons === 0;
+  const rows: Row[] = [];
+  const names = (xs: { name: string }[]) =>
+    xs.slice(0, 2).map((x) => x.name.split(" ")[0]).join(", ") + (xs.length > 2 ? ` и ещё ${xs.length - 2}` : "");
 
-  if (allClear) {
+  if (reviewsCount > 0)
+    rows.push({
+      key: "reviews",
+      href: "/teacher#students",
+      badge: String(reviewsCount),
+      tone: "bg-violet-light text-violet-text",
+      title: `Проверить ${pluralRu(reviewsCount, ["работу", "работы", "работ"])}`,
+      sub: "Ученики ждут оценки",
+    });
+  if (unmarkedLessons > 0)
+    rows.push({
+      key: "unmarked",
+      href: "/teacher/schedule",
+      badge: String(unmarkedLessons),
+      tone: "bg-amber-light text-amber-dark",
+      title: unmarkedLessons === 1 ? "Отметить прошлое занятие" : `Отметить прошлые занятия`,
+      sub: "От «Было» зависит баланс оплат",
+    });
+  if (debts.length > 0)
+    rows.push({
+      key: "debts",
+      href: debts.length === 1 ? `/teacher/student/${debts[0].id}` : "/teacher/payments",
+      badge: "₽",
+      tone: "bg-coral-light text-coral-text",
+      title: debts.length === 1 ? `Долг: ${debts[0].name}` : `Долги: ${debts.length} ${pluralRu(debts.length, ["ученик", "ученика", "учеников"])}`,
+      sub:
+        debts.length === 1
+          ? `${debts[0].lessons} ${pluralRu(debts[0].lessons, ["занятие не оплачено", "занятия не оплачены", "занятий не оплачено"])}`
+          : names(debts),
+    });
+  if (overdue.length > 0)
+    rows.push({
+      key: "overdue",
+      href: overdue.length === 1 ? `/teacher/student/${overdue[0].id}` : "/teacher#students",
+      badge: String(overdue.length),
+      tone: "bg-coral-light text-coral-text",
+      title: "Просрочена домашка",
+      sub: names(overdue),
+    });
+  if (inactive.length > 0)
+    rows.push({
+      key: "inactive",
+      href: inactive.length === 1 ? `/teacher/student/${inactive[0].id}` : "/teacher#students",
+      badge: String(inactive.length),
+      tone: "bg-grid text-ink-soft",
+      title: "Давно не занимались",
+      sub:
+        inactive.length === 1
+          ? `${inactive[0].name}: ${daysLabel(inactive[0].days)}`
+          : inactive
+              .slice(0, 2)
+              .map((s) => `${s.name.split(" ")[0]} — ${daysLabel(s.days)}`)
+              .join(" · ") + (inactive.length > 2 ? ` · ещё ${inactive.length - 2}` : ""),
+    });
+
+  if (rows.length === 0) {
     return (
-      <div className="card mb-6 flex items-center gap-3 p-4">
-        <span className="text-2xl">✅</span>
-        <div>
-          <p className="text-sm font-bold text-ink">Всё под контролем</p>
-          <p className="text-xs text-ink-soft">
-            Нет работ на проверке, просроченных заданий, долгов и потерявшихся учеников.
-          </p>
-        </div>
+      <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pine-light font-black text-pine-dark">✓</span>
+        <p className="text-sm font-bold text-ink">Всё под контролем — срочных дел нет</p>
       </div>
     );
   }
 
   return (
-    <div className="mb-6">
-      <h2 className="mb-3 font-display text-lg font-black text-ink">Требует внимания</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* Работы на проверке */}
-        {reviewsCount > 0 && (
-          <div className="card border-l-4 !border-l-amber p-4">
-            <div className="flex items-center gap-2">
-              <span className="rounded-pill bg-amber px-2 py-0.5 text-sm font-black text-white">
-                {reviewsCount}
+    <section className="mb-4 overflow-hidden rounded-[20px] border border-line-soft bg-white">
+      <h2 className="px-4 pb-1 pt-3 font-display text-[16px] font-black text-ink">Нужно внимание</h2>
+      <ul>
+        {rows.map((r, i) => (
+          <li key={r.key} className={i < rows.length - 1 ? "border-b border-line-soft" : ""}>
+            <a href={r.href} className="flex min-h-[56px] items-center gap-3 px-4 py-2 transition hover:bg-paper">
+              <span className={`flex h-8 min-w-8 items-center justify-center rounded-[10px] px-1.5 text-sm font-black ${r.tone}`}>
+                {r.badge}
               </span>
-              <p className="text-sm font-bold text-ink">
-                {pluralRu(reviewsCount, ["работа", "работы", "работ"])} на проверке
-              </p>
-            </div>
-            <p className="mt-2 text-xs text-ink-soft">
-              Ученики ждут вашей оценки — откройте карточку ученика, чтобы проверить.
-            </p>
-          </div>
-        )}
-
-        {/* Прошедшие занятия без отметки — иначе баланс оплат врёт */}
-        {unmarkedLessons > 0 && (
-          <a href="/teacher/schedule" className="card block border-l-4 !border-l-amber p-4 transition hover:border-pine">
-            <div className="flex items-center gap-2">
-              <span className="rounded-pill bg-amber px-2 py-0.5 text-sm font-black text-white">
-                {unmarkedLessons}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-extrabold text-ink">{r.title}</span>
+                {r.sub && <span className="block truncate text-[12px] text-ink-soft">{r.sub}</span>}
               </span>
-              <p className="text-sm font-bold text-ink">
-                {pluralRu(unmarkedLessons, ["занятие не отмечено", "занятия не отмечены", "занятий не отмечено"])}
-              </p>
-            </div>
-            <p className="mt-2 text-xs text-ink-soft">
-              Время прошло, а «Было / Не было» не нажато. От этого зависит баланс оплат → отметить
-            </p>
-          </a>
-        )}
-
-        {/* Просроченные ДЗ */}
-        {overdue.length > 0 && (
-          <div className="card border-l-4 !border-l-coral p-4">
-            <div className="flex items-center gap-2">
-              <span className="rounded-pill bg-coral px-2 py-0.5 text-sm font-black text-white">
-                {overdue.length}
-              </span>
-              <p className="text-sm font-bold text-ink">
-                {overdue.length === 1 ? "ученик" : "учеников"} с просрочкой
-              </p>
-            </div>
-            <ul className="mt-2 space-y-1">
-              {overdue.slice(0, 4).map((s) => (
-                <li key={s.id}>
-                  <a
-                    href={`/teacher/student/${s.id}`}
-                    className="flex items-center justify-between text-xs text-ink-soft transition hover:text-coral"
-                  >
-                    <span className="truncate">{s.name}</span>
-                    <span className="ml-2 shrink-0 font-mono">{s.count}</span>
-                  </a>
-                </li>
-              ))}
-              {overdue.length > 4 && (
-                <li className="text-[11px] text-ink-soft">и ещё {overdue.length - 4}…</li>
-              )}
-            </ul>
-          </div>
-        )}
-
-        {/* Долг по оплате */}
-        {debts.length > 0 && (
-          <div className="card border-l-4 !border-l-coral p-4">
-            <div className="flex items-center gap-2">
-              <span className="rounded-pill bg-coral px-2 py-0.5 text-sm font-black text-white">
-                {debts.length}
-              </span>
-              <p className="text-sm font-bold text-ink">
-                {debts.length === 1 ? "долг по оплате" : "долги по оплате"}
-              </p>
-            </div>
-            <ul className="mt-2 space-y-1">
-              {debts.slice(0, 4).map((s) => (
-                <li key={s.id}>
-                  <a
-                    href={`/teacher/student/${s.id}`}
-                    className="flex items-center justify-between text-xs text-ink-soft transition hover:text-coral"
-                  >
-                    <span className="truncate">{s.name}</span>
-                    <span className="ml-2 shrink-0">
-                      {s.lessons} {pluralRu(s.lessons, ["занятие", "занятия", "занятий"])}
-                    </span>
-                  </a>
-                </li>
-              ))}
-              {debts.length > 4 && (
-                <li>
-                  <a href="/teacher/payments" className="text-[11px] text-ink-soft hover:text-coral">
-                    и ещё {debts.length - 4}… → все оплаты
-                  </a>
-                </li>
-              )}
-            </ul>
-          </div>
-        )}
-
-        {/* Давно не заходили */}
-        {inactive.length > 0 && (
-          <div className="card border-l-4 !border-l-ink-soft p-4">
-            <div className="flex items-center gap-2">
-              <span className="rounded-pill bg-ink-soft px-2 py-0.5 text-sm font-black text-white">
-                {inactive.length}
-              </span>
-              <p className="text-sm font-bold text-ink">потерялись</p>
-            </div>
-            <ul className="mt-2 space-y-1">
-              {inactive.slice(0, 4).map((s) => (
-                <li key={s.id}>
-                  <a
-                    href={`/teacher/student/${s.id}`}
-                    className="flex items-center justify-between text-xs text-ink-soft transition hover:text-pine"
-                  >
-                    <span className="truncate">{s.name}</span>
-                    <span className="ml-2 shrink-0">{daysLabel(s.days)}</span>
-                  </a>
-                </li>
-              ))}
-              {inactive.length > 4 && (
-                <li className="text-[11px] text-ink-soft">и ещё {inactive.length - 4}…</li>
-              )}
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
+              <span aria-hidden className="text-lg font-black text-ink-soft/60">›</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
