@@ -3,12 +3,59 @@ name: Deploy to Timeweb
 # Срабатывает при каждом пуше в основную ветку. Если название основной
 # ветки на GitHub другое (проверьте на странице репозитория) — замените
 # оба места ниже: "branches: [master]" и "git pull origin master".
+#
+# Сначала job «test» прогоняет автотесты на отдельной тестовой базе внутри
+# GitHub (к рабочему серверу и рабочей базе он не прикасается). Деплой
+# запускается, только если тесты прошли, — сломанная сборка на прод не уедет.
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mathapp
+          POSTGRES_PASSWORD: mathapp
+          POSTGRES_DB: mathapp_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mathapp"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://mathapp:mathapp@localhost:5432/mathapp_test
+      # Сервер в смоук-тесте работает на тестовой базе; секрет — одноразовый.
+      DATABASE_URL: postgresql://mathapp:mathapp@localhost:5432/mathapp_test
+      SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else-0123456789
+      NEXT_PUBLIC_APP_URL: http://localhost:3100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Тестовая база (миграции + демо-данные)
+        run: npm run test:db
+      - name: Логические тесты
+        run: npm test
+      - name: Сборка
+        run: npm run build
+      - name: Смоук-тест страниц
+        run: |
+          npx playwright-core install --with-deps chromium
+          npx next start -p 3100 &
+          npx --yes wait-on -t 60000 http://localhost:3100/login
+          BASE_URL=http://localhost:3100 npm run test:e2e
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH

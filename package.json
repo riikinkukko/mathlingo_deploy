@@ -12,7 +12,10 @@
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
     "seed:reset": "tsx scripts/seed.ts --reset",
-    "telegram:poll": "tsx scripts/telegram-poller.ts"
+    "telegram:poll": "tsx scripts/telegram-poller.ts",
+    "test:db": "tsx scripts/test-db.ts",
+    "test": "node --import tsx --import ./tests/setup.ts --test --test-concurrency=1 tests/unit/*.test.ts",
+    "test:e2e": "tsx tests/e2e/smoke.ts"
   },
   "dependencies": {
     "@capacitor-community/safe-area": "^8.0.1",
@@ -45,6 +48,7 @@
     "autoprefixer": "10.4.20",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
+    "playwright-core": "^1.56.0",
     "postcss": "8.4.47",
     "tailwindcss": "3.4.13",
     "tsx": "^4.19.1",
