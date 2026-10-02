@@ -156,13 +156,16 @@ export default async function StudentDashboard({
     .toUpperCase();
   const firstName = user.name.split(" ")[0];
 
+  // Совсем новый ученик (ни одного верного ответа) — «Первый урок / Начать»
+  // вместо «Продолжить / Решать дальше»: продолжать ещё нечего.
+  const isNewbie = xp === 0;
   const heroCard = currentSkill && !chapterLockedByPlan ? (
     <a
       href={`/student/skill/${currentSkill.id}`}
       className="block rounded-[22px] bg-pine-dark p-6 text-white transition hover:brightness-105"
     >
       <p className="text-[11px] font-black uppercase tracking-wide text-white/60">
-        Продолжить · {currentChapter?.chapter.title}
+        {isNewbie ? "Первый урок" : "Продолжить"} · {currentChapter?.chapter.title}
       </p>
       <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">{currentSkill.title}</h1>
       <p className="mt-1.5 text-[14px] font-semibold text-white/75">
@@ -170,7 +173,7 @@ export default async function StudentDashboard({
         {energy !== null && " · 1 энергия"}
       </p>
       <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
-        Решать дальше →
+        {isNewbie ? "Начать →" : "Решать дальше →"}
       </span>
     </a>
   ) : chapterLockedByPlan ? (
@@ -214,7 +217,7 @@ export default async function StudentDashboard({
           {pendingHw.length} {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
         </p>
         <p className="text-[12px] font-semibold text-ink-soft">
-          {pendingHw.length > 0 ? "ждут выполнения" : "всё выполнено"}
+          {pendingHw.length > 0 ? "ждут выполнения" : allHw.length > 0 ? "всё выполнено" : standalone && !isEffectivelyPro(user) ? "в Pro" : "пока нет"}
         </p>
       </a>
     </>
@@ -247,7 +250,7 @@ export default async function StudentDashboard({
         />
         {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
-          <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} />
+          <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} streak={streak} />
           {(() => {
             const plan = computeExamPlan(progress);
             return (

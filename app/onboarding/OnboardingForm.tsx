@@ -34,6 +34,20 @@ export default function OnboardingForm() {
         </div>
       </div>
 
+      <div>
+        <label htmlFor="dreamUniversity" className="mb-2 block text-sm font-bold text-ink">
+          Куда хочешь поступить? <span className="font-semibold text-ink-soft">(необязательно)</span>
+        </label>
+        <input
+          id="dreamUniversity"
+          name="dreamUniversity"
+          maxLength={120}
+          className="input"
+          placeholder="Например: МГУ, ВМК"
+        />
+        <p className="mt-1.5 text-xs text-ink-soft">Покажем, сколько дней до ЕГЭ и сколько заниматься в день.</p>
+      </div>
+
       <div className="flex items-center justify-between pt-2">
         <a href="/student" className="text-sm font-bold text-ink-soft hover:text-pine hover:underline">
           Пропустить

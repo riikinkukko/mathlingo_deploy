@@ -2214,3 +2214,12 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
   }
   return out;
 }
+
+/** Для чек-листа «Первые шаги» на главной нового репетитора. */
+export async function getTeacherSetupProgress(teacherId: string): Promise<{ homeworks: number; lessons: number }> {
+  const [h, l] = await Promise.all([
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.homeworks).where(eq(schema.homeworks.teacherId, teacherId)),
+    db.select({ c: sql<number>`count(*)::int` }).from(schema.scheduledLessons).where(eq(schema.scheduledLessons.teacherId, teacherId)),
+  ]);
+  return { homeworks: Number(h[0]?.c ?? 0), lessons: Number(l[0]?.c ?? 0) };
+}

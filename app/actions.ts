@@ -339,6 +339,7 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   const consent = formData.get("consent");
 
   if (!name || !email) return { error: "Заполните имя и email" };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return { error: "Проверьте email ученика" };
   if (consent !== "on") {
     return { error: "Нужно подтвердить, что согласие ученика (или его представителя) получено" };
   }
@@ -346,8 +347,9 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   const existing = await getUserByEmail(email);
   if (existing) return { error: "Пользователь с таким email уже существует" };
 
+  const studentId = genId("u");
   await db.insert(schema.users).values({
-    id: genId("u"),
+    id: studentId,
     name,
     email,
     passwordHash: await hashPassword(password),
@@ -356,7 +358,7 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
     consentGivenAt: new Date(),
   });
   revalidatePath("/teacher");
-  return { success: true, password };
+  return { success: true, password, email, name, studentId };
 }
 
 export async function deleteStudentAction(formData: FormData) {
@@ -785,11 +787,13 @@ export async function saveOnboardingAction(formData: FormData) {
 
   const targetScoreRaw = formData.get("targetScore");
   const targetScore = targetScoreRaw ? Number(targetScoreRaw) : null;
+  const dream = String(formData.get("dreamUniversity") || "").trim().slice(0, 120);
 
   await db
     .update(schema.users)
     .set({
       targetScore: targetScore && targetScore >= 0 && targetScore <= 100 ? targetScore : null,
+      ...(dream ? { dreamUniversity: dream } : {}),
     })
     .where(eq(schema.users.id, user.id));
 

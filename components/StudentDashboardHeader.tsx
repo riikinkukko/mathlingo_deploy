@@ -85,7 +85,7 @@ export default async function StudentDashboardHeader({
 }
 
 /** Цель дня — первая строка контента главной (раньше была частью шапки). */
-export function DailyGoalBar({ done, total }: { done: number; total: number }) {
+export function DailyGoalBar({ done, total, streak = 1 }: { done: number; total: number; streak?: number }) {
   const pct = Math.min(100, Math.round((done / Math.max(1, total)) * 100));
   const closed = done >= total;
   return (
@@ -103,7 +103,11 @@ export function DailyGoalBar({ done, total }: { done: number; total: number }) {
         <p className="text-[15px] font-black text-ink">
           {closed ? "Цель дня выполнена!" : `Цель дня: ещё ${total - done}`}
         </p>
-        <p className="text-[12px] text-ink-soft">{closed ? "Серия продлена — можно отдыхать" : "Решай задачи, чтобы не прервать серию"}</p>
+        <p className="text-[12px] text-ink-soft">{closed
+            ? "Серия продлена — можно отдыхать"
+            : streak > 0
+              ? "Решай задачи, чтобы не прервать серию"
+              : "Реши задачу сегодня — и начнётся серия 🔥"}</p>
       </div>
     </div>
   );

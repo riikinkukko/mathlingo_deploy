@@ -472,7 +472,7 @@ export default async function StudentDetailPage({
         </>)}
 
         {tab === "overview" && (<>
-        <section>
+        <section id="parents" className="scroll-mt-24">
           <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>
           {parents.length > 0 && (
             <ul className="mb-4 space-y-1 text-sm text-ink-soft">

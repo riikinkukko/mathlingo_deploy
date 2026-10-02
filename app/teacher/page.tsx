@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, getTeacherHomeStats, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
+import { getStudentsOfTeacher, getTeacherHomeStats, getTeacherSetupProgress, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import { nudgedRecently } from "@/lib/nudge";
 import TeacherShell from "@/components/TeacherShell";
@@ -7,6 +7,7 @@ import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 import TeacherTodayCard from "@/components/TeacherTodayCard";
 import LessonDoneBanner from "@/components/LessonDoneBanner";
+import TeacherSetupChecklist from "@/components/TeacherSetupChecklist";
 
 const FREE_STUDENT_LIMIT = 3;
 // Через сколько дней без активности ученик считается "потерявшимся".
@@ -25,7 +26,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions] = await Promise.all([
+  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup] = await Promise.all([
     getTeacherHomeStats(user.id),
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
@@ -33,7 +34,9 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
     getUnmarkedPastLessons(user.id),
     getTodayLessonsForTeacher(user.id),
     getOpenQuestionsCount(user.id),
+    getTeacherSetupProgress(user.id),
   ]);
+  const setupVisible = !(students.length > 0 && setup.homeworks > 0 && setup.lessons > 0);
   const EMPTY = { attemptsCount: 0, solvedProblems: 0, accuracy: 0, lastActiveAt: null, pendingCount: 0, overdueCount: 0 };
   const cards = students.map((s) => {
     const st = homeStats.get(s.id) ?? EMPTY;
@@ -86,8 +89,16 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
         {showDone && (
           <LessonDoneBanner lesson={doneLesson} studentName={students.find((st) => st.id === doneLesson.studentId)?.name} />
         )}
+        <TeacherSetupChecklist
+          emailVerified={!!user.emailVerifiedAt || isOwner || isPro}
+          studentsCount={students.length}
+          homeworks={setup.homeworks}
+          lessons={setup.lessons}
+          telegram={!!user.telegramChatId}
+          firstStudentId={students[0]?.id}
+        />
         {students.length > 0 && <TeacherTodayCard lessons={todayLessons} dateLabel={todayLabel} />}
-        {students.length > 0 && !user.telegramChatId && (
+        {students.length > 0 && !user.telegramChatId && !setupVisible && (
           <a
             href="/teacher/settings#telegram"
             className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3 text-sm transition hover:border-pine"
