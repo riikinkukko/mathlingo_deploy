@@ -189,7 +189,7 @@ export default function DiagramScratchpad({
         aria-label="Закрыть черновик"
         onClick={onClose}
         className="w-full shrink-0 cursor-default"
-        style={{ height: "calc(max(1rem, var(--safe-area-inset-top, env(safe-area-inset-top))) + 12vh)" }}
+        style={{ height: "calc(max(1rem, var(--app-sat)) + 12vh)" }}
       />
       <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col rounded-t-3xl bg-ink/95 shadow-2xl">
       <div className="flex items-center justify-between px-4 pb-2 pt-3">
@@ -240,7 +240,7 @@ export default function DiagramScratchpad({
         </button>
       </div>
 
-      <div className="px-4 pb-[max(1rem,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-3">
+      <div className="px-4 pb-[max(1rem,var(--app-sab))] pt-3">
         <div className="mx-auto flex max-w-lg items-center justify-between gap-2 rounded-2xl bg-white/10 p-2">
           <div className="flex items-center gap-1.5">
             <ToolButton active={tool === "pen"} onClick={() => setTool("pen")} label="✏️" ariaLabel="Карандаш" />

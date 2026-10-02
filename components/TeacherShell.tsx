@@ -7,6 +7,7 @@ import {
 import TeacherSidebar from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
+import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
 import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar, IconWallet, IconSettings } from "./icons";
 
 export default async function TeacherShell({
@@ -30,22 +31,21 @@ export default async function TeacherShell({
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="flex items-center justify-between border-b border-line-soft bg-paper px-[18px] pb-3 pt-[max(0.75rem,var(--safe-area-inset-top,env(safe-area-inset-top)))] lg:hidden">
-        <a href="/teacher" className="flex items-center gap-2.5">
-          <Mascot mood="idle" size={32} float={false} />
-          <span className="font-display text-[16px] font-black text-ink">{title}</span>
-        </a>
-        <div className="flex items-center gap-1">
-          <a
-            href="/teacher/settings"
-            aria-label="Настройки"
-            className={`flex h-11 w-11 items-center justify-center rounded-full ${active === "settings" ? "text-pine-dark" : "text-ink-soft"}`}
-          >
-            <IconSettings className="h-[22px] w-[22px]" />
-          </a>
-          <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
-        </div>
-      </header>
+      <MobileAppBar
+        left={<AppBarTitle href="/teacher" title={title} mascot={<Mascot mood="idle" size={34} float={false} />} />}
+        right={
+          <>
+            <a
+              href="/teacher/settings"
+              aria-label="Настройки"
+              className={`flex h-11 w-11 items-center justify-center rounded-full ${active === "settings" ? "text-pine-dark" : "text-ink-soft"}`}
+            >
+              <IconSettings className="h-[22px] w-[22px]" />
+            </a>
+            <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
+          </>
+        }
+      />
 
       <TeacherSidebar
         active={active}
@@ -59,7 +59,7 @@ export default async function TeacherShell({
       <div className="pb-20 lg:ml-[236px] lg:pb-8">{children}</div>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line-soft bg-white pb-[max(10px,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-2 lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line-soft bg-white pb-[max(10px,var(--app-sab))] pt-2 lg:hidden"
         aria-label="Основная навигация"
       >
         <a

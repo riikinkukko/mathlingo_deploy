@@ -23,7 +23,7 @@ import {
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
-import StudentDashboardHeader from "@/components/StudentDashboardHeader";
+import StudentDashboardHeader, { DailyGoalBar } from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
 import BottomTabBar from "@/components/BottomTabBar";
@@ -236,9 +236,9 @@ export default async function StudentDashboard({
           streak={streak}
           energy={energy}
           energyMax={FREE_MAX_ENERGY}
-          dailyGoal={dailyGoal}
         />
         <main className="space-y-4 px-[18px] py-4">
+          <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} />
           {targetScoreRec && (
             <div className="rounded-xl bg-teal-light/60 px-3.5 py-2.5 text-[12px] text-teal-text">
               {targetScoreRec}
@@ -270,7 +270,7 @@ export default async function StudentDashboard({
           )}
           {programTeaser}
         </main>
-        <BottomTabBar reviewCount={dueReviewCount} mistakesCount={unresolvedMistakesCount} homeworkLabel={standalone ? "Пробники" : "Задания"} />
+        <BottomTabBar reviewCount={dueReviewCount} mistakesCount={unresolvedMistakesCount} homeworkLabel={standalone ? "Пробники" : "Домашка"} />
       </div>
 
       {/* ---------- ДЕСКТОПНАЯ РАСКЛАДКА (≥ 1024px) ---------- */}

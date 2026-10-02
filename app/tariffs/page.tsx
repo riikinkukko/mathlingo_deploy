@@ -39,7 +39,7 @@ export default function TariffsPage() {
   const teacher = getTeacherProPrice();
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper pt-[env(safe-area-inset-top)]">
+    <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
         <a href="/" className="mb-6 inline-flex items-center gap-1.5 text-sm font-bold text-ink-soft hover:text-pine">
           ← На главную

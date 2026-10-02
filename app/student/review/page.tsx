@@ -52,7 +52,7 @@ export default async function ReviewPage({
   // Есть что повторять — сфокусированный режим без сайдбара/таб-бара, как
   // на экране самой задачи (ReviewFlow сам рисует упрощённую шапку).
   return (
-    <div className="min-h-screen bg-paper px-4 pb-16 pt-[max(1rem,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
+    <div className="min-h-screen bg-paper px-4 pb-16 pt-[max(1rem,var(--app-sat))]">
       <ReviewFlow items={items} backHref={backHref} />
     </div>
   );

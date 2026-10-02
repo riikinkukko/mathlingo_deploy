@@ -1,8 +1,15 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
-import { IconGrid } from "./icons";
+import MobileAppBar from "./MobileAppBar";
+import { IconGrid, IconBolt, IconFlame, IconBattery } from "./icons";
 import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queries";
 
+/**
+ * Шапка главной ученика на телефоне — та же MobileAppBar (56 px), что и на
+ * остальных экранах. Полоса «Цель дня» вынесена из шапки в контент
+ * (DailyGoalBar ниже): из-за неё шапка главной была на 36 px выше прочих и
+ * «прыгала» при переходе между вкладками.
+ */
 export default async function StudentDashboardHeader({
   userId,
   levelTitle,
@@ -10,7 +17,6 @@ export default async function StudentDashboardHeader({
   streak,
   energy,
   energyMax,
-  dailyGoal,
 }: {
   userId: string;
   levelTitle: string;
@@ -18,58 +24,87 @@ export default async function StudentDashboardHeader({
   streak: number;
   energy: number | null; // null — безлимит (ученик репетитора / Pro)
   energyMax: number;
-  dailyGoal: { done: number; total: number };
 }) {
-  const notifications = await getNotificationsForUser(userId);
-  const unreadCount = await getUnreadNotificationCount(userId);
-  const goalPct = Math.round((dailyGoal.done / dailyGoal.total) * 100);
+  const [notifications, unreadCount] = await Promise.all([
+    getNotificationsForUser(userId),
+    getUnreadNotificationCount(userId),
+  ]);
+  // Серия 0 — нейтральная, а не красная: ноль не ошибка, а приглашение начать.
+  const streakCls = streak > 0 ? "bg-amber-light text-amber-dark" : "bg-white text-ink-soft border border-line";
 
   return (
-    <header className="border-b border-line-soft bg-paper px-[18px] pb-3 pt-[max(14px,var(--safe-area-inset-top,env(safe-area-inset-top)))]">
-      <div className="flex items-center justify-between">
-        <a href="/student/profile" className="flex items-center gap-2.5">
-          <Mascot mood="idle" size={40} float={false} />
-          {/* Звание вместо названия текущей главы — мотивирует прогрессом
-              самого ученика, а не нейтрально называет тему урока. */}
-          <span className="font-display text-[15px] font-black text-pine-dark">{levelTitle}</span>
-        </a>
-        <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 rounded-pill bg-amber-light px-2.5 py-[5px] text-[12.5px] font-black text-amber-text">
-            ⚡ {xp}
+    <MobileAppBar
+      left={
+        <a href="/student/profile" className="flex min-w-0 items-center gap-2" aria-label={`Профиль · ${levelTitle}`}>
+          <span className="shrink-0">
+            <Mascot mood="idle" size={36} float={false} />
           </span>
-          <span className="flex items-center gap-1 rounded-pill bg-coral-light px-2.5 py-[5px] text-[12.5px] font-black text-coral-text">
-            🔥 {streak}
+          <span className="hidden truncate font-display text-[15px] font-black text-pine-dark min-[400px]:inline">
+            {levelTitle}
+          </span>
+        </a>
+      }
+      right={
+        <>
+          <span
+            aria-label={`Серия: ${streak} дн.`}
+            className={`flex h-9 items-center gap-1 rounded-pill px-2.5 text-[14px] font-black ${streakCls}`}
+          >
+            <IconFlame className="h-4 w-4" />
+            {streak}
+          </span>
+          <span
+            aria-label={`Опыт: ${xp}`}
+            className="flex h-9 items-center gap-1 rounded-pill bg-pine-light px-2.5 text-[14px] font-black text-pine-dark"
+          >
+            <IconBolt className="h-4 w-4" />
+            {xp}
           </span>
           {energy !== null && (
             <a
               href="/student/upgrade"
-              className="flex items-center gap-1 rounded-pill bg-teal-light px-2.5 py-[5px] text-[12.5px] font-black text-teal-text"
+              aria-label={`Энергия: ${energy} из ${energyMax}`}
+              className="flex h-9 items-center gap-1 rounded-pill bg-teal-light px-2.5 text-[14px] font-black text-teal-text"
             >
-              ⚡ {energy}/{energyMax}
+              <IconBattery className="h-4 w-4" />
+              {energy}
             </a>
           )}
           <a
             href="/student/subjects"
             aria-label="Все предметы"
-            className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft transition hover:text-pine"
           >
-            <IconGrid className="h-4 w-4" />
+            <IconGrid className="h-5 w-5" />
           </a>
           <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
-        </div>
-      </div>
+        </>
+      }
+    />
+  );
+}
 
-      <div className="mt-3 flex items-center gap-2.5">
-        <div className="h-2 flex-1 overflow-hidden rounded-pill bg-grid">
-          <div
-            className="h-full rounded-pill bg-pine transition-all"
-            style={{ width: `${goalPct}%` }}
-          />
-        </div>
-        <span className="shrink-0 text-[12px] font-black text-ink-soft">
-          Цель дня {dailyGoal.done}/{dailyGoal.total}
+/** Цель дня — первая строка контента главной (раньше была частью шапки). */
+export function DailyGoalBar({ done, total }: { done: number; total: number }) {
+  const pct = Math.min(100, Math.round((done / Math.max(1, total)) * 100));
+  const closed = done >= total;
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3">
+      <div
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{ background: `conic-gradient(#159A5E 0 ${pct}%, #DCEEE3 ${pct}% 100%)` }}
+        aria-hidden
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[12px] font-black text-ink">
+          {done}/{total}
         </span>
       </div>
-    </header>
+      <div className="min-w-0">
+        <p className="text-[15px] font-black text-ink">
+          {closed ? "Цель дня выполнена!" : `Цель дня: ещё ${total - done}`}
+        </p>
+        <p className="text-[12px] text-ink-soft">{closed ? "Серия продлена — можно отдыхать" : "Решай задачи, чтобы не прервать серию"}</p>
+      </div>
+    </div>
   );
 }

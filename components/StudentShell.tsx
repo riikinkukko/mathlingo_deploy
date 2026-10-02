@@ -15,6 +15,7 @@ import StudentSidebar from "./StudentSidebar";
 import BottomTabBar from "./BottomTabBar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
+import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
 
 /**
  * Общая обёртка для всех "навигационных" экранов ученика (не для экрана
@@ -53,13 +54,10 @@ export default async function StudentShell({
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="flex items-center justify-between border-b border-line-soft bg-paper px-[18px] pb-3 pt-[max(0.75rem,var(--safe-area-inset-top,env(safe-area-inset-top)))] lg:hidden">
-        <a href="/student/subjects" className="flex items-center gap-2.5">
-          <Mascot mood="idle" size={32} float={false} />
-          <span className="font-display text-[16px] font-black text-ink">{title}</span>
-        </a>
-        <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
-      </header>
+      <MobileAppBar
+        left={<AppBarTitle href="/student" title={title} mascot={<Mascot mood="idle" size={34} float={false} />} />}
+        right={<NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />}
+      />
 
       <StudentSidebar
         active={active}

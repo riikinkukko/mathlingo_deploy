@@ -53,6 +53,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ru">
+      <head>
+        {/* До первой отрисовки: подставляем отступы под системные панели,
+            сохранённые с прошлого запуска приложения (CapacitorBootstrap).
+            Без этого плагин safe-area присылает их уже после загрузки, и
+            шапка дёргается вниз. Самый первый запуск в приложении — типичные
+            28px, точное значение плагин пришлёт следом. В браузере — ничего. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var r=document.documentElement.style,t=localStorage.getItem("pm-sat"),b=localStorage.getItem("pm-sab");if(t)r.setProperty("--safe-area-inset-top",t);else if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())r.setProperty("--safe-area-inset-top","28px");if(b)r.setProperty("--safe-area-inset-bottom",b)}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="font-sans bg-paper text-ink antialiased">
         <ServiceWorkerRegister />
         <CapacitorBootstrap />

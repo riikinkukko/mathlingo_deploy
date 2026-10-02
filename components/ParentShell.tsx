@@ -3,6 +3,7 @@ import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queri
 import { logoutAction } from "@/app/actions";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
+import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
 
 export default async function ParentShell({
   title,
@@ -19,23 +20,10 @@ export default async function ParentShell({
 
   return (
     <div className="min-h-screen bg-paper">
-      <header className="flex items-center justify-between border-b border-line-soft bg-paper px-[18px] pb-3 pt-[max(0.75rem,var(--safe-area-inset-top,env(safe-area-inset-top)))] lg:hidden">
-        <a href="/parent" className="flex items-center gap-2.5">
-          <Mascot mood="idle" size={32} float={false} />
-          <span className="font-display text-[16px] font-black text-ink">{title}</span>
-        </a>
-        <div className="flex items-center gap-2">
-          <NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="rounded-full border-2 border-line px-2.5 py-1.5 text-[11px] font-extrabold uppercase text-ink-soft transition hover:border-coral hover:text-coral"
-            >
-              Выйти
-            </button>
-          </form>
-        </div>
-      </header>
+      <MobileAppBar
+        left={<AppBarTitle href="/parent" title={title} mascot={<Mascot mood="idle" size={34} float={false} />} />}
+        right={<NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />}
+      />
 
       {/* У родителя всего один раздел (дети) — полноценный сайдбар был бы
           избыточен, вместо него простая закреплённая шапка и на десктопе. */}
@@ -61,6 +49,12 @@ export default async function ParentShell({
       </header>
 
       <div className="pb-8">{children}</div>
+      {/* На телефоне «Выйти» — внизу страницы, а не в шапке рядом с колокольчиком. */}
+      <form action={logoutAction} className="pb-[max(2rem,var(--app-sab))] text-center lg:hidden">
+        <button type="submit" className="min-h-[44px] px-4 text-sm font-bold text-ink-soft underline hover:text-coral">
+          Выйти из аккаунта
+        </button>
+      </form>
     </div>
   );
 }

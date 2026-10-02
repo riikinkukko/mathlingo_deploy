@@ -29,6 +29,20 @@ export default function CapacitorBootstrap() {
       // явного вызова для этого не требуется (в отличие от более старых
       // версий этого же плагина, где нужно было звать enable() вручную).
       // Стиль системных панелей настроен статически в capacitor.config.ts.
+      // Запоминаем отступы, которые прислал плагин, — при следующем запуске
+      // скрипт в <head> (app/layout.tsx) подставит их до первой отрисовки.
+      const rememberInsets = () => {
+        try {
+          const cs = getComputedStyle(document.documentElement);
+          const top = cs.getPropertyValue("--safe-area-inset-top").trim();
+          const bottom = cs.getPropertyValue("--safe-area-inset-bottom").trim();
+          if (top) localStorage.setItem("pm-sat", top);
+          if (bottom) localStorage.setItem("pm-sab", bottom);
+        } catch {}
+      };
+      [300, 1500, 4000].forEach((ms) => window.setTimeout(rememberInsets, ms));
+      window.addEventListener("resize", rememberInsets);
+
       await SplashScreen.hide().catch(() => {});
 
       // Аппаратная/программная кнопка "назад" на Android: по умолчанию
@@ -44,7 +58,10 @@ export default function CapacitorBootstrap() {
           App.minimizeApp().catch(() => {});
         }
       });
-      cleanup = () => listener.remove();
+      cleanup = () => {
+        listener.remove();
+        window.removeEventListener("resize", rememberInsets);
+      };
     })();
 
     return () => cleanup?.();

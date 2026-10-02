@@ -6,7 +6,7 @@ import { IconMap, IconRepeat, IconClipboard, IconBook, IconUser } from "./icons"
 export default function BottomTabBar({
   reviewCount = 0,
   mistakesCount = 0,
-  homeworkLabel = "Задания",
+  homeworkLabel = "Домашка",
 }: {
   reviewCount?: number;
   mistakesCount?: number;
@@ -36,7 +36,7 @@ export default function BottomTabBar({
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line-soft bg-white pb-[max(10px,var(--safe-area-inset-bottom,env(safe-area-inset-bottom)))] pt-2 lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line-soft bg-white pb-[max(10px,var(--app-sab))] pt-2 lg:hidden"
       aria-label="Основная навигация"
     >
       {tabs.map((tab) => {

@@ -8,7 +8,7 @@ export default function ResetPasswordPage({ searchParams }: { searchParams: { to
   const token = searchParams.token;
 
   return (
-    <div className="flex min-h-screen flex-col bg-paper pt-[env(safe-area-inset-top)]">
+    <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm">
           <div className="mb-4 text-center">

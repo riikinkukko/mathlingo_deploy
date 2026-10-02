@@ -50,10 +50,12 @@ export default async function ProfilePage({
 
   const standalone = isStandaloneStudent(user);
   const pro = standalone && isEffectivelyPro(user);
-  const memberSince = new Date(user.createdAt).toLocaleDateString("ru-RU", {
-    month: "long",
-    year: "numeric",
-  });
+  // «С нами с сентября 2026» — месяц нужен в родительном падеже; его даёт
+  // формат с днём («1 сентября»), день потом отрезаем.
+  const created = new Date(user.createdAt);
+  const memberSince = `${created
+    .toLocaleDateString("ru-RU", { day: "numeric", month: "long" })
+    .replace(/^\d+\s/, "")} ${created.getFullYear()}`;
 
   return (
     <StudentShell active="profile" title="Профиль">

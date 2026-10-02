@@ -8,15 +8,32 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Отступы под системные панели (вырез, статус-бар, жестовая полоса).
+ * Плагин @capacitor-community/safe-area на старых Android WebView отдаёт
+ * их через --safe-area-inset-*, новые WebView — через env(). Берём
+ * большее. Сохранённое с прошлого запуска значение подставляется скриптом
+ * в <head> (app/layout.tsx) до первой отрисовки — поэтому шапка не прыгает,
+ * когда плагин присылает значения после загрузки страницы. */
+:root {
+  --app-sat: max(var(--safe-area-inset-top, 0px), env(safe-area-inset-top, 0px));
+  --app-sab: max(var(--safe-area-inset-bottom, 0px), env(safe-area-inset-bottom, 0px));
+}
+
+/* overflow-x: clip, а не hidden: hidden превращает html/body в контейнер
+ * прокрутки, и position: sticky у шапки перестаёт работать (шапка уезжала
+ * вверх вместе со страницей). clip так же обрезает горизонтальный вылет,
+ * но прокрутку не создаёт. hidden оставлен запасным для старых WebView. */
 html {
   background-color: #f2faf5;
   overflow-x: hidden;
+  overflow-x: clip;
   width: 100%;
 }
 
 body {
   color: #132a20;
   overflow-x: hidden;
+  overflow-x: clip;
   width: 100%;
 }
 
