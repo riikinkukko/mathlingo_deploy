@@ -5,11 +5,13 @@ import TeacherShell from "@/components/TeacherShell";
 import { createHomeworkAction } from "@/app/actions";
 import AssignmentKindPicker from "./AssignmentKindPicker";
 import CustomProblemBuilder from "./CustomProblemBuilder";
+import QuickHomework from "@/components/QuickHomework";
+import { weakSpotsSummary, availableExamNumbers } from "@/lib/quick-homework";
 
 export default async function NewHomeworkPage({
   searchParams,
 }: {
-  searchParams: { studentId?: string };
+  searchParams: { studentId?: string; quick?: string };
 }) {
   const teacher = (await getSessionUser())!;
   const studentId = searchParams.studentId;
@@ -18,7 +20,17 @@ export default async function NewHomeworkPage({
     notFound();
   }
 
-  const curriculum = await getCurriculum();
+  const [curriculum, weak, examNumbers] = await Promise.all([
+    getCurriculum(),
+    weakSpotsSummary(student.id),
+    availableExamNumbers(),
+  ]);
+  const quickNotice =
+    searchParams.quick === "empty"
+      ? "Подходящих нерешённых задач не нашлось — выберите другие номера или соберите задание вручную."
+      : searchParams.quick === "nonumbers"
+        ? "Отметьте хотя бы один номер ЕГЭ."
+        : undefined;
   const allSkillsFlat = curriculum.flatMap((t) => t.chapters).flatMap((c) => c.skills);
   const problemsBySkill = new Map(
     await Promise.all(
@@ -30,14 +42,16 @@ export default async function NewHomeworkPage({
   const defaultDueStr = defaultDue.toISOString().slice(0, 10);
 
   return (
-    <TeacherShell active="students" title={`Задание для ${student.name}`}>
+    <TeacherShell active="students" title="Новое задание">
       <main className="mx-auto max-w-3xl px-4 pt-6">
         <h1 className="mb-1 font-display text-2xl font-black text-ink">
-          Задание для {student.name}
+          Новое задание · {student.name}
         </h1>
         <p className="mb-6 text-sm text-ink-soft">
           Выберите тип задания, задачи и срок сдачи.
         </p>
+
+        <QuickHomework studentId={student.id} weak={weak} numbers={examNumbers} notice={quickNotice} />
 
         <form action={createHomeworkAction} className="space-y-6">
           <input type="hidden" name="studentId" value={student.id} />

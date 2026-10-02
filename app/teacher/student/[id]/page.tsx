@@ -58,7 +58,7 @@ export default async function StudentDetailPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { done?: string; log?: string; tab?: string; ok?: string; hw?: string };
+  searchParams: { done?: string; log?: string; tab?: string; ok?: string; hw?: string; quick?: string };
 }) {
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
@@ -312,6 +312,11 @@ export default async function StudentDetailPage({
         </CollapsibleSection>
         </>)}
 
+        {tab === "hw" && Number(searchParams.quick) > 0 && (
+          <p role="status" className="mb-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-bold text-pine-dark">
+            ✓ Задание из {searchParams.quick} {pluralRu(Number(searchParams.quick), ["задачи", "задач", "задач"])} назначено — ученик получил уведомление.
+          </p>
+        )}
         {tab === "hw" && (<>
         <CollapsibleSection
           title="Прогресс по навыкам"
