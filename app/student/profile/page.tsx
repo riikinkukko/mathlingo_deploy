@@ -18,6 +18,7 @@ import ExamPlanCard from "@/components/ExamPlanCard";
 import { computeExamPlan, perDayLabel, EXAM_DATE, EXAM_DATE_IS_ESTIMATE } from "@/lib/exam-plan";
 import { computeStudentProgress } from "@/lib/queries";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
+import StudentRemindersToggle from "@/components/StudentRemindersToggle";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
@@ -227,7 +228,8 @@ export default async function ProfilePage({
                 ✅ Подключено — новые задания, пробники и результаты проверки
                 будут приходить и сюда, и в приложение.
               </p>
-              <form action={disconnectTelegramAction}>
+              <StudentRemindersToggle enabled={user.tgStudentReminders !== false} />
+              <form action={disconnectTelegramAction} className="mt-3">
                 <button type="submit" className="btn-secondary !text-xs !text-coral">
                   Отключить
                 </button>

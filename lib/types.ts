@@ -45,6 +45,7 @@ export interface User {
   tgNotifyLessons?: boolean;
   tgDailyDigest?: boolean;
   tgWeeklyReport?: boolean;
+  tgStudentReminders?: boolean;
   createdAt: string;
 }
 

@@ -150,6 +150,10 @@ export const users = pgTable("users", {
   // которую отчёт уже ушёл, чтобы не прислать его дважды.
   tgWeeklyReport: boolean("tg_weekly_report").notNull().default(true),
   weeklyReportSentOn: text("weekly_report_sent_on"),
+  // У УЧЕНИКА: вечернее напоминание в Telegram («серия сгорит», «завтра срок
+  // ДЗ»). eveningRemindedOn — дата последнего напоминания (YYYY-MM-DD, МСК).
+  tgStudentReminders: boolean("tg_student_reminders").notNull().default(true),
+  eveningRemindedOn: text("evening_reminded_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
