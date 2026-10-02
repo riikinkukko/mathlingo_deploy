@@ -5,12 +5,17 @@ import {
   getHomeworksForStudent,
   homeworkStatus,
 } from "@/lib/queries";
+import { redirect } from "next/navigation";
 import ParentShell from "@/components/ParentShell";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
 
 export default async function ParentDashboard({ searchParams }: { searchParams: { telegram?: string } }) {
   const user = (await getSessionUser())!;
   const children = await getChildrenOfParent(user.id);
+  // Один ребёнок (почти всегда) — сразу открываем его неделю, без лишнего экрана.
+  if (children.length === 1) {
+    redirect(`/parent/child/${children[0].id}${searchParams.telegram ? `?telegram=${encodeURIComponent(searchParams.telegram)}` : ""}`);
+  }
 
   const cards = await Promise.all(
     children.map(async (child) => {

@@ -14,7 +14,8 @@ import {
   getUpcomingLessonsForStudent,
   getStudentBalance,
 } from "@/lib/queries";
-import { balanceLabel, balanceColor } from "@/components/BalanceSummary";
+import { balanceLabel } from "@/components/BalanceSummary";
+import { IconCalendar, IconClipboard } from "@/components/icons";
 import GoalCard from "@/components/GoalCard";
 import UpcomingLessons from "@/components/UpcomingLessons";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
@@ -24,6 +25,8 @@ import CollapsibleSection from "@/components/CollapsibleSection";
 import SkillsProgressSummary from "@/components/SkillsProgressSummary";
 import RecentList from "@/components/RecentList";
 import { pluralRu } from "@/lib/pluralize";
+import Mascot from "@/components/Mascot";
+import TelegramConnectCard from "@/components/TelegramConnectCard";
 
 const KIND_LABEL: Record<string, string> = {
   homework: "Домашка",
@@ -33,8 +36,10 @@ const KIND_LABEL: Record<string, string> = {
 
 export default async function ChildDetailPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { telegram?: string };
 }) {
   const parent = (await getSessionUser())!;
   const isMyChild = await isParentOf(parent.id, params.id);
@@ -68,40 +73,96 @@ export default async function ChildDetailPage({
       ? await getStudentBalance(child.teacherId, child.id)
       : undefined;
 
+  const thisWeek = weekly[weekly.length - 1] ?? { solved: 0, accuracy: null };
+  const hwDone = homeworks.filter((h) => statusById.get(h.id)?.complete).length;
+  const hwOverdue = homeworks.filter((h) => statusById.get(h.id)?.overdue).length;
+  const nextDue = homeworks
+    .filter((h) => !statusById.get(h.id)?.complete && new Date(h.dueDate).getTime() >= Date.now())
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
+
   return (
     <ParentShell title={child.name}>
-      <main className="mx-auto max-w-3xl px-4 py-6">
-        <div className="mb-6">
-          <h1 className="font-display text-2xl font-black text-ink">{child.name}</h1>
-          {teacher && <p className="mt-1 text-sm text-ink-soft">Репетитор: {teacher.name}</p>}
-        </div>
-
-        <div className="mb-4 grid grid-cols-3 gap-3">
-          <StatChip label="Решено задач" value={`${stats.solvedProblems}/${stats.totalProblems}`} />
-          <StatChip label="Точность ответов" value={`${stats.accuracy}%`} />
-          <StatChip label="Активных дней за неделю" value={`${stats.activeDaysLast7}`} />
-        </div>
+      <main className="mx-auto max-w-3xl px-4 py-5">
+        {/* Неделя ребёнка — главное, ради чего родитель открывает приложение. */}
+        <section className="mb-4 flex items-center gap-3 rounded-[24px] bg-pine-darker p-4 pl-5 text-white">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-extrabold text-pine-mint">
+              {child.name.split(" ")[0]} · эта неделя
+            </p>
+            <p className="mt-1 font-display text-[22px] font-black leading-tight">
+              {stats.activeDaysLast7 > 0
+                ? `Занятия ${stats.activeDaysLast7} ${pluralRu(stats.activeDaysLast7, ["день", "дня", "дней"])} из 7`
+                : "Неделя без занятий"}
+            </p>
+            <p className="mt-1.5 text-[14px] text-pine-mint">
+              {thisWeek.solved} {pluralRu(thisWeek.solved, ["задача", "задачи", "задач"])}
+              {thisWeek.accuracy !== null ? ` · точность ${thisWeek.accuracy}%` : ""}
+            </p>
+          </div>
+          <Mascot mood={stats.activeDaysLast7 >= 3 ? "happy" : stats.activeDaysLast7 > 0 ? "idle" : "worried"} size={80} float={false} />
+        </section>
 
         <GoalCard targetScore={child.targetScore} mocks={mocks} readOnly />
-        {/* У GoalCard свой нижний отступ; если карточки нет — держим ритм страницы. */}
         {!child.targetScore && mocks.length === 0 && <div className="mb-4" />}
 
-        {balance && (
-          <div className={`card mb-6 p-4 ${balance.balance < 0 ? "border-2 !border-coral bg-coral-light/30" : ""}`}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-bold text-ink">Оплата занятий</p>
-              <p className={`text-sm font-bold ${balanceColor(balance.balance)}`}>{balanceLabel(balance.balance)}</p>
-            </div>
-            <p className="mt-1 text-xs text-ink-soft">
-              Оплачено занятий: {balance.paidLessons} · проведено: {balance.doneLessons}
+        {/* Сводка одной карточкой: занятие, домашка, оплата. */}
+        <section className="mb-4 overflow-hidden rounded-[20px] border border-line-soft bg-white">
+          <SummaryRow
+            tone="bg-pine-light text-pine-dark"
+            icon={<IconCalendar className="h-5 w-5" />}
+            title={
+              upcomingLessons[0]
+                ? `Занятие ${new Date(upcomingLessons[0].startsAt).toLocaleString("ru-RU", {
+                    timeZone: "Europe/Moscow",
+                    weekday: "long",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}`
+                : "Ближайших занятий нет"
+            }
+            sub={upcomingLessons[0]?.topic ?? (teacher ? `Репетитор: ${teacher.name}` : undefined)}
+          />
+          <SummaryRow
+            tone="bg-amber-light text-amber-dark"
+            icon={<IconClipboard className="h-5 w-5" />}
+            title={
+              homeworks.length === 0
+                ? "Домашних заданий нет"
+                : `Домашка: ${hwDone} из ${homeworks.length} ${pluralRu(homeworks.length, ["сдана", "сданы", "сдано"])}`
+            }
+            sub={
+              hwOverdue > 0
+                ? `Просрочено: ${hwOverdue}`
+                : nextDue
+                  ? `Ближайший срок — ${new Date(nextDue.dueDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`
+                  : undefined
+            }
+            alert={hwOverdue > 0}
+          />
+          {balance && (
+            <SummaryRow
+              tone={balance.balance < 0 ? "bg-coral-light text-coral-text" : "bg-pine-light text-pine-dark"}
+              icon="₽"
+              title={balanceLabel(balance.balance)}
+              sub={teacher?.paymentInstructions ? `Как оплатить: ${teacher.paymentInstructions}` : `Оплачено ${balance.paidLessons} · проведено ${balance.doneLessons}`}
+              alert={balance.balance < 0}
+              last
+            />
+          )}
+        </section>
+
+        {lessonLogs[0] && (
+          <section className="mb-6 rounded-[20px] border border-line-soft bg-white p-4">
+            <p className="text-[12px] font-extrabold text-ink-soft">
+              Последний отчёт репетитора ·{" "}
+              {new Date(lessonLogs[0].date).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}
             </p>
-            {teacher?.paymentInstructions && (
-              <p className="mt-2 text-xs text-ink">
-                <span className="font-bold">Как оплатить:</span> {teacher.paymentInstructions}
-              </p>
-            )}
-          </div>
+            <p className="mt-1 font-display text-[15px] font-black text-ink">{lessonLogs[0].topic}</p>
+            <p className="mt-1 text-[14px] leading-relaxed text-ink-soft">{lessonLogs[0].report}</p>
+          </section>
         )}
+
+        <h2 className="mb-2 px-1 text-[12px] font-black uppercase tracking-wide text-ink-soft">Подробнее</h2>
 
         {upcomingLessons.length > 0 && (
           <CollapsibleSection
@@ -116,7 +177,6 @@ export default async function ChildDetailPage({
         <CollapsibleSection
           title="Динамика"
           summary={`${solved12w} ${pluralRu(solved12w, ["задача", "задачи", "задач"])} за 12 недель`}
-          defaultOpen
         >
           <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={child.targetScore} readOnly />
         </CollapsibleSection>
@@ -178,16 +238,44 @@ export default async function ChildDetailPage({
             })}
           />
         </CollapsibleSection>
+        <div className="mt-6">
+          <TelegramConnectCard
+            user={parent}
+            returnTo={`/parent/child/${child.id}`}
+            disconnected={searchParams.telegram === "disconnected"}
+            pitch="Напоминания о занятиях, отчёты репетитора после урока и напоминания об оплате — прямо в Telegram, без входа в приложение."
+            connectedNote="Уведомления о ребёнке дублируются сюда."
+          />
+        </div>
       </main>
     </ParentShell>
   );
 }
 
-function StatChip({ label, value }: { label: string; value: string }) {
+function SummaryRow({
+  icon,
+  tone,
+  title,
+  sub,
+  alert,
+  last,
+}: {
+  icon: React.ReactNode;
+  tone: string;
+  title: string;
+  sub?: string;
+  alert?: boolean;
+  last?: boolean;
+}) {
   return (
-    <div className="card px-4 py-3 text-center">
-      <p className="font-mono text-lg font-semibold leading-none text-ink">{value}</p>
-      <p className="mt-1 text-[11px] text-ink-soft">{label}</p>
+    <div className={`flex min-h-[60px] items-center gap-3 px-4 py-2.5 ${last ? "" : "border-b border-line-soft"}`}>
+      <span aria-hidden className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[15px] font-black ${tone}`}>
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-[15px] font-extrabold ${alert ? "text-coral-text" : "text-ink"}`}>{title}</p>
+        {sub && <p className="text-[12px] text-ink-soft">{sub}</p>}
+      </div>
     </div>
   );
 }
