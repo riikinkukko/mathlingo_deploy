@@ -35,8 +35,8 @@ jobs:
       SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else-0123456789
       NEXT_PUBLIC_APP_URL: http://localhost:3100
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -64,13 +64,10 @@ jobs:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Вся логика — в scripts/deploy.sh (он приходит с git pull, так что
+          # всегда свежий): миграция или сборка не прошли → сайт остаётся на
+          # прежней рабочей версии, а не ложится с 502.
           script: |
             cd /var/www/planimetrika
             git pull origin master
-            npm install
-            npx drizzle-kit migrate
-            npm run build
-            pm2 restart planimetrika
-            pm2 delete planimetrika-tg || true
-            pm2 start npm --name planimetrika-tg -- run telegram:poll
-            pm2 save
+            bash scripts/deploy.sh

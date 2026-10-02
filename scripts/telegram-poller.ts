@@ -62,6 +62,11 @@ async function main() {
   const { sendLessonStatusPrompts, sendTeacherDigests } = await import("../lib/teacher-telegram");
   const { sendParentWeeklyReports } = await import("../lib/parent-weekly");
   const { sendStudentEveningReminders } = await import("../lib/student-reminders");
+  const { reportError } = await import("../lib/alerts");
+  const alert = (where: string, e: unknown) => {
+    const err = e instanceof Error ? e : new Error(String(e));
+    void reportError({ source: "bot", message: `${where}: ${err.message}`, stack: err.stack });
+  };
 
   // Напоминания о занятиях — отдельным циклом, параллельно опросу Telegram.
   // Повторная отправка исключена на уровне БД (атомарная пометка reminded_at),
@@ -73,6 +78,7 @@ async function main() {
         if (n > 0) console.log(`[telegram-poller] Напоминания о занятиях отправлены: ${n}`);
       } catch (e) {
         console.error("[telegram-poller] Ошибка напоминаний о занятиях:", e);
+        alert("Напоминания о занятиях", e);
       }
       // Репетитору: «занятие прошло — было или не было?» и утренняя сводка.
       try {
@@ -86,6 +92,7 @@ async function main() {
         if (e > 0) console.log(`[telegram-poller] Вечерних напоминаний ученикам: ${e}`);
       } catch (e) {
         console.error("[telegram-poller] Ошибка уведомлений репетитору:", e);
+        alert("Сводки и напоминания", e);
       }
       await sleep(REMINDER_INTERVAL_MS);
     }
@@ -123,6 +130,7 @@ async function main() {
           await handleTelegramUpdate(update);
         } catch (e) {
           console.error("[telegram-poller] Ошибка обработки апдейта", update.update_id, e);
+          alert("Обработка сообщения боту", e);
         }
       }
     } catch (e) {
