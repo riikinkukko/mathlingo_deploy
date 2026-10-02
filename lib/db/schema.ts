@@ -37,6 +37,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "review_decided",
   "review_pending",
   "skill_completed",
+  "weekly_report",
 ]);
 
 // ---------------- Таблицы ----------------
@@ -141,6 +142,11 @@ export const users = pgTable("users", {
   tgNotifyLessons: boolean("tg_notify_lessons").notNull().default(true),
   tgDailyDigest: boolean("tg_daily_digest").notNull().default(true),
   digestSentOn: text("digest_sent_on"),
+  // У РОДИТЕЛЯ: еженедельный отчёт о ребёнке по воскресеньям (вкл. по
+  // умолчанию). weeklyReportSentOn — понедельник недели (YYYY-MM-DD), за
+  // которую отчёт уже ушёл, чтобы не прислать его дважды.
+  tgWeeklyReport: boolean("tg_weekly_report").notNull().default(true),
+  weeklyReportSentOn: text("weekly_report_sent_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

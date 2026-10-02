@@ -47,3 +47,14 @@ export async function saveTeacherTelegramPrefsAction(_prev: TgPrefsState, formDa
   revalidatePath("/teacher/settings");
   return { ok: true, at: Date.now() };
 }
+
+/** Родитель: присылать ли недельный отчёт по воскресеньям. */
+export async function setParentWeeklyReportAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
+  const user = await getSessionUser();
+  if (!user || user.role !== "PARENT") return { error: "Нет доступа" };
+  await db
+    .update(schema.users)
+    .set({ tgWeeklyReport: formData.get("weekly") === "on" })
+    .where(eq(schema.users.id, user.id));
+  return { ok: true, at: Date.now() };
+}

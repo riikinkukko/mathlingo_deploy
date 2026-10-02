@@ -54,6 +54,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     tgNotifyHomework: row.tgNotifyHomework,
     tgNotifyLessons: row.tgNotifyLessons,
     tgDailyDigest: row.tgDailyDigest,
+    tgWeeklyReport: row.tgWeeklyReport,
     createdAt: row.createdAt.toISOString(),
   };
 }

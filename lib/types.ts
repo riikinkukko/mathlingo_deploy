@@ -43,6 +43,7 @@ export interface User {
   tgNotifyHomework?: boolean;
   tgNotifyLessons?: boolean;
   tgDailyDigest?: boolean;
+  tgWeeklyReport?: boolean;
   createdAt: string;
 }
 
@@ -220,7 +221,8 @@ export type NotificationType =
   | "question_asked"
   | "review_decided"
   | "review_pending"
-  | "skill_completed";
+  | "skill_completed"
+  | "weekly_report";
 
 export interface Notification {
   id: string;

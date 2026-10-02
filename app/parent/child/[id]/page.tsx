@@ -27,6 +27,7 @@ import RecentList from "@/components/RecentList";
 import { pluralRu } from "@/lib/pluralize";
 import Mascot from "@/components/Mascot";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
+import ParentWeeklyToggle from "@/components/ParentWeeklyToggle";
 
 const KIND_LABEL: Record<string, string> = {
   homework: "Домашка",
@@ -246,6 +247,8 @@ export default async function ChildDetailPage({
             pitch="Напоминания о занятиях, отчёты репетитора после урока и напоминания об оплате — прямо в Telegram, без входа в приложение."
             connectedNote="Уведомления о ребёнке дублируются сюда."
           />
+          {/* Отчёт приходит в приложение всегда, в Telegram — если подключён. */}
+          <ParentWeeklyToggle enabled={parent.tgWeeklyReport !== false} />
         </div>
       </main>
     </ParentShell>

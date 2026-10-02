@@ -60,6 +60,7 @@ async function main() {
   const { handleTelegramUpdate } = await import("../lib/telegram-updates");
   const { sendDueLessonReminders } = await import("../lib/lesson-reminders");
   const { sendLessonStatusPrompts, sendTeacherDigests } = await import("../lib/teacher-telegram");
+  const { sendParentWeeklyReports } = await import("../lib/parent-weekly");
 
   // Напоминания о занятиях — отдельным циклом, параллельно опросу Telegram.
   // Повторная отправка исключена на уровне БД (атомарная пометка reminded_at),
@@ -78,6 +79,8 @@ async function main() {
         if (p > 0) console.log(`[telegram-poller] Вопросов «было ли занятие» отправлено: ${p}`);
         const d = await sendTeacherDigests();
         if (d > 0) console.log(`[telegram-poller] Утренних сводок отправлено: ${d}`);
+        const w = await sendParentWeeklyReports();
+        if (w > 0) console.log(`[telegram-poller] Недельных отчётов родителям: ${w}`);
       } catch (e) {
         console.error("[telegram-poller] Ошибка уведомлений репетитору:", e);
       }
