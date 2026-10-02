@@ -9,6 +9,7 @@ import { ymGoal } from "@/lib/ym";
 import DiagramScratchpad from "./diagrams/DiagramScratchpad";
 import MathKeyboard from "./MathKeyboard";
 import Mascot from "./Mascot";
+import AskTeacherButton from "./AskTeacherButton";
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
 export type ProblemCardStatus = "unsolved" | "solved" | "pending" | "needs_revision";
@@ -25,6 +26,7 @@ export default function ProblemCard({
   onSolved,
   onWrong,
   onOpenTheory,
+  canAskTeacher = false,
 }: {
   problem: PublicProblem;
   status: ProblemCardStatus;
@@ -39,6 +41,8 @@ export default function ProblemCard({
   /** Кнопка "Теория" в панели инструментов — опциональна: есть только там,
    * где родитель (LessonFlow) реально владеет карточками теории навыка. */
   onOpenTheory?: () => void;
+  /** Кнопка «Не понял — спросить репетитора» (только у учеников репетитора). */
+  canAskTeacher?: boolean;
 }) {
   const isDetailed = problem.answerType === "DETAILED";
   const [answer, setAnswer] = useState(previousAnswer ?? "");
@@ -400,6 +404,7 @@ export default function ProblemCard({
           </div>
         </div>
       )}
+      {canAskTeacher && !pendingReview && <AskTeacherButton problemId={problem.id} currentAnswer={answer} />}
     </div>
   );
 }

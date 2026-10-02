@@ -19,6 +19,7 @@ export default function LessonFlow({
   isLastSkill,
   forceTheoryFirst = false,
   backHref = "/student",
+  canAskTeacher = false,
 }: {
   skillTitle: string;
   theoryCards: TheoryCard[];
@@ -36,6 +37,8 @@ export default function LessonFlow({
    * чтобы ученик вернулся в ТУ ЖЕ тему, где решал задачу, а не всегда
    * в первую тему списка (см. app/student/skill/[id]/page.tsx). */
   backHref?: string;
+  /** У ученика есть репетитор — показываем «Не понял — спросить репетитора». */
+  canAskTeacher?: boolean;
 }) {
   const allSolvedInitially = problems.every((p) => initialStates[p.id]?.status === "solved");
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
@@ -149,6 +152,7 @@ export default function LessonFlow({
         onSolved={() => handleSolved(current.id)}
         onWrong={() => handleWrong(current.id)}
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
+        canAskTeacher={canAskTeacher}
       />
 
       {/* Одна большая кнопка внизу, под большим пальцем: появляется, когда

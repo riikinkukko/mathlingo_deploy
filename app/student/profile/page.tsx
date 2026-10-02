@@ -148,6 +148,15 @@ export default async function ProfilePage({
         <div className="mb-6">
           <ExamMap rows={examMap} />
         </div>
+        {user.teacherId && (
+          <a
+            href="/student/questions"
+            className="mb-6 flex min-h-[52px] items-center justify-between rounded-[20px] border border-line-soft bg-white px-4 text-[15px] font-extrabold text-ink transition hover:border-pine"
+          >
+            Мои вопросы репетитору
+            <span aria-hidden className="text-ink-soft/60">›</span>
+          </a>
+        )}
 
         <div className="mb-6 grid grid-cols-3 gap-3">
           <StatChip label="Решено задач" value={`${stats.solvedProblems}`} />

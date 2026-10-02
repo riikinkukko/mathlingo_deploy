@@ -216,6 +216,8 @@ export type NotificationType =
   | "lesson_log_added"
   | "lesson_scheduled"
   | "payment_reminder"
+  | "question_answered"
+  | "question_asked"
   | "review_decided"
   | "review_pending"
   | "skill_completed";

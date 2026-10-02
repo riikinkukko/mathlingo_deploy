@@ -32,6 +32,8 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "lesson_log_added",
   "lesson_scheduled",
   "payment_reminder",
+  "question_answered",
+  "question_asked",
   "review_decided",
   "review_pending",
   "skill_completed",
@@ -409,6 +411,27 @@ export const studentNotes = pgTable("student_notes", {
     .references(() => users.id, { onDelete: "cascade" }),
   notes: text("notes").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Вопрос ученика репетитору из задачи («Не понял»): условие + ответ ученика +
+// его сообщение; репетитор отвечает текстом. answeredAt/answer — NULL, пока
+// вопрос открыт.
+export const studentQuestions = pgTable("student_questions", {
+  id: text("id").primaryKey(),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  problemId: text("problem_id")
+    .notNull()
+    .references(() => problems.id, { onDelete: "cascade" }),
+  studentAnswer: text("student_answer"),
+  message: text("message").notNull().default(""),
+  answer: text("answer"),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const notifications = pgTable("notifications", {

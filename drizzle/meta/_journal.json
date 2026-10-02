@@ -127,6 +127,13 @@
       "when": 1790941726096,
       "tag": "0017_next_madripoor",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790958859653,
+      "tag": "0018_normal_spencer_smythe",
+      "breakpoints": true
     }
   ]
 }

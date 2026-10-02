@@ -96,6 +96,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
         isLastSkill={!next}
         forceTheoryFirst={forceTheoryFirst}
         backHref={`/student?topic=${topicEntry?.topic.id ?? ""}`}
+        canAskTeacher={!!user.teacherId}
       />
     </div>
   );

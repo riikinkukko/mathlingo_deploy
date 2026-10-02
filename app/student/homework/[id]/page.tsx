@@ -56,6 +56,7 @@ export default async function HomeworkPage({ params }: { params: { id: string } 
         items={items}
         initialStates={states}
         deadlineAt={deadlineAt}
+        canAskTeacher={!!user.teacherId}
       />
     </div>
   );

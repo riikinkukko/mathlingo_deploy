@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById } from "@/lib/queries";
+import { getStudentsOfTeacher, computeOverallStats, getHomeworksForStudent, homeworkStatus, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
 import TeacherShell from "@/components/TeacherShell";
 import TeacherDayPanel, { DayPanelData } from "@/components/TeacherDayPanel";
@@ -24,7 +24,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [cards, pendingReviews, balances, latestMocks, unmarked, todayLessons] = await Promise.all([
+  const [cards, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions] = await Promise.all([
     Promise.all(
       students.map(async (s) => {
         const [stats, homeworks] = await Promise.all([
@@ -42,6 +42,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
     getLatestMockScoresForTeacher(user.id),
     getUnmarkedPastLessons(user.id),
     getTodayLessonsForTeacher(user.id),
+    getOpenQuestionsCount(user.id),
   ]);
   const todayLabel = new Date().toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", weekday: "short", day: "numeric", month: "long" });
   // В «Нужно внимание» — только прошлые дни: сегодняшние отмечаются в карточке «Сегодня».
@@ -68,6 +69,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
       .sort((a, b) => a.balance - b.balance)
       .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance })),
     unmarkedLessons: unmarked.filter((l) => !todayIds.has(l.id)).length,
+    openQuestions,
   };
 
   return (

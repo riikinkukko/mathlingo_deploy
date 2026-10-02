@@ -2036,3 +2036,66 @@ export async function getHomeworkById(id: string): Promise<Homework | undefined>
   const rows = await db.select().from(schema.homeworks).where(eq(schema.homeworks.id, id)).limit(1);
   return rows[0] ? mapHomework(rows[0]) : undefined;
 }
+
+// ---------- Вопросы ученика репетитору («Не понял») ----------
+
+export interface StudentQuestionView {
+  id: string;
+  studentId: string;
+  studentName: string;
+  problemId: string;
+  problemText: string;
+  egeTaskNumber: number | null;
+  studentAnswer: string | null;
+  message: string;
+  answer: string | null;
+  answeredAt: string | null;
+  createdAt: string;
+}
+
+async function selectQuestions(where: ReturnType<typeof eq>) {
+  const rows = await db
+    .select({
+      q: schema.studentQuestions,
+      studentName: schema.users.name,
+      problemText: schema.problems.text,
+      egeTaskNumber: schema.problems.egeTaskNumber,
+    })
+    .from(schema.studentQuestions)
+    .innerJoin(schema.users, eq(schema.users.id, schema.studentQuestions.studentId))
+    .innerJoin(schema.problems, eq(schema.problems.id, schema.studentQuestions.problemId))
+    .where(where)
+    .orderBy(desc(schema.studentQuestions.createdAt))
+    .limit(100);
+  return rows.map(
+    (r): StudentQuestionView => ({
+      id: r.q.id,
+      studentId: r.q.studentId,
+      studentName: r.studentName,
+      problemId: r.q.problemId,
+      problemText: r.problemText,
+      egeTaskNumber: r.egeTaskNumber ?? null,
+      studentAnswer: r.q.studentAnswer,
+      message: r.q.message,
+      answer: r.q.answer,
+      answeredAt: r.q.answeredAt ? r.q.answeredAt.toISOString() : null,
+      createdAt: r.q.createdAt.toISOString(),
+    })
+  );
+}
+
+export function getQuestionsForTeacher(teacherId: string) {
+  return selectQuestions(eq(schema.studentQuestions.teacherId, teacherId));
+}
+
+export function getQuestionsForStudent(studentId: string) {
+  return selectQuestions(eq(schema.studentQuestions.studentId, studentId));
+}
+
+export async function getOpenQuestionsCount(teacherId: string): Promise<number> {
+  const rows = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(schema.studentQuestions)
+    .where(and(eq(schema.studentQuestions.teacherId, teacherId), isNull(schema.studentQuestions.answeredAt)));
+  return Number(rows[0]?.c ?? 0);
+}

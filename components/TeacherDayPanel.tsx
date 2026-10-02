@@ -27,6 +27,8 @@ export interface DayPanelData {
   debts: { id: string; name: string; lessons: number }[];
   /** прошедшие занятия, не отмеченные «Было/Не было» */
   unmarkedLessons: number;
+  /** вопросы учеников «Не понял» без ответа */
+  openQuestions?: number;
 }
 
 function daysLabel(days: number | null): string {
@@ -46,6 +48,16 @@ type Row = { key: string; href: string; badge: string; tone: string; title: stri
 export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
   const { reviewsCount, overdue, inactive, debts, unmarkedLessons } = data;
   const rows: Row[] = [];
+  const openQuestions = data.openQuestions ?? 0;
+  if (openQuestions > 0)
+    rows.push({
+      key: "questions",
+      href: "/teacher/questions",
+      badge: String(openQuestions),
+      tone: "bg-violet-light text-violet-text",
+      title: `${openQuestions === 1 ? "Вопрос ученика" : "Вопросы учеников"} — ответить`,
+      sub: "Нажали «Не понял» в задаче",
+    });
   const names = (xs: { name: string }[]) =>
     xs.slice(0, 2).map((x) => x.name.split(" ")[0]).join(", ") + (xs.length > 2 ? ` и ещё ${xs.length - 2}` : "");
 
@@ -104,7 +116,7 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
               .join(" · ") + (inactive.length > 2 ? ` · ещё ${inactive.length - 2}` : ""),
     });
 
-  if (rows.length === 0) {
+  if (rows.length === 0 && openQuestions === 0) {
     return (
       <div className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white px-4 py-3">
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pine-light font-black text-pine-dark">✓</span>

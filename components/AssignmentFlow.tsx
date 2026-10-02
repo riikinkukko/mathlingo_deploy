@@ -21,6 +21,7 @@ export default function AssignmentFlow({
   items,
   initialStates,
   deadlineAt,
+  canAskTeacher = false,
 }: {
   title: string;
   kind: string;
@@ -28,6 +29,8 @@ export default function AssignmentFlow({
   items: { problem: PublicProblem; skillTitle: string }[];
   initialStates: Record<string, ProblemState>;
   deadlineAt?: string | null;
+  /** «Не понял — спросить репетитора»; в контрольной без подсказок не показываем. */
+  canAskTeacher?: boolean;
 }) {
   const [index, setIndex] = useState(0);
   const [states, setStates] = useState(initialStates);
@@ -123,6 +126,7 @@ export default function AssignmentFlow({
         locked={expired}
         onSolved={() => handleSolved(current.problem.id)}
         onWrong={() => setCombo(0)}
+        canAskTeacher={canAskTeacher && allowHints}
       />
 
       <div className="mt-4 flex gap-2">
