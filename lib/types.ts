@@ -265,12 +265,16 @@ export interface ScheduledLesson {
   topic: string | null;
   status: LessonStatus;
   seriesId: string | null; // не null — занятие из еженедельной серии
+  /** групповое занятие: у строк всех учеников одного занятия общий groupLessonId */
+  groupId: string | null;
+  groupLessonId: string | null;
   createdAt: string;
 }
 
 /** Занятие вместе с именем ученика — для списков в кабинете. */
 export interface ScheduledLessonWithStudent extends ScheduledLesson {
   studentName: string;
+  groupName?: string | null;
 }
 
 /** Оплата занятий учеником репетитору (не путать с Payment — подписка ЮKassa). */

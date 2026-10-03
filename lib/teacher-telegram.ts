@@ -27,6 +27,8 @@ import { isQuietHours } from "./lesson-reminders";
 import { pluralRu } from "./pluralize";
 import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
+import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
+import { countDistinctLessons } from "./groups";
 
 const TZ = "Europe/Moscow";
 /** Через сколько после конца занятия спрашиваем «было или не было». */
@@ -167,6 +169,26 @@ function lessonPromptText(studentName: string, startsAt: Date, durationMin: numb
   );
 }
 
+function groupPromptText(groupName: string | null, names: string[], startsAt: Date, durationMin: number, topic: string | null) {
+  const end = new Date(startsAt.getTime() + durationMin * 60000);
+  return (
+    `<b>Занятие закончилось</b>\n👥 ${esc(groupTitle(groupName))} · ${mskDateShort(startsAt)}, ${mskTime(startsAt)}–${mskTime(end)}` +
+    `\n${esc(names.join(", "))}` +
+    (topic ? `\nТема: ${esc(topic)}` : "")
+  );
+}
+
+function groupKeyboard(groupLessonId: string): InlineKeyboard {
+  return {
+    inline_keyboard: [
+      [
+        { text: "✅ Были все", callback_data: `lg:d:${groupLessonId}` },
+        { text: "✖️ Не было", callback_data: `lg:c:${groupLessonId}` },
+      ],
+    ],
+  };
+}
+
 function lessonKeyboard(lessonId: string): InlineKeyboard {
   return {
     inline_keyboard: [
@@ -196,7 +218,26 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
     .returning();
 
   let sent = 0;
+  // Групповое занятие — один вопрос на всю группу, а не по сообщению на ученика.
+  const groupRows = new Map<string, typeof claimed>();
+  for (const l of claimed) if (l.groupLessonId) groupRows.set(l.groupLessonId, [...(groupRows.get(l.groupLessonId) ?? []), l]);
+  for (const [groupLessonId, rows] of groupRows) {
+    try {
+      const first = rows[0];
+      const teacher = await getUserById(first.teacherId);
+      if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
+      const info = await groupLessonInfo(groupLessonId);
+      const text =
+        groupPromptText(info.groupName, info.names, first.startsAt, first.durationMin, first.topic) +
+        `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
+        openLink(first.groupId ? `/teacher/groups/${first.groupId}` : "/teacher/schedule", "Отметить посещаемость →");
+      if (await sendTelegramMessage(teacher.telegramChatId, text, { replyMarkup: groupKeyboard(groupLessonId) })) sent++;
+    } catch (e) {
+      console.error("[teacher-telegram] не удалось спросить про групповое занятие", groupLessonId, e);
+    }
+  }
   for (const lesson of claimed) {
+    if (lesson.groupLessonId) continue;
     try {
       const teacher = await getUserById(lesson.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
@@ -210,6 +251,20 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
     }
   }
   return sent;
+}
+
+/** Название группы и имена учеников группового занятия. */
+async function groupLessonInfo(groupLessonId: string) {
+  const rows = await db
+    .select({ name: schema.users.name, groupName: schema.studentGroups.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
+    .where(eq(schema.scheduledLessons.groupLessonId, groupLessonId));
+  return {
+    groupName: rows[0]?.groupName ?? null,
+    names: rows.map((r) => r.name.split(" ")[0]).sort((a, b) => a.localeCompare(b, "ru")),
+  };
 }
 
 async function findTeacherByChat(chatId: string) {
@@ -244,6 +299,46 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
           ? `Уже напоминали за последние сутки: ${first}`
           : "Ученик не найден"
     );
+    return;
+  }
+
+  const g = /^lg:([dc]):(.+)$/.exec(data);
+  if (g && chatId) {
+    const t = await findTeacherByChat(chatId);
+    if (!t) {
+      await answer("Этот Telegram не привязан к кабинету репетитора");
+      return;
+    }
+    const status: LessonMark = g[1] === "d" ? "done" : "cancelled";
+    const rows = await db
+      .select({ id: schema.scheduledLessons.id, teacherId: schema.scheduledLessons.teacherId, status: schema.scheduledLessons.status, startsAt: schema.scheduledLessons.startsAt, durationMin: schema.scheduledLessons.durationMin, topic: schema.scheduledLessons.topic, groupId: schema.scheduledLessons.groupId })
+      .from(schema.scheduledLessons)
+      .where(eq(schema.scheduledLessons.groupLessonId, g[2]));
+    if (rows.length === 0 || rows[0].teacherId !== t.id) {
+      await answer("Занятие не найдено — возможно, его удалили");
+      return;
+    }
+    // Только неотмеченные строки: если в кабинете уже отметили посещаемость,
+    // кнопка из чата её не перезапишет.
+    let changed = 0;
+    for (const r of rows) {
+      const res = await applyLessonStatus(t.id, r.id, status, { onlyIfPlanned: true });
+      if (res.ok) changed++;
+    }
+    const mark = status === "done" ? "✅ Отмечено: были все" : "✖️ Отмечено: занятия не было";
+    if (messageId) {
+      const info = await groupLessonInfo(g[2]);
+      await callTelegram("editMessageText", {
+        chat_id: chatId,
+        message_id: messageId,
+        text:
+          groupPromptText(info.groupName, info.names, rows[0].startsAt, rows[0].durationMin, rows[0].topic) +
+          `\n\n<b>${changed ? mark : "Уже было отмечено раньше"}</b>`,
+        parse_mode: "HTML",
+        disable_web_page_preview: true,
+      });
+    }
+    await answer(changed ? mark : "Уже было отмечено раньше");
     return;
   }
 
@@ -302,9 +397,10 @@ export async function buildTodayText(
 
   const [lessons, pending, unmarked, balances, inactive] = await Promise.all([
     db
-      .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+      .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
       .from(schema.scheduledLessons)
       .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+      .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
       .where(
         and(
           eq(schema.scheduledLessons.teacherId, teacherId),
@@ -321,6 +417,10 @@ export async function buildTodayText(
   ]);
   // Неотмеченные — только прошлых дней: сегодняшние и так в списке занятий.
   const unmarkedOld = unmarked.filter((l) => new Date(l.startsAt) < dayStart);
+  const unmarkedOldCount = countDistinctLessons(unmarkedOld);
+  const dayItems = collapseGroupLessons(
+    lessons.map(({ lesson, studentName, groupName }) => ({ ...lesson, studentName, groupName }))
+  );
   const debtors = balances.filter((b) => b.balance < 0).sort((a, b) => a.balance - b.balance);
 
   if (lessons.length === 0 && pending.length === 0 && unmarkedOld.length === 0 && debtors.length === 0 && inactive.length === 0)
@@ -329,11 +429,13 @@ export async function buildTodayText(
   const lines: string[] = [];
   lines.push(`<b>${greeting ? "Доброе утро! " : ""}Сегодня, ${esc(mskDateLong(now))}</b>`);
 
-  if (lessons.length) {
-    lines.push("", `📅 ${lessons.length} ${pluralRu(lessons.length, ["занятие", "занятия", "занятий"])}:`);
-    for (const { lesson, studentName } of lessons) {
-      const done = lesson.status === "done" ? " ✅" : "";
-      lines.push(`${mskTime(lesson.startsAt)} — ${esc(studentName)}${lesson.topic ? ` · ${esc(lesson.topic)}` : ""}${done}`);
+  if (dayItems.length) {
+    lines.push("", `📅 ${dayItems.length} ${pluralRu(dayItems.length, ["занятие", "занятия", "занятий"])}:`);
+    for (const l of dayItems) {
+      const done = l.status === "done" ? " ✅" : "";
+      const end = new Date(l.startsAt.getTime() + l.durationMin * 60000);
+      const who = l.members ? `👥 ${groupTitle(l.groupName)} (${l.members.length})` : l.studentName;
+      lines.push(`${mskTime(l.startsAt)}–${mskTime(end)} — ${esc(who)}${l.topic ? ` · ${esc(l.topic)}` : ""}${done}`);
     }
   } else {
     lines.push("", "📅 Занятий сегодня нет");
@@ -341,8 +443,8 @@ export async function buildTodayText(
   if (pending.length) {
     lines.push(`📝 На проверке: ${pending.length} ${pluralRu(pending.length, ["решение", "решения", "решений"])}`);
   }
-  if (unmarkedOld.length) {
-    lines.push(`⏳ Не отмечено прошлых занятий: ${unmarkedOld.length}`);
+  if (unmarkedOldCount) {
+    lines.push(`⏳ Не отмечено прошлых занятий: ${unmarkedOldCount}`);
   }
   if (debtors.length) {
     const names = debtors

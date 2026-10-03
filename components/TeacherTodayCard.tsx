@@ -1,10 +1,9 @@
 import { setLessonStatusAction } from "@/app/actions-schedule";
 import { pluralRu } from "@/lib/pluralize";
 import type { ScheduledLessonWithStudent } from "@/lib/types";
-
-function mskTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" });
-}
+import { collapseGroupLessons, groupTitle } from "@/lib/lesson-collapse";
+import { lessonTimeRange, mskClock } from "@/lib/lesson-time";
+import GroupLessonActions from "./GroupLessonActions";
 
 function untilLabel(iso: string, now: number) {
   const min = Math.round((new Date(iso).getTime() - now) / 60000);
@@ -26,18 +25,19 @@ export default function TeacherTodayCard({
   dateLabel: string;
 }) {
   const now = Date.now();
+  const items = collapseGroupLessons(lessons);
   return (
     <section className="mb-4 rounded-[24px] bg-pine-darker p-4 text-white">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="font-display text-[17px] font-black">
-          {lessons.length > 0
-            ? `${lessons.length} ${pluralRu(lessons.length, ["занятие", "занятия", "занятий"])} сегодня`
+          {items.length > 0
+            ? `${items.length} ${pluralRu(items.length, ["занятие", "занятия", "занятий"])} сегодня`
             : "Сегодня занятий нет"}
         </h2>
         <span className="text-[12px] font-bold text-pine-mint">{dateLabel}</span>
       </div>
 
-      {lessons.length === 0 ? (
+      {items.length === 0 ? (
         <a
           href="/teacher/schedule"
           className="mt-3 flex min-h-[44px] items-center justify-center rounded-2xl bg-white/10 text-sm font-extrabold text-white"
@@ -46,7 +46,7 @@ export default function TeacherTodayCard({
         </a>
       ) : (
         <ul className="mt-3 space-y-2">
-          {lessons.map((l) => {
+          {items.map((l) => {
             const started = new Date(l.startsAt).getTime() <= now;
             const needsMark = l.status === "planned" && started;
             return (
@@ -55,9 +55,24 @@ export default function TeacherTodayCard({
                 className={`rounded-2xl p-3 ${needsMark ? "bg-white text-ink" : "bg-white/10 text-white"}`}
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-12 shrink-0 font-display text-[15px] font-black">{mskTime(l.startsAt)}</span>
-                  <a href={`/teacher/student/${l.studentId}`} className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px] font-extrabold">{l.studentName}</span>
+                  <span className="w-[52px] shrink-0 leading-tight" title={lessonTimeRange(l.startsAt, l.durationMin)}>
+                    <span className="block font-display text-[15px] font-black">{mskClock(l.startsAt)}</span>
+                    <span className={`block text-[11px] font-bold ${needsMark ? "text-ink-soft" : "text-pine-mint"}`}>
+                      –{mskClock(new Date(new Date(l.startsAt).getTime() + l.durationMin * 60000))}
+                    </span>
+                  </span>
+                  <a
+                    href={l.members && l.groupId ? `/teacher/groups/${l.groupId}` : `/teacher/student/${l.studentId}`}
+                    className="min-w-0 flex-1"
+                  >
+                    <span className="block truncate text-[15px] font-extrabold">
+                      {l.members ? `👥 ${groupTitle(l.groupName)}` : l.studentName}
+                    </span>
+                    {l.members && (
+                      <span className={`block truncate text-[12px] ${needsMark ? "text-ink-soft" : "text-pine-mint"}`}>
+                        {l.members.map((m) => m.studentName.split(" ")[0]).join(", ")}
+                      </span>
+                    )}
                     <span className={`block truncate text-[12px] ${needsMark ? "text-ink-soft" : "text-pine-mint"}`}>
                       {l.topic || "Тема не указана"}
                       {l.status === "planned" && !started ? ` · ${untilLabel(l.startsAt, now)}` : ""}
@@ -72,7 +87,12 @@ export default function TeacherTodayCard({
                     </span>
                   )}
                 </div>
-                {needsMark && (
+                {needsMark && l.members && l.groupLessonId && (
+                  <div className="mt-2.5 flex">
+                    <GroupLessonActions groupLessonId={l.groupLessonId} members={l.members} from="home" tone="dark" past />
+                  </div>
+                )}
+                {needsMark && !l.members && (
                   <div className="mt-2.5 grid grid-cols-2 gap-2">
                     <form action={setLessonStatusAction}>
                       <input type="hidden" name="lessonId" value={l.id} />

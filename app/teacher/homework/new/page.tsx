@@ -8,22 +8,25 @@ import CustomProblemBuilder from "./CustomProblemBuilder";
 import SelectedSubmitBar from "./SelectedSubmitBar";
 import QuickHomework from "@/components/QuickHomework";
 import { weakSpotsSummary, availableExamNumbers } from "@/lib/quick-homework";
+import { getGroupForTeacher } from "@/lib/groups";
 
 export default async function NewHomeworkPage({
   searchParams,
 }: {
-  searchParams: { studentId?: string; quick?: string };
+  searchParams: { studentId?: string; groupId?: string; quick?: string };
 }) {
   const teacher = (await getSessionUser())!;
+  // Задание одному ученику (?studentId=) или всей группе (?groupId=).
+  const group = searchParams.groupId ? await getGroupForTeacher(searchParams.groupId, teacher.id) : undefined;
   const studentId = searchParams.studentId;
-  const student = studentId ? await getUserById(studentId) : undefined;
-  if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
+  const student = !group && studentId ? await getUserById(studentId) : undefined;
+  if (group ? group.members.length === 0 : !student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
     notFound();
   }
 
   const [curriculum, weak, examNumbers] = await Promise.all([
     getCurriculum(),
-    weakSpotsSummary(student.id),
+    group ? Promise.resolve(null) : weakSpotsSummary(student!.id),
     availableExamNumbers(),
   ]);
   const quickNotice =
@@ -46,16 +49,28 @@ export default async function NewHomeworkPage({
     <TeacherShell active="students" title="Новое задание">
       <main className="mx-auto max-w-3xl px-4 pt-6">
         <h1 className="mb-1 font-display text-2xl font-black text-ink">
-          Новое задание · {student.name}
+          Новое задание · {group ? `группа «${group.name}»` : student!.name}
         </h1>
         <p className="mb-6 text-sm text-ink-soft">
-          Выберите тип задания, задачи и срок сдачи.
+          {group
+            ? `Задание получит каждый из ${group.members.length}: ${group.members.map((m) => m.name.split(" ")[0]).join(", ")}. Прогресс у каждого свой. Индивидуальное задание можно задать со страницы ученика.`
+            : "Выберите тип задания, задачи и срок сдачи."}
         </p>
 
-        <QuickHomework studentId={student.id} weak={weak} numbers={examNumbers} notice={quickNotice} />
+        <QuickHomework
+          studentId={student?.id}
+          groupId={group?.id}
+          weak={weak}
+          numbers={examNumbers}
+          notice={quickNotice}
+        />
 
         <form action={createHomeworkAction} className="space-y-6">
-          <input type="hidden" name="studentId" value={student.id} />
+          {group ? (
+            <input type="hidden" name="groupId" value={group.id} />
+          ) : (
+            <input type="hidden" name="studentId" value={student!.id} />
+          )}
 
           <AssignmentKindPicker />
 

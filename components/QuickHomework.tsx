@@ -37,12 +37,16 @@ function Settings() {
  */
 export default function QuickHomework({
   studentId,
+  groupId,
   weak,
   numbers,
   notice,
 }: {
-  studentId: string;
-  weak: { mistakes: number; numbers: number[] };
+  studentId?: string;
+  /** задание группе: каждому ученику подбираются задачи по его ошибкам */
+  groupId?: string;
+  /** null — группа: сводку по одному ученику не показываем */
+  weak: { mistakes: number; numbers: number[] } | null;
   numbers: number[];
   notice?: string;
 }) {
@@ -52,27 +56,33 @@ export default function QuickHomework({
       {notice && <p className="rounded-2xl bg-amber-light px-4 py-2.5 text-sm font-bold text-amber-dark">{notice}</p>}
 
       <form action={createQuickHomeworkAction} className="rounded-[20px] border border-line-soft bg-white p-4">
-        <input type="hidden" name="studentId" value={studentId} />
+        {groupId ? <input type="hidden" name="groupId" value={groupId} /> : <input type="hidden" name="studentId" value={studentId} />}
         <input type="hidden" name="mode" value="weak" />
         <p className="font-display text-[16px] font-black text-ink">По слабым местам</p>
         <p className="mt-0.5 text-[13px] text-ink-soft">
-          {weak.mistakes > 0
+          {!weak
+            ? "Каждому ученику группы — свои задачи: его нерешённые ошибки, потом похожие задачи тех же номеров."
+            : weak.mistakes > 0
             ? `Не решено задач с ошибками: ${weak.mistakes}${
                 weak.numbers.length ? ` · номера ${weak.numbers.slice(0, 6).map((n) => `№${n}`).join(", ")}` : ""
               }. Сначала они, потом похожие задачи тех же номеров.`
             : "У ученика пока нет нерешённых ошибок — подбирать нечего. Воспользуйтесь выбором по номерам."}
         </p>
         <Settings />
-        <button type="submit" disabled={weak.mistakes === 0} className="btn-primary mt-4 w-full !normal-case !tracking-normal sm:w-auto">
+        <button type="submit" disabled={!!weak && weak.mistakes === 0} className="btn-primary mt-4 w-full !normal-case !tracking-normal sm:w-auto">
           Задать работу над ошибками
         </button>
       </form>
 
       <form action={createQuickHomeworkAction} className="rounded-[20px] border border-line-soft bg-white p-4">
-        <input type="hidden" name="studentId" value={studentId} />
+        {groupId ? <input type="hidden" name="groupId" value={groupId} /> : <input type="hidden" name="studentId" value={studentId} />}
         <input type="hidden" name="mode" value="numbers" />
         <p className="font-display text-[16px] font-black text-ink">По номерам ЕГЭ</p>
-        <p className="mt-0.5 text-[13px] text-ink-soft">Отметьте номера — задачи разделятся между ними поровну, решённые ранее не попадут.</p>
+        <p className="mt-0.5 text-[13px] text-ink-soft">
+          {groupId
+            ? "Отметьте номера — всей группе одинаковые задачи, поровну по номерам. Сначала берутся те, что никто из группы ещё не решил."
+            : "Отметьте номера — задачи разделятся между ними поровну, решённые ранее не попадут."}
+        </p>
         <fieldset className="mt-3">
           <legend className="sr-only">Номера ЕГЭ</legend>
           <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-10">

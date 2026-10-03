@@ -63,15 +63,24 @@ export async function pickWeakProblems(studentId: string, count: number): Promis
   return chosen;
 }
 
-export async function pickByNumbers(studentId: string, numbers: number[], count: number): Promise<string[]> {
+/** studentIds — для группы: одни задачи на всех. Сначала задачи, которые не
+ * решил никто из группы, потом — решённые меньшинством; решённые всеми не берём. */
+export async function pickByNumbers(studentIds: string | string[], numbers: number[], count: number): Promise<string[]> {
   if (numbers.length === 0) return [];
+  const ids = Array.isArray(studentIds) ? studentIds : [studentIds];
+  if (ids.length === 0) return [];
+  const idList = sql.join(ids.map((id) => sql`${id}`), sql`, `);
   const all = await rows(sql`
-    select p.id, p.ege_task_number as n
-    from problems p
-    where p.skill_id is not null
-      and p.ege_task_number in (${sql.join(numbers.map((n) => sql`${n}`), sql`, `)})
-      and not exists (select 1 from attempts a where a.problem_id = p.id and a.student_id = ${studentId} and a.is_correct)
-    order by random()
+    select id, n from (
+      select p.id, p.ege_task_number as n,
+        (select count(distinct a.student_id) from attempts a
+          where a.problem_id = p.id and a.is_correct and a.student_id in (${idList}))::int as solved
+      from problems p
+      where p.skill_id is not null
+        and p.ege_task_number in (${sql.join(numbers.map((n) => sql`${n}`), sql`, `)})
+    ) t
+    where solved < ${ids.length}
+    order by solved, random()
   `);
   // Поровну по номерам: по кругу берём по одной задаче каждого номера.
   const byN = new Map<number, string[]>();

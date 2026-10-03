@@ -8,6 +8,7 @@ import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 import TeacherTodayCard from "@/components/TeacherTodayCard";
 import LessonDoneBanner from "@/components/LessonDoneBanner";
 import TeacherSetupChecklist from "@/components/TeacherSetupChecklist";
+import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
 
 const FREE_STUDENT_LIMIT = 3;
 // Через сколько дней без активности ученик считается "потерявшимся".
@@ -26,7 +27,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
 
-  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup] = await Promise.all([
+  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup, groups] = await Promise.all([
     getTeacherHomeStats(user.id),
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
@@ -35,7 +36,10 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
     getTodayLessonsForTeacher(user.id),
     getOpenQuestionsCount(user.id),
     getTeacherSetupProgress(user.id),
+    getGroupsOfTeacher(user.id),
   ]);
+  const groupsByStudent = new Map<string, string[]>();
+  for (const g of groups) for (const m of g.members) groupsByStudent.set(m.id, [...(groupsByStudent.get(m.id) ?? []), g.name]);
   const setupVisible = !(students.length > 0 && setup.homeworks > 0 && setup.lessons > 0);
   const EMPTY = { attemptsCount: 0, solvedProblems: 0, accuracy: 0, lastActiveAt: null, pendingCount: 0, overdueCount: 0 };
   const cards = students.map((s) => {
@@ -67,7 +71,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
       .filter((b) => b.balance < 0)
       .sort((a, b) => a.balance - b.balance)
       .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance })),
-    unmarkedLessons: unmarked.filter((l) => !todayIds.has(l.id)).length,
+    unmarkedLessons: countDistinctLessons(unmarked.filter((l) => !todayIds.has(l.id))),
     openQuestions,
   };
 
@@ -163,6 +167,28 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
           </div>
         </div>
 
+        {students.length >= 2 && (
+          <a
+            href="/teacher/groups"
+            className="mb-3 flex items-center gap-3 rounded-[20px] border border-violet-border bg-violet-light/50 p-3.5 transition hover:border-violet"
+          >
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] bg-white text-[20px]" aria-hidden>
+              👥
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[15px] font-black text-ink">
+                {groups.length ? `Группы · ${groups.length}` : "Группы"}
+              </span>
+              <span className="block truncate text-[12px] text-ink-soft">
+                {groups.length
+                  ? groups.map((g) => g.name).join(", ")
+                  : "Занятия и домашка сразу для нескольких учеников"}
+              </span>
+            </span>
+            <span className="font-black text-violet">›</span>
+          </a>
+        )}
+
         <div className="space-y-2">
           {cards.map(({ s, stats, pendingCount, overdue }) => {
             const initials = s.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
@@ -185,6 +211,11 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
                         {mock ?? "—"} / {s.targetScore ?? "—"}
                       </span>
                     )}
+                    {(groupsByStudent.get(s.id) ?? []).slice(0, 2).map((gn) => (
+                      <span key={gn} className="max-w-[120px] truncate rounded-pill bg-violet-light px-2 py-0.5 text-[11px] font-black text-violet">
+                        {gn}
+                      </span>
+                    ))}
                     {debt && (
                       <span className="rounded-pill bg-coral-light px-2 py-0.5 text-[11px] font-black text-coral-text">
                         долг {-debt.balance}

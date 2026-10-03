@@ -33,9 +33,15 @@ function nextHourMsk(): string {
 export default function AddLessonForm({
   studentId,
   students,
+  groups = [],
+  groupId,
 }: {
   studentId?: string;
   students?: { id: string; name: string }[];
+  /** группы репетитора — в выборе «Ученик или группа» */
+  groups?: { id: string; name: string; count: number }[];
+  /** страница группы: группа фиксирована */
+  groupId?: string;
   /** оставлено для совместимости со старыми вызовами */
   from?: "student" | "schedule";
 }) {
@@ -59,19 +65,39 @@ export default function AddLessonForm({
   return (
     <form action={formAction} className="card space-y-3 p-4">
       {studentId && <input type="hidden" name="studentId" value={studentId} />}
+      {groupId && <input type="hidden" name="studentId" value={`g:${groupId}`} />}
 
-      {!studentId && students && (
+      {!studentId && !groupId && students && (
         <div>
-          <label className="label" htmlFor="studentId">Ученик</label>
+          <label className="label" htmlFor="studentId">{groups.length ? "Ученик или группа" : "Ученик"}</label>
           <select className="input" id="studentId" name="studentId" required defaultValue="">
             <option value="" disabled>
-              Выберите ученика…
+              {groups.length ? "Выберите ученика или группу…" : "Выберите ученика…"}
             </option>
-            {students.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
+            {groups.length > 0 && (
+              <optgroup label="Группы">
+                {groups.map((g) => (
+                  <option key={g.id} value={`g:${g.id}`}>
+                    👥 {g.name} ({g.count})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {groups.length > 0 ? (
+              <optgroup label="Ученики">
+                {students.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </optgroup>
+            ) : (
+              students.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
       )}

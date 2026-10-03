@@ -317,6 +317,35 @@ export const attempts = pgTable("attempts", {
   byStudentProblem: index("attempts_student_problem_idx").on(t.studentId, t.problemId),
 }));
 
+// ---------------- Группы учеников ----------------
+// Многие репетиторы ведут группы. Группа — просто именованный набор учеников:
+// групповое занятие и групповая домашка хранятся ПО СТРОКЕ НА УЧЕНИКА (с общим
+// groupLessonId / batchId). Так баланс оплат, напоминания, статусы домашки и
+// всё остальное работают как раньше, а индивидуальные задания не теряются.
+export const studentGroups = pgTable("student_groups", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byTeacher: index("student_groups_teacher_idx").on(t.teacherId),
+}));
+
+export const studentGroupMembers = pgTable("student_group_members", {
+  groupId: text("group_id")
+    .notNull()
+    .references(() => studentGroups.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.groupId, t.studentId] }),
+  byStudent: index("student_group_members_student_idx").on(t.studentId),
+}));
+
 export const homeworks = pgTable("homeworks", {
   id: text("id").primaryKey(),
   // NULL у авторских пробников платформы (audience=pro_standalone).
@@ -329,10 +358,14 @@ export const homeworks = pgTable("homeworks", {
   audience: audienceEnum("audience"),
   problemIds: jsonb("problem_ids").notNull().$type<string[]>(),
   dueDate: timestamp("due_date", { withTimezone: true }).notNull(),
+  // Задание группе: у копий для каждого ученика общий batchId.
+  groupId: text("group_id").references(() => studentGroups.id, { onDelete: "set null" }),
+  batchId: text("batch_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byStudent: index("homeworks_student_idx").on(t.studentId),
   byTeacher: index("homeworks_teacher_idx").on(t.teacherId),
+  byBatch: index("homeworks_batch_idx").on(t.batchId),
 }));
 
 export const assignmentSessions = pgTable("assignment_sessions", {
@@ -395,8 +428,13 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // Когда репетитору ушёл вопрос «Занятие прошло — было или не было?» с
   // кнопками в Telegram. Ставится атомарно, как remindedAt.
   teacherPromptedAt: timestamp("teacher_prompted_at", { withTimezone: true }),
+  // Групповое занятие: строка на каждого ученика, общий groupLessonId у одного
+  // занятия (у серии — ещё и общий seriesId). Посещаемость — статус строки.
+  groupId: text("group_id").references(() => studentGroups.id, { onDelete: "set null" }),
+  groupLessonId: text("group_lesson_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  byGroupLesson: index("scheduled_lessons_group_lesson_idx").on(t.groupLessonId),
   byTeacherTime: index("scheduled_lessons_teacher_starts_idx").on(t.teacherId, t.startsAt),
   byStudentTime: index("scheduled_lessons_student_starts_idx").on(t.studentId, t.startsAt),
 }));

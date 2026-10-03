@@ -649,6 +649,8 @@ function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): imp
     topic: r.topic,
     status: r.status,
     seriesId: r.seriesId,
+    groupId: r.groupId,
+    groupLessonId: r.groupLessonId,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -664,9 +666,10 @@ export async function getUnmarkedPastLessons(
   studentId?: string
 ): Promise<import("./types").ScheduledLessonWithStudent[]> {
   const rows = await db
-    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
     .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
@@ -676,7 +679,7 @@ export async function getUnmarkedPastLessons(
       )
     )
     .orderBy(asc(schema.scheduledLessons.startsAt));
-  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
 }
 
 /** Ближайшие запланированные занятия репетитора (со всеми учениками). */
@@ -685,9 +688,10 @@ export async function getUpcomingLessonsForTeacher(
   limit = 20
 ): Promise<import("./types").ScheduledLessonWithStudent[]> {
   const rows = await db
-    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
     .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
@@ -697,7 +701,7 @@ export async function getUpcomingLessonsForTeacher(
     )
     .orderBy(asc(schema.scheduledLessons.startsAt))
     .limit(limit);
-  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
 }
 
 /** Занятия репетитора на сегодня (по Москве): запланированные и проведённые. */
@@ -709,9 +713,10 @@ export async function getTodayLessonsForTeacher(
   const start = new Date(`${day}T00:00:00+03:00`);
   const end = new Date(start.getTime() + 24 * 3600 * 1000);
   const rows = await db
-    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name })
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
     .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
@@ -721,7 +726,7 @@ export async function getTodayLessonsForTeacher(
       )
     )
     .orderBy(asc(schema.scheduledLessons.startsAt));
-  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName }));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
 }
 
 /** Все занятия конкретного ученика (для страницы ученика): предстоящие сверху. */
@@ -739,10 +744,11 @@ export async function getLessonsForStudent(
 /** Предстоящие занятия ученика (planned, в будущем) — для панели ученика/родителя. */
 export async function getUpcomingLessonsForStudent(
   studentId: string
-): Promise<import("./types").ScheduledLesson[]> {
+): Promise<(import("./types").ScheduledLesson & { groupName: string | null })[]> {
   const rows = await db
-    .select()
+    .select({ lesson: schema.scheduledLessons, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.studentId, studentId),
@@ -751,7 +757,7 @@ export async function getUpcomingLessonsForStudent(
       )
     )
     .orderBy(asc(schema.scheduledLessons.startsAt));
-  return rows.map(mapScheduledLesson);
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), groupName: r.groupName }));
 }
 
 /** Одно занятие по id (для проверки владельца перед изменением статуса). */

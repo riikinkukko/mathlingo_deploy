@@ -30,6 +30,7 @@ const ROLES: { email: string; pages: [string, RegExp][] }[] = [
     pages: [
       ["/teacher", /Мои ученики/],
       ["/teacher/schedule", /Запланировать/],
+      ["/teacher/groups", /Группы/],
       ["/teacher/payments", /Балансы/],
       ["/teacher/student/u_2", /Максим/],
       ["/teacher/homework/new?studentId=u_2", /задачи из банка/i],

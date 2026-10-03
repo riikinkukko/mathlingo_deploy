@@ -12,10 +12,13 @@ export default function LessonDeleteControl({
   lessonId,
   seriesId,
   from,
+  wholeGroup = false,
 }: {
   lessonId: string;
   seriesId: string | null;
-  from: "student" | "schedule";
+  from: "student" | "schedule" | "group" | "home";
+  /** групповое занятие в общем списке: удалить у всех учеников группы */
+  wholeGroup?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -23,6 +26,7 @@ export default function LessonDeleteControl({
     <>
       <input type="hidden" name="lessonId" value={lessonId} />
       <input type="hidden" name="from" value={from} />
+      {wholeGroup && <input type="hidden" name="wholeGroup" value="1" />}
     </>
   );
 
@@ -45,7 +49,7 @@ export default function LessonDeleteControl({
               type="submit"
               className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-coral hover:bg-coral-light"
             >
-              {seriesId ? "Только это занятие" : "Удалить занятие"}
+              {seriesId ? "Только это занятие" : wholeGroup ? "Удалить занятие группы" : "Удалить занятие"}
             </button>
           </form>
           {seriesId && (

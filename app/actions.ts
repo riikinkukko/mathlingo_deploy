@@ -59,6 +59,7 @@ function getClientIp(): string {
   return forwarded ? forwarded.split(",").pop()!.trim() : "";
 }
 import { AssignmentKind, Role } from "@/lib/types";
+import { getGroupForTeacher } from "@/lib/groups";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -437,15 +438,21 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
 
 export async function createHomeworkAction(formData: FormData) {
   const teacher = await getSessionUser();
-  const studentId = String(formData.get("studentId") || "");
+  // Задание одному ученику или всей группе (копия каждому, общий batchId).
+  const groupId = String(formData.get("groupId") || "");
+  const group = groupId && teacher ? await getGroupForTeacher(groupId, teacher.id) : undefined;
+  const studentId = group ? "" : String(formData.get("studentId") || "");
+  const errBack = group ? `/teacher/homework/new?groupId=${groupId}&error=1` : `/teacher/homework/new?studentId=${studentId}&error=1`;
   if (!teacher || teacher.role !== "TEACHER") {
-    redirect(`/teacher/homework/new?studentId=${studentId}&error=1`);
+    redirect(errBack);
   }
   // Только своему ученику: иначе любой репетитор мог слать домашки и записи
   // журнала (с уведомлениями ученику и родителям) чужим ученикам.
-  if (!(await isOwnStudent(teacher.id, studentId))) {
-    redirect(`/teacher/homework/new?studentId=${studentId}&error=1`);
+  if (groupId ? !group || group.members.length === 0 : !(await isOwnStudent(teacher.id, studentId))) {
+    redirect(errBack);
   }
+  const targetIds = group ? group.members.map((m) => m.id) : [studentId];
+  const batchId = group ? genId("hb") : null;
 
   const title = String(formData.get("title") || "").trim();
   const dueDate = String(formData.get("dueDate") || "");
@@ -478,8 +485,8 @@ export async function createHomeworkAction(formData: FormData) {
   const problemIds = [...bankProblemIds, ...drafts.map(() => genId("p"))];
   const customProblemIds = problemIds.slice(bankProblemIds.length);
 
-  if (!studentId || !title || !dueDate || problemIds.length === 0) {
-    redirect(`/teacher/homework/new?studentId=${studentId}&error=1`);
+  if (targetIds.length === 0 || !title || !dueDate || problemIds.length === 0) {
+    redirect(errBack);
   }
 
   const KIND_LABEL: Record<string, string> = {
@@ -503,29 +510,37 @@ export async function createHomeworkAction(formData: FormData) {
       });
     }
 
-    await tx.insert(schema.homeworks).values({
-      id: genId("h"),
-      teacherId: teacher.id,
-      studentId,
-      title,
-      kind,
-      allowHints,
-      timeLimitMinutes: timeLimitMinutes ?? null,
-      audience: "assigned",
-      problemIds,
-      dueDate: new Date(dueDate),
-    });
+    for (const sid of targetIds) {
+      await tx.insert(schema.homeworks).values({
+        id: genId("h"),
+        teacherId: teacher.id,
+        studentId: sid,
+        title,
+        kind,
+        allowHints,
+        timeLimitMinutes: timeLimitMinutes ?? null,
+        audience: "assigned",
+        problemIds,
+        dueDate: new Date(dueDate),
+        groupId: group?.id ?? null,
+        batchId,
+      });
 
-    await pushNotification(tx, {
-      userId: studentId,
-      type: "assignment_created",
-      title: KIND_LABEL[kind] ?? "Новое задание",
-      body: title,
-      link: `/student/homework`,
-    });
+      await pushNotification(tx, {
+        userId: sid,
+        type: "assignment_created",
+        title: KIND_LABEL[kind] ?? "Новое задание",
+        body: title,
+        link: `/student/homework`,
+      });
+    }
   });
 
-  revalidatePath(`/teacher/student/${studentId}`);
+  for (const sid of targetIds) revalidatePath(`/teacher/student/${sid}`);
+  if (group) {
+    revalidatePath(`/teacher/groups/${group.id}`);
+    redirect(`/teacher/groups/${group.id}?hw=${targetIds.length}`);
+  }
   redirect(`/teacher/student/${studentId}?tab=hw`);
 }
 

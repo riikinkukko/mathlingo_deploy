@@ -13,6 +13,7 @@ import {
   pushNotification,
 } from "@/lib/queries";
 import { applyLessonStatus } from "@/lib/lesson-status";
+import { getGroupForTeacher } from "@/lib/groups";
 
 // Все ученики платформы — российские (ЕГЭ), поэтому наивное время из
 // <input type="datetime-local"> трактуем как московское, а не как локальное
@@ -64,9 +65,10 @@ async function assertOwnsStudent(teacherId: string, studentId: string): Promise<
   return !!s && s.role === "STUDENT" && s.teacherId === teacherId;
 }
 
-/** Куда вернуться после действия: на страницу ученика или в общее расписание. */
-function backTo(from: string, studentId: string): string {
+/** Куда вернуться после действия: на страницу ученика, группы или в общее расписание. */
+function backTo(from: string, studentId: string, groupId?: string | null): string {
   if (from === "student") return `/teacher/student/${studentId}`;
+  if (from === "group" && groupId) return `/teacher/groups/${groupId}`;
   if (from === "home") return "/teacher";
   return "/teacher/schedule";
 }
@@ -83,11 +85,23 @@ export async function createLessonAction(
   formData: FormData
 ): Promise<CreateLessonState> {
   const teacher = await getSessionUser();
-  const studentId = String(formData.get("studentId") || "");
+  // «studentId» из формы — id ученика или «g:<id группы>».
+  const target = String(formData.get("studentId") || "");
 
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
-  if (!studentId) return { error: "Выберите ученика" };
-  if (!(await assertOwnsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+  if (!target) return { error: "Выберите ученика или группу" };
+
+  let studentIds: string[];
+  let group: Awaited<ReturnType<typeof getGroupForTeacher>> = undefined;
+  if (target.startsWith("g:")) {
+    group = await getGroupForTeacher(target.slice(2), teacher.id);
+    if (!group) return { error: "Группа не найдена" };
+    if (group.members.length === 0) return { error: "В группе нет учеников" };
+    studentIds = group.members.map((m) => m.id);
+  } else {
+    if (!(await assertOwnsStudent(teacher.id, target))) return { error: "Ученик не найден" };
+    studentIds = [target];
+  }
 
   const startsAt = parseMskDateTime(String(formData.get("startsAt") || ""));
   const durationMin = Math.max(15, Math.min(300, Number(formData.get("durationMin")) || 60));
@@ -104,21 +118,30 @@ export async function createLessonAction(
   const dates = Array.from({ length: repeatWeeks }, (_, i) => new Date(startsAt.getTime() + i * WEEK_MS));
   const seriesId = repeatWeeks > 1 ? genId("ser") : null;
 
+  // У группового занятия — строка на каждого ученика; строки одного занятия
+  // связаны общим groupLessonId (посещаемость отмечается по ученикам).
+  const groupLessonIds = dates.map(() => (group ? genId("gl") : null));
+
   await db.transaction(async (tx) => {
     await tx.insert(schema.scheduledLessons).values(
-      dates.map((d) => ({
-        id: genId("sl"),
-        teacherId: teacher.id,
-        studentId,
-        startsAt: d,
-        durationMin,
-        topic,
-        status: "planned" as const,
-        seriesId,
-      }))
+      dates.flatMap((d, i) =>
+        studentIds.map((studentId) => ({
+          id: genId("sl"),
+          teacherId: teacher.id,
+          studentId,
+          startsAt: d,
+          durationMin,
+          topic,
+          status: "planned" as const,
+          seriesId,
+          groupId: group?.id ?? null,
+          groupLessonId: groupLessonIds[i],
+        }))
+      )
     );
 
     // Одно уведомление на всю серию — а не 12 сообщений подряд в Telegram.
+    for (const studentId of studentIds)
     await pushNotification(tx, {
       userId: studentId,
       type: "lesson_scheduled",
@@ -138,7 +161,8 @@ export async function createLessonAction(
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
-  revalidatePath(`/teacher/student/${studentId}`);
+  for (const studentId of studentIds) revalidatePath(`/teacher/student/${studentId}`);
+  if (group) revalidatePath(`/teacher/groups/${group.id}`);
   // at — метка времени, чтобы два успешных сохранения подряд были разными
   // состояниями и эффект очистки формы срабатывал каждый раз.
   return { ok: true, at: Date.now(), count: repeatWeeks };
@@ -151,7 +175,7 @@ export async function setLessonStatusAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "");
+  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
 
   if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
   if (!lesson || lesson.teacherId !== teacher.id) redirect(`${back}?error=1`);
@@ -173,17 +197,30 @@ export async function deleteLessonAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "");
+  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
 
   if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
   if (!lesson || lesson.teacherId !== teacher.id) redirect(`${back}?error=1`);
 
-  await db.delete(schema.scheduledLessons).where(eq(schema.scheduledLessons.id, lessonId));
+  // wholeGroup — удалить занятие у всей группы (из общего расписания);
+  // со страницы ученика удаляется только его строка.
+  const wholeGroup = formData.get("wholeGroup") === "1" && !!lesson.groupLessonId;
+  await db
+    .delete(schema.scheduledLessons)
+    .where(
+      wholeGroup
+        ? and(
+            eq(schema.scheduledLessons.groupLessonId, lesson.groupLessonId!),
+            eq(schema.scheduledLessons.teacherId, teacher.id)
+          )
+        : eq(schema.scheduledLessons.id, lessonId)
+    );
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
   revalidatePath(`/teacher/student/${lesson.studentId}`);
-  redirect(`${back}?ok=lesson`);
+  if (lesson.groupId) revalidatePath(`/teacher/groups/${lesson.groupId}`);
+  redirect(`${backTo(from, lesson.studentId, lesson.groupId)}?ok=lesson`);
 }
 
 /**
@@ -197,11 +234,14 @@ export async function deleteLessonSeriesFromAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "");
+  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
 
   if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
   if (!lesson || lesson.teacherId !== teacher.id || !lesson.seriesId) redirect(`${back}?error=1`);
 
+  // У групповой серии общий seriesId на всех учеников: со страницы ученика
+  // удаляем серию только у него, из расписания/группы — у всей группы.
+  const wholeGroup = formData.get("wholeGroup") === "1";
   await db
     .delete(schema.scheduledLessons)
     .where(
@@ -209,12 +249,49 @@ export async function deleteLessonSeriesFromAction(formData: FormData) {
         eq(schema.scheduledLessons.seriesId, lesson.seriesId),
         eq(schema.scheduledLessons.teacherId, teacher.id),
         eq(schema.scheduledLessons.status, "planned"),
-        gte(schema.scheduledLessons.startsAt, new Date(lesson.startsAt))
+        gte(schema.scheduledLessons.startsAt, new Date(lesson.startsAt)),
+        ...(wholeGroup ? [] : [eq(schema.scheduledLessons.studentId, lesson.studentId)])
       )
     );
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
   revalidatePath(`/teacher/student/${lesson.studentId}`);
+  if (lesson.groupId) revalidatePath(`/teacher/groups/${lesson.groupId}`);
+  redirect(`${backTo(from, lesson.studentId, lesson.groupId)}?ok=lesson`);
+}
+
+/**
+ * Отметка группового занятия: кто был (present) — «было», остальные — «не было»
+ * (занятие им не засчитывается в баланс). mode=cancel — занятия не было ни у кого.
+ */
+export async function setGroupLessonStatusAction(formData: FormData) {
+  const teacher = await getSessionUser();
+  const groupLessonId = String(formData.get("groupLessonId") || "");
+  const mode = String(formData.get("mode") || "");
+  const from = String(formData.get("from") || "schedule");
+  const present = new Set(formData.getAll("present").map(String));
+
+  const rows = groupLessonId
+    ? await db
+        .select({ id: schema.scheduledLessons.id, studentId: schema.scheduledLessons.studentId, groupId: schema.scheduledLessons.groupId, teacherId: schema.scheduledLessons.teacherId })
+        .from(schema.scheduledLessons)
+        .where(eq(schema.scheduledLessons.groupLessonId, groupLessonId))
+    : [];
+  const back = backTo(from, "", rows[0]?.groupId);
+
+  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
+  if (rows.length === 0 || rows.some((r) => r.teacherId !== teacher.id)) redirect(`${back}?error=1`);
+  if (mode !== "attendance" && mode !== "cancel") redirect(`${back}?error=1`);
+
+  for (const r of rows) {
+    const status = mode === "attendance" && present.has(r.studentId) ? "done" : "cancelled";
+    await applyLessonStatus(teacher.id, r.id, status);
+    revalidatePath(`/teacher/student/${r.studentId}`);
+  }
+
+  revalidatePath("/teacher/schedule");
+  revalidatePath("/teacher");
+  if (rows[0].groupId) revalidatePath(`/teacher/groups/${rows[0].groupId}`);
   redirect(`${back}?ok=lesson`);
 }

@@ -38,6 +38,7 @@ import SkillsProgressSummary from "@/components/SkillsProgressSummary";
 import RecentList from "@/components/RecentList";
 import AddLessonForm from "@/components/AddLessonForm";
 import UpcomingLessons from "@/components/UpcomingLessons";
+import { lessonTimeRange } from "@/lib/lesson-time";
 import AddPaymentForm from "@/components/AddPaymentForm";
 import PaymentHistory from "@/components/PaymentHistory";
 import BalanceSummary, { balanceLabel } from "@/components/BalanceSummary";
@@ -177,9 +178,8 @@ export default async function StudentDetailPage({
                   {new Date(upcomingLessons[0].startsAt).toLocaleString("ru-RU", {
                     timeZone: "Europe/Moscow",
                     weekday: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+                  })}{" "}
+                  {lessonTimeRange(upcomingLessons[0].startsAt, upcomingLessons[0].durationMin)}
                 </span>
               )}
               {pendingReviews.length > 0 && (
