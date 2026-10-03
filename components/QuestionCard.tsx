@@ -38,6 +38,18 @@ export default function QuestionCard({
           Ответ ученика: <span className="font-mono font-bold text-ink">{q.studentAnswer}</span>
         </p>
       )}
+      {q.hasSketch && (
+        <a
+          href={`/api/question-sketch/${q.id}`}
+          target="_blank"
+          rel="noopener"
+          className="mt-3 block overflow-hidden rounded-2xl border border-line-soft bg-white"
+        >
+          <span className="block px-3 pt-2 text-[12px] font-black text-ink-soft">Черновик ученика · нажми, чтобы открыть крупно</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/question-sketch/${q.id}`} alt="Черновик ученика" loading="lazy" className="max-h-72 w-full object-contain" />
+        </a>
+      )}
       {q.message && (
         <p className="mt-2 whitespace-pre-wrap rounded-2xl bg-paper px-3 py-2 text-[14px] text-ink">
           <span className="font-bold">Вопрос: </span>

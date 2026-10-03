@@ -2097,15 +2097,27 @@ export interface StudentQuestionView {
   answer: string | null;
   answeredAt: string | null;
   createdAt: string;
+  /** К вопросу приложен снимок черновика (/api/question-sketch/[id]). */
+  hasSketch: boolean;
 }
 
 async function selectQuestions(where: ReturnType<typeof eq>) {
   const rows = await db
     .select({
-      q: schema.studentQuestions,
+      q: {
+        id: schema.studentQuestions.id,
+        studentId: schema.studentQuestions.studentId,
+        problemId: schema.studentQuestions.problemId,
+        studentAnswer: schema.studentQuestions.studentAnswer,
+        message: schema.studentQuestions.message,
+        answer: schema.studentQuestions.answer,
+        answeredAt: schema.studentQuestions.answeredAt,
+        createdAt: schema.studentQuestions.createdAt,
+      },
       studentName: schema.users.name,
       problemText: schema.problems.text,
       egeTaskNumber: schema.problems.egeTaskNumber,
+      hasSketch: sql<boolean>`(${schema.studentQuestions.sketch} is not null)`,
     })
     .from(schema.studentQuestions)
     .innerJoin(schema.users, eq(schema.users.id, schema.studentQuestions.studentId))
@@ -2126,6 +2138,7 @@ async function selectQuestions(where: ReturnType<typeof eq>) {
       answer: r.q.answer,
       answeredAt: r.q.answeredAt ? r.q.answeredAt.toISOString() : null,
       createdAt: r.q.createdAt.toISOString(),
+      hasSketch: !!r.hasSketch,
     })
   );
 }

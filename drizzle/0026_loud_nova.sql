@@ -1,0 +1,1 @@
+ALTER TABLE "student_questions" ADD COLUMN "sketch" text;

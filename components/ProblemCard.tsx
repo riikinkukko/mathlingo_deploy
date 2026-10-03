@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
@@ -10,6 +10,7 @@ import DiagramScratchpad from "./diagrams/DiagramScratchpad";
 import MathKeyboard from "./MathKeyboard";
 import Mascot from "./Mascot";
 import AskTeacherButton from "./AskTeacherButton";
+import { hasSavedSketch, loadSketch, renderSketchJpeg } from "@/lib/sketch";
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
 export type ProblemCardStatus = "unsolved" | "solved" | "pending" | "needs_revision";
@@ -59,6 +60,11 @@ export default function ProblemCard({
   const [formulaOpen, setFormulaOpen] = useState(false);
   const [scratchpadOpen, setScratchpadOpen] = useState(false);
   const [hasSketch, setHasSketch] = useState(false);
+  // Черновик хранится на устройстве по задаче — метка «есть пометки» сразу.
+  useEffect(() => {
+    setHasSketch(hasSavedSketch(problem.id));
+  }, [problem.id]);
+  const diagramBoxRef = useRef<HTMLDivElement>(null);
   const [noEnergy, setNoEnergy] = useState(false);
   const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
@@ -72,22 +78,29 @@ export default function ProblemCard({
     e.preventDefault();
     if (!answer.trim()) return;
     startTransition(async () => {
+      await runSubmit();
+    });
+  }
+
+  /** Отправка ответа — из формы под задачей и из поля ответа в черновике. */
+  async function runSubmit(): Promise<"correct" | "wrong" | "other"> {
+    {
       const res = await submitAttemptAction(problem.id, answer, source);
       if ("error" in res) {
         setServerError(typeof res.error === "string" ? res.error : "Не удалось отправить ответ");
-        return;
+        return "other";
       }
       setServerError(null);
 
       if (res.kind === "no_energy") {
         setNoEnergy(true);
         setNoEnergyUnverified(!!res.emailUnverified);
-        return;
+        return "other";
       }
       if (res.kind === "pending") {
         setPendingReview(true);
         setNeedsRevision(false);
-        return;
+        return "other";
       }
       if (res.kind === "correct") {
         setCorrectResult({ explanation: res.explanation, correctAnswer: res.correctAnswer });
@@ -100,13 +113,14 @@ export default function ProblemCard({
           ymGoal("problem_solved");
           onSolved?.();
         }
-        return;
+        return "correct";
       }
       // wrong
       setWrongState({ hint: res.hint, wrongCount: res.wrongCount, canRevealSolution: res.canRevealSolution });
       setShakeSeq((n) => n + 1);
       onWrong?.();
-    });
+      return "wrong";
+    }
   }
 
   function handleReveal() {
@@ -170,7 +184,7 @@ export default function ProblemCard({
               onClick={() => setScratchpadOpen(true)}
               className="rounded-pill border-2 border-line px-3 py-1.5 text-xs font-extrabold text-ink-soft transition hover:border-pine hover:text-pine"
             >
-              ✏️ Черновик
+              {hasSketch ? "Черновик •" : "Черновик"}
             </button>
           )}
         </div>
@@ -219,35 +233,40 @@ export default function ProblemCard({
             onClick={() => setScratchpadOpen(true)}
             className="group relative mb-1.5 block h-44 w-full rounded-2xl border border-line-soft bg-paper p-2 text-left transition hover:border-pine"
           >
-            <DiagramRenderer spec={problem.diagram} />
-            <span className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-full border border-line bg-white text-sm shadow-soft transition group-active:scale-90">
-              ✏️
+            <div ref={diagramBoxRef} className="h-full w-full">
+              <DiagramRenderer spec={problem.diagram} />
+            </div>
+            <span className="absolute right-2.5 top-2.5 flex h-9 items-center gap-1.5 rounded-[12px] border border-line bg-white px-2.5 text-[12px] font-extrabold text-ink-soft shadow-soft transition group-active:scale-95">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+              Черновик
             </span>
             {hasSketch && (
-              <span className="absolute left-2.5 top-2.5 rounded-pill bg-pine px-2 py-0.5 text-[10px] font-extrabold text-white">
+              <span className="absolute left-2.5 top-2.5 rounded-pill bg-coral-light px-2 py-0.5 text-[10px] font-extrabold text-coral-text">
                 есть пометки
               </span>
             )}
           </button>
           <p className="mb-4 text-[11px] font-bold text-ink-soft">
-            Нажми на чертёж, чтобы чертить и помечать
+            {hasSketch ? "Пометки сохранены — нажми, чтобы продолжить" : "Нажми на чертёж, чтобы чертить и решать"}
           </p>
-          {scratchpadOpen && (
-            <DiagramScratchpad
-              spec={problem.diagram}
-              problemText={problem.text}
-              onClose={() => setScratchpadOpen(false)}
-              onDirty={() => setHasSketch(true)}
-            />
-          )}
         </>
       )}
 
-      {!problem.diagram && scratchpadOpen && (
+      {scratchpadOpen && (
         <DiagramScratchpad
+          problemId={problem.id}
+          spec={problem.diagram}
           problemText={problem.text}
+          egeNumber={problem.egeTaskNumber ?? undefined}
           onClose={() => setScratchpadOpen(false)}
-          onDirty={() => setHasSketch(true)}
+          onChange={setHasSketch}
+          answerBar={{
+            value: answer,
+            onChange: setAnswer,
+            onSubmit: runSubmit,
+            detailed: isDetailed,
+            disabled: !showForm,
+          }}
         />
       )}
 
@@ -419,7 +438,18 @@ export default function ProblemCard({
           </div>
         </div>
       )}
-      {canAskTeacher && !pendingReview && <AskTeacherButton problemId={problem.id} currentAnswer={answer} />}
+      {canAskTeacher && !pendingReview && (
+        <AskTeacherButton
+          problemId={problem.id}
+          currentAnswer={answer}
+          hasSketch={hasSketch}
+          getSketch={async () => {
+            const doc = loadSketch(problem.id);
+            if (!doc?.items.length) return null;
+            return renderSketchJpeg(doc, (diagramBoxRef.current?.querySelector("svg") as SVGSVGElement | null) ?? null);
+          }}
+        />
+      )}
     </div>
   );
 }

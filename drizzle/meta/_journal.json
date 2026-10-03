@@ -176,6 +176,20 @@
       "when": 1790980900952,
       "tag": "0024_lumpy_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791064989980,
+      "tag": "0025_planimetry_ege_numbers",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791065384698,
+      "tag": "0026_loud_nova",
+      "breakpoints": true
     }
   ]
 }

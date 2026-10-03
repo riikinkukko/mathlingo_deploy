@@ -476,6 +476,9 @@ export const studentQuestions = pgTable("student_questions", {
     .references(() => problems.id, { onDelete: "cascade" }),
   studentAnswer: text("student_answer"),
   message: text("message").notNull().default(""),
+  // Снимок черновика ученика (data URL JPEG, до ~600 КБ). Отдаётся отдельно:
+  // /api/question-sketch/[id] — не тянем картинки в списки вопросов.
+  sketch: text("sketch"),
   answer: text("answer"),
   answeredAt: timestamp("answered_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

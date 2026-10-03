@@ -8811,7 +8811,20 @@ async function main() {
  * пишутся только при первом запуске (isFreshInstall). При повторном запуске
  * эти таблицы просто не трогаются вообще — они уже надёжно живут в Postgres.
  */
+/** Планиметрия: ответ-число — №1 ЕГЭ, развёрнутое решение — №18 (то же
+ * делает миграция 0025 для уже заполненной базы). */
+function normalizePlanimetryNumbers(built: DB) {
+  const plan = built.topics.find((t) => t.title === "Планиметрия");
+  if (!plan) return;
+  const subIds = new Set(built.subtopics.filter((s) => s.topicId === plan.id).map((s) => s.id));
+  const skillIds = new Set(built.skills.filter((sk) => subIds.has(sk.subtopicId)).map((sk) => sk.id));
+  for (const p of built.problems) {
+    if (p.skillId && skillIds.has(p.skillId)) p.egeTaskNumber = p.answerType === "DETAILED" ? 18 : 1;
+  }
+}
+
 async function commitToDatabase(built: DB, isFreshInstall: boolean) {
+  normalizePlanimetryNumbers(built);
   await pgDb.transaction(async (tx) => {
     for (const t of built.topics) {
       await tx

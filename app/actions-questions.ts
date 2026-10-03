@@ -21,7 +21,8 @@ function excerpt(s: string, n = 90) {
 export async function askTeacherAction(
   problemId: string,
   message: string,
-  studentAnswer: string
+  studentAnswer: string,
+  sketch?: string | null
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT" || !user.teacherId) return { error: "Вопрос можно задать только своему репетитору" };
@@ -29,6 +30,9 @@ export async function askTeacherAction(
   if (!problem) return { error: "Задача не найдена" };
   const text = message.trim().slice(0, MAX_MESSAGE);
   const answer = studentAnswer.trim().slice(0, 300) || null;
+  // Снимок черновика: только JPEG/PNG data URL разумного размера.
+  const sketchOk = typeof sketch === "string" && /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(sketch) && sketch.length <= 700_000;
+  const sketchVal = sketchOk ? sketch : null;
 
   const open = await db
     .select({ id: schema.studentQuestions.id, message: schema.studentQuestions.message })
@@ -50,6 +54,7 @@ export async function askTeacherAction(
       .set({
         message: [open[0].message, text].filter(Boolean).join("\n\n").slice(0, MAX_MESSAGE * 2),
         studentAnswer: answer ?? undefined,
+        ...(sketchVal ? { sketch: sketchVal } : {}),
       })
       .where(eq(schema.studentQuestions.id, id));
   } else {
@@ -61,6 +66,7 @@ export async function askTeacherAction(
       problemId,
       studentAnswer: answer,
       message: text,
+      sketch: sketchVal,
     });
   }
 
@@ -68,7 +74,9 @@ export async function askTeacherAction(
     userId: user.teacherId,
     type: "question_asked",
     title: `${user.name}: не понял задачу${problem.egeTaskNumber ? ` (№${problem.egeTaskNumber})` : ""}`,
-    body: text ? excerpt(text, 160) : `«${excerpt(problem.text)}»${answer ? ` · ответ ученика: ${answer}` : ""}`,
+    body:
+      (text ? excerpt(text, 160) : `«${excerpt(problem.text)}»${answer ? ` · ответ ученика: ${answer}` : ""}`) +
+      (sketchVal ? " · приложен черновик" : ""),
     link: `/teacher/questions#${id}`,
   });
   revalidatePath("/teacher/questions");
