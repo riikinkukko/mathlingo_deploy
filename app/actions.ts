@@ -60,6 +60,7 @@ function getClientIp(): string {
 }
 import { AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
+import { cleanImageDataUrl } from "@/lib/image-data";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -167,7 +168,9 @@ export async function revealSolutionAction(problemId: string) {
 export async function reviewAttemptAction(
   attemptId: string,
   decision: "approved" | "needs_revision",
-  feedback: string
+  feedback: string,
+  /** фото решения с пометками репетитора (data URL JPEG) */
+  markup?: string | null
 ) {
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
@@ -192,12 +195,21 @@ export async function reviewAttemptAction(
     })
     .where(eq(schema.attempts.id, attemptId));
 
+  // Пометки сохраняем только к уже приложенному фото (своё фото репетитор не подставит).
+  const marked = cleanImageDataUrl(markup);
+  if (marked) {
+    await db
+      .update(schema.attemptImages)
+      .set({ annotated: marked })
+      .where(eq(schema.attemptImages.attemptId, attemptId));
+  }
+
   await db.transaction(async (tx) => {
     await pushNotification(tx, {
       userId: attempt.studentId,
       type: "review_decided",
       title: decision === "approved" ? `Решение одобрено ✓` : `Решение нужно доработать`,
-      body: `Навык «${skill?.title ?? ""}»${feedback ? `: ${feedback}` : ""}`,
+      body: `Навык «${skill?.title ?? ""}»${feedback ? `: ${feedback}` : ""}${marked ? " · есть пометки на фото" : ""}`,
       link: `/student`,
     });
 

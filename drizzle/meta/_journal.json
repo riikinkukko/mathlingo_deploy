@@ -204,6 +204,13 @@
       "when": 1791067363746,
       "tag": "0028_student_groups",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1791069817796,
+      "tag": "0029_attempt_image_markup",
+      "breakpoints": true
     }
   ]
 }

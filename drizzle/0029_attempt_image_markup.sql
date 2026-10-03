@@ -1,0 +1,1 @@
+ALTER TABLE "attempt_images" ADD COLUMN "annotated" text;

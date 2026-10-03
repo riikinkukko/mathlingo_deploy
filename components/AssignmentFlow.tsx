@@ -123,6 +123,7 @@ export default function AssignmentFlow({
         solvedInfo={currentState.solvedInfo}
         feedback={currentState.feedback}
         previousAnswer={currentState.previousAnswer}
+        review={currentState.review}
         allowHints={allowHints}
         source="assignment"
         locked={expired}

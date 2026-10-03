@@ -1078,11 +1078,22 @@ export async function getPendingReviewsForTeacher(teacherId: string): Promise<Pe
 
 // ---------- Состояние задачи для карточки (учитывает DETAILED-ревью) ----------
 
+/** Проверка развёрнутого решения репетитором: фото ученика и пометки на нём. */
+export interface ReviewInfo {
+  attemptId: string;
+  /** "markup" — есть фото с пометками репетитора, "photo" — только фото ученика */
+  image: "markup" | "photo" | null;
+  /** комментарий репетитора (и при одобрении — его тоже стоит показать) */
+  feedback?: string;
+  approved: boolean;
+}
+
 export interface ProblemState {
   status: "unsolved" | "solved" | "pending" | "needs_revision";
   solvedInfo?: SolvedInfo;
   feedback?: string;
   previousAnswer?: string;
+  review?: ReviewInfo;
 }
 
 export async function computeProblemStates(
@@ -1099,6 +1110,20 @@ export async function computeProblemStates(
       .orderBy(asc(schema.attempts.createdAt))
   ).map(mapAttempt);
 
+  // Фото к последним попыткам развёрнутых задач (и есть ли на них пометки).
+  const lastDetailedIds = problems
+    .filter((p) => p.answerType === "DETAILED")
+    .map((p) => attemptRows.filter((a) => a.problemId === p.id).at(-1)?.id)
+    .filter((x): x is string => !!x);
+  const images = new Map<string, "markup" | "photo">();
+  if (lastDetailedIds.length) {
+    const imgRows = await db
+      .select({ attemptId: schema.attemptImages.attemptId, marked: sql<boolean>`${schema.attemptImages.annotated} is not null` })
+      .from(schema.attemptImages)
+      .where(inArray(schema.attemptImages.attemptId, lastDetailedIds));
+    for (const r of imgRows) images.set(r.attemptId, r.marked ? "markup" : "photo");
+  }
+
   const result: Record<string, ProblemState> = {};
   for (const p of problems) {
     const attempts = attemptRows.filter((a) => a.problemId === p.id);
@@ -1108,19 +1133,32 @@ export async function computeProblemStates(
     }
     const last = attempts[attempts.length - 1];
     if (p.answerType === "DETAILED") {
+      const review: ReviewInfo = {
+        attemptId: last.id,
+        image: images.get(last.id) ?? null,
+        feedback: last.teacherFeedback,
+        approved: last.reviewStatus === "approved",
+      };
+      const reviewed = !!review.image || !!review.feedback;
       if (last.reviewStatus === "approved" || last.reviewStatus === "self_checked") {
         result[p.id] = {
           status: "solved",
           solvedInfo: { explanation: p.explanation, correctAnswer: p.correctAnswer },
+          ...(last.reviewStatus === "approved" && reviewed ? { review } : {}),
         };
       } else if (last.reviewStatus === "needs_revision") {
         result[p.id] = {
           status: "needs_revision",
           feedback: last.teacherFeedback,
-          previousAnswer: last.answer,
+          previousAnswer: last.answer === "(решение на фото)" ? "" : last.answer,
+          review,
         };
       } else {
-        result[p.id] = { status: "pending", previousAnswer: last.answer };
+        result[p.id] = {
+          status: "pending",
+          previousAnswer: last.answer,
+          ...(review.image ? { review } : {}),
+        };
       }
     } else {
       const solved = attempts.some((a) => a.isCorrect);

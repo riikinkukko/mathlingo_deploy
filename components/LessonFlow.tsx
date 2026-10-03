@@ -150,6 +150,7 @@ export default function LessonFlow({
         solvedInfo={currentState.solvedInfo}
         feedback={currentState.feedback}
         previousAnswer={currentState.previousAnswer}
+        review={currentState.review}
         source="lesson"
         onSolved={() => handleSolved(current.id)}
         onWrong={() => handleWrong(current.id)}

@@ -12,6 +12,23 @@ import Mascot from "./Mascot";
 import AskTeacherButton from "./AskTeacherButton";
 import { hasSavedSketch, loadSketch, renderSketchJpeg } from "@/lib/sketch";
 import { fileToJpeg } from "@/lib/image-compress";
+import type { ReviewInfo } from "@/lib/queries";
+
+/** Фото решения ученика — с пометками репетитора, если они есть. */
+function ReviewPhoto({ review }: { review: ReviewInfo }) {
+  if (!review.image) return null;
+  const marked = review.image === "markup";
+  const src = `/api/attempt-image/${review.attemptId}${marked ? "?v=markup" : ""}`;
+  return (
+    <a href={src} target="_blank" rel="noopener" className="mt-2.5 block overflow-hidden rounded-xl border border-line bg-white">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt={marked ? "Твоё решение с пометками репетитора" : "Твоё решение"} loading="lazy" className="max-h-80 w-full object-contain" />
+      <span className="block px-3 py-1.5 text-[12px] font-bold text-ink-soft">
+        {marked ? "Пометки репетитора · нажми, чтобы открыть крупно" : "Твоё фото · нажми, чтобы открыть крупно"}
+      </span>
+    </a>
+  );
+}
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
 export type ProblemCardStatus = "unsolved" | "solved" | "pending" | "needs_revision";
@@ -22,6 +39,7 @@ export default function ProblemCard({
   solvedInfo,
   feedback,
   previousAnswer,
+  review,
   allowHints = true,
   source,
   locked = false,
@@ -35,6 +53,8 @@ export default function ProblemCard({
   solvedInfo?: SolvedInfo | null;
   feedback?: string;
   previousAnswer?: string;
+  /** проверка репетитора: фото с пометками, комментарий */
+  review?: ReviewInfo;
   allowHints?: boolean;
   source: "lesson" | "assignment" | "review";
   locked?: boolean;
@@ -56,6 +76,8 @@ export default function ProblemCard({
   const [solved, setSolved] = useState(status === "solved");
   const [pendingReview, setPendingReview] = useState(status === "pending");
   const [needsRevision, setNeedsRevision] = useState(status === "needs_revision");
+  // Проверка прошлой попытки; после новой отправки она уже не про это решение.
+  const [rev, setRev] = useState<ReviewInfo | undefined>(review);
   const [justSolved, setJustSolved] = useState(false);
   const [shakeSeq, setShakeSeq] = useState(0);
   const [formulaOpen, setFormulaOpen] = useState(false);
@@ -129,6 +151,7 @@ export default function ProblemCard({
         setPendingReview(true);
         setNeedsRevision(false);
         setSolutionImage(null);
+        setRev(undefined);
         return "other";
       }
       if (res.kind === "correct") {
@@ -303,17 +326,30 @@ export default function ProblemCard({
         {problem.text}
       </p>
 
-      {needsRevision && feedback && !pendingReview && (
+      {needsRevision && (feedback || rev?.image) && !pendingReview && (
         <div className="mb-4 rounded-2xl border-2 border-coral-light bg-coral-light p-3.5 text-sm">
-          <p className="mb-1 font-extrabold text-coral">Преподаватель просит доработать:</p>
-          <p className="text-ink-soft">{feedback}</p>
+          <p className="mb-1 font-extrabold text-coral">Репетитор просит доработать:</p>
+          {feedback && <p className="whitespace-pre-wrap text-ink-soft">{feedback}</p>}
+          {rev && <ReviewPhoto review={rev} />}
+        </div>
+      )}
+
+      {solved && rev?.approved && (
+        <div className="mb-4 rounded-2xl border-2 border-pine-light bg-pine-light/60 p-3.5 text-sm">
+          <p className="mb-1 font-extrabold text-pine-dark">Комментарий репетитора</p>
+          {rev.feedback && <p className="whitespace-pre-wrap text-ink-soft">{rev.feedback}</p>}
+          <ReviewPhoto review={rev} />
         </div>
       )}
 
       {pendingReview && (
         <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4 text-sm">
           <p className="mb-2 font-extrabold text-amber">Решение отправлено на проверку</p>
-          <p className="whitespace-pre-wrap text-ink-soft">{answer}</p>
+          {answer && answer !== "(решение на фото)" && <p className="whitespace-pre-wrap text-ink-soft">{answer}</p>}
+          {rev?.image && !needsRevision && <ReviewPhoto review={rev} />}
+          {!rev?.image && (!answer || answer === "(решение на фото)") && (
+            <p className="text-ink-soft">📷 Решение на фото — репетитор его увидит.</p>
+          )}
         </div>
       )}
 

@@ -601,5 +601,7 @@ export const attemptImages = pgTable("attempt_images", {
     .primaryKey()
     .references(() => attempts.id, { onDelete: "cascade" }),
   data: text("data").notNull(), // data URL JPEG/PNG, до ~900 КБ
+  // То же фото с пометками репетитора (обвёл ошибку, ✓/✗, подписи) — его видит ученик.
+  annotated: text("annotated"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
