@@ -17,6 +17,7 @@ import {
   getOrCreateAssignmentSession,
 } from "./queries";
 import { User } from "./types";
+import { cleanImageDataUrl } from "./image-data";
 import { notifyHomeworkIfFinished } from "./teacher-telegram";
 
 /** Сбой уведомления репетитору не должен ломать отправку ответа. */
@@ -123,11 +124,15 @@ export async function performSubmitAttempt(
   user: User,
   problemId: string,
   answer: string,
-  source: "lesson" | "assignment" | "review"
+  source: "lesson" | "assignment" | "review",
+  image?: string | null
 ) {
   const problem = await getProblem(problemId);
   if (!problem) return { error: "Задача не найдена" as const };
-  if (!answer.trim()) return { error: "Введите ответ" as const };
+  // К развёрнутому решению можно приложить фото/черновик — тогда текст не обязателен.
+  const img = problem.answerType === "DETAILED" ? cleanImageDataUrl(image) : null;
+  if (!answer.trim() && !img) return { error: "Введите ответ" as const };
+  if (!answer.trim() && img) answer = "(решение на фото)";
   // Серверная проверка доступа: Free не должен решать Pro-навыки и DETAILED,
   // а в режиме задания — только задачи из своих заданий. Страница навыка
   // проверяет это же, но экшен можно вызвать напрямую с любым problemId.
@@ -161,8 +166,9 @@ export async function performSubmitAttempt(
         .limit(1);
       const telegram = source !== "assignment" && teacherRow[0]?.tgNotifyHomework !== false;
       await db.transaction(async (tx) => {
+        const attemptId = genId("a");
         await tx.insert(schema.attempts).values({
-          id: genId("a"),
+          id: attemptId,
           studentId: user.id,
           problemId,
           answer,
@@ -170,11 +176,12 @@ export async function performSubmitAttempt(
           source,
           reviewStatus: "pending",
         });
+        if (img) await tx.insert(schema.attemptImages).values({ attemptId, data: img });
         await pushNotification(tx, {
           userId: user.teacherId!,
           type: "review_pending",
           title: `${user.name}: решение ждёт проверки`,
-          body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку.`,
+          body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку${img ? " (с фото)" : ""}.`,
           link: `/teacher/student/${user.id}`,
           telegram,
         });
@@ -183,8 +190,9 @@ export async function performSubmitAttempt(
       return { kind: "pending" as const };
     }
 
+    const selfId = genId("a");
     await db.insert(schema.attempts).values({
-      id: genId("a"),
+      id: selfId,
       studentId: user.id,
       problemId,
       answer,
@@ -192,6 +200,7 @@ export async function performSubmitAttempt(
       source,
       reviewStatus: "self_checked",
     });
+    if (img) await db.insert(schema.attemptImages).values({ attemptId: selfId, data: img });
     await safeNotifyHomework(user, problemId, source);
     return {
       kind: "correct" as const,

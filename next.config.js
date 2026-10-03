@@ -6,7 +6,12 @@ const nextConfig = {
   // под конкретную версию, если она когда-то появится.
   poweredByHeader: false,
   // instrumentation.ts — пересылка ошибок сервера владельцу в Telegram.
-  experimental: { instrumentationHook: true },
+  experimental: {
+    instrumentationHook: true,
+    // Фото решения (сжимается в браузере до ~650 КБ) уходит через серверный
+    // экшен; стандартный предел Next — 1 МБ впритык, даём запас.
+    serverActions: { bodySizeLimit: "1.5mb" },
+  },
   // Базовые заголовки безопасности для всех страниц. CSP сознательно не
   // включаем: для Next.js он требует аккуратной настройки nonce, иначе
   // ломает страницы — это отдельная задача.

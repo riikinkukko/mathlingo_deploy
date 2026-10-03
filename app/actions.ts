@@ -105,13 +105,14 @@ export async function logoutAction() {
 export async function submitAttemptAction(
   problemId: string,
   answer: string,
-  source: "lesson" | "assignment" | "review"
+  source: "lesson" | "assignment" | "review",
+  image?: string | null
 ) {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") {
     return { error: "Нужно войти как ученик" };
   }
-  const result = await performSubmitAttempt(user, problemId, answer, source);
+  const result = await performSubmitAttempt(user, problemId, answer, source, image);
   if ("error" in result) return result;
 
   // /student ревалидируем только для урочных/pending попыток — там показан

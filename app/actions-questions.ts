@@ -6,6 +6,7 @@ import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getProblem, getUserById, pushNotification } from "@/lib/queries";
+import { cleanImageDataUrl } from "@/lib/image-data";
 
 const MAX_MESSAGE = 1000;
 
@@ -31,8 +32,7 @@ export async function askTeacherAction(
   const text = message.trim().slice(0, MAX_MESSAGE);
   const answer = studentAnswer.trim().slice(0, 300) || null;
   // Снимок черновика: только JPEG/PNG data URL разумного размера.
-  const sketchOk = typeof sketch === "string" && /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(sketch) && sketch.length <= 700_000;
-  const sketchVal = sketchOk ? sketch : null;
+  const sketchVal = cleanImageDataUrl(sketch);
 
   const open = await db
     .select({ id: schema.studentQuestions.id, message: schema.studentQuestions.message })

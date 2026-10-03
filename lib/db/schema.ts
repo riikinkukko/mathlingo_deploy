@@ -554,3 +554,14 @@ export const streakFreezeDays = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.studentId, t.day] }) })
 );
+
+// Фото решения или снимок черновика к попытке с развёрнутым ответом.
+// Отдельной таблицей: attempts читают десятки запросов (серия, статистика,
+// домашка) — картинки там сделали бы каждый из них тяжёлым.
+export const attemptImages = pgTable("attempt_images", {
+  attemptId: text("attempt_id")
+    .primaryKey()
+    .references(() => attempts.id, { onDelete: "cascade" }),
+  data: text("data").notNull(), // data URL JPEG/PNG, до ~900 КБ
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

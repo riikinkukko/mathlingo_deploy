@@ -11,6 +11,7 @@ import MathKeyboard from "./MathKeyboard";
 import Mascot from "./Mascot";
 import AskTeacherButton from "./AskTeacherButton";
 import { hasSavedSketch, loadSketch, renderSketchJpeg } from "@/lib/sketch";
+import { fileToJpeg } from "@/lib/image-compress";
 
 type WrongState = { hint: string; wrongCount: number; canRevealSolution: boolean };
 export type ProblemCardStatus = "unsolved" | "solved" | "pending" | "needs_revision";
@@ -65,6 +66,33 @@ export default function ProblemCard({
     setHasSketch(hasSavedSketch(problem.id));
   }, [problem.id]);
   const diagramBoxRef = useRef<HTMLDivElement>(null);
+  // Развёрнутое решение: фото тетради или снимок черновика вместо набора текста.
+  const [solutionImage, setSolutionImage] = useState<{ url: string; kind: "photo" | "sketch" } | null>(null);
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  async function onPhotoPicked(file: File | undefined) {
+    if (!file) return;
+    setImageError(null);
+    setImageBusy(true);
+    const url = await fileToJpeg(file);
+    setImageBusy(false);
+    if (url) setSolutionImage({ url, kind: "photo" });
+    else setImageError("Не получилось обработать фото — попробуй другое");
+  }
+
+  async function attachSketch() {
+    setImageError(null);
+    setImageBusy(true);
+    const doc = loadSketch(problem.id);
+    const url = doc?.items.length
+      ? await renderSketchJpeg(doc, (diagramBoxRef.current?.querySelector("svg") as SVGSVGElement | null) ?? null)
+      : null;
+    setImageBusy(false);
+    if (url) setSolutionImage({ url, kind: "sketch" });
+    else setImageError("Черновик пустой — сначала реши в нём");
+  }
   const [noEnergy, setNoEnergy] = useState(false);
   const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
@@ -76,7 +104,7 @@ export default function ProblemCard({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!answer.trim()) return;
+    if (!answer.trim() && !(isDetailed && solutionImage)) return;
     startTransition(async () => {
       await runSubmit();
     });
@@ -85,7 +113,7 @@ export default function ProblemCard({
   /** Отправка ответа — из формы под задачей и из поля ответа в черновике. */
   async function runSubmit(): Promise<"correct" | "wrong" | "other"> {
     {
-      const res = await submitAttemptAction(problem.id, answer, source);
+      const res = await submitAttemptAction(problem.id, answer, source, isDetailed ? solutionImage?.url ?? null : null);
       if ("error" in res) {
         setServerError(typeof res.error === "string" ? res.error : "Не удалось отправить ответ");
         return "other";
@@ -100,6 +128,7 @@ export default function ProblemCard({
       if (res.kind === "pending") {
         setPendingReview(true);
         setNeedsRevision(false);
+        setSolutionImage(null);
         return "other";
       }
       if (res.kind === "correct") {
@@ -291,13 +320,70 @@ export default function ProblemCard({
       {showForm && (
         <form onSubmit={handleSubmit} className="space-y-3">
           {isDetailed ? (
-            <textarea
-              className="input min-h-[140px] resize-y font-sans text-[15px]"
-              placeholder="Опишите решение подробно: что дано, какие теоремы/формулы применяете, промежуточные шаги, ответ."
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              disabled={pending}
-            />
+            <>
+              <textarea
+                className="input min-h-[120px] resize-y font-sans text-[15px]"
+                placeholder={
+                  solutionImage
+                    ? "Можно добавить пояснение или ответ (необязательно)"
+                    : "Опишите решение: что дано, какие теоремы применяете, шаги, ответ. Или приложите фото решения из тетради."
+                }
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                disabled={pending}
+              />
+              {solutionImage ? (
+                <div className="relative overflow-hidden rounded-2xl border border-line bg-white">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={solutionImage.url} alt={solutionImage.kind === "photo" ? "Фото решения" : "Снимок черновика"} className="max-h-72 w-full object-contain" />
+                  <p className="px-3 py-1.5 text-[12px] font-bold text-ink-soft">
+                    {solutionImage.kind === "photo" ? "Фото решения приложено" : "Снимок черновика приложен"}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSolutionImage(null)}
+                    aria-label="Убрать картинку"
+                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-ink/70 text-white"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={imageBusy || pending}
+                    onClick={() => photoInputRef.current?.click()}
+                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-line bg-white text-[14px] font-extrabold text-ink-soft transition hover:border-pine hover:text-pine disabled:opacity-50"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z" /><circle cx="12" cy="13" r="3.5" /></svg>
+                    {imageBusy ? "Сжимаем…" : "Фото решения"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={imageBusy || pending || !hasSketch}
+                    onClick={attachSketch}
+                    title={hasSketch ? undefined : "Сначала реши в черновике"}
+                    className="flex h-12 items-center justify-center gap-2 rounded-2xl border-2 border-line bg-white text-[14px] font-extrabold text-ink-soft transition hover:border-pine hover:text-pine disabled:opacity-50"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+                    Из черновика
+                  </button>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      void onPhotoPicked(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
+                </div>
+              )}
+              {imageError && <p className="text-sm font-semibold text-coral">{imageError}</p>}
+            </>
           ) : (
             <>
               <div

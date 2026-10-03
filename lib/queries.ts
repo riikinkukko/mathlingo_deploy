@@ -1023,6 +1023,8 @@ export interface PendingReview {
   skillTitle: string;
   answer: string;
   submittedAt: string;
+  /** Приложено фото решения / снимок черновика (/api/attempt-image/[id]). */
+  hasImage: boolean;
 }
 
 export async function getPendingReviewsForTeacher(teacherId: string): Promise<PendingReview[]> {
@@ -1038,6 +1040,16 @@ export async function getPendingReviewsForTeacher(teacherId: string): Promise<Pe
   const problems = (await db.select().from(schema.problems)).map(mapProblem);
   const skillRows = await db.select().from(schema.skills);
   const studentById = new Map(students.map((s) => [s.id, s]));
+  const withImage = new Set(
+    attemptRows.length
+      ? (
+          await db
+            .select({ id: schema.attemptImages.attemptId })
+            .from(schema.attemptImages)
+            .where(inArray(schema.attemptImages.attemptId, attemptRows.map((a) => a.id)))
+        ).map((r) => r.id)
+      : []
+  );
 
   const result: PendingReview[] = [];
   for (const a of attemptRows) {
@@ -1052,6 +1064,7 @@ export async function getPendingReviewsForTeacher(teacherId: string): Promise<Pe
       skillTitle: skill?.title ?? "—",
       answer: a.answer,
       submittedAt: a.createdAt.toISOString(),
+      hasImage: withImage.has(a.id),
     });
   }
   return result.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));

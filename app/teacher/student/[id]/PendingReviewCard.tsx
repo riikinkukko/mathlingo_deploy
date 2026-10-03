@@ -31,6 +31,13 @@ export default function PendingReviewCard({ review }: { review: PendingReview })
       <div className="mb-3 rounded-xl border border-line bg-paper p-3">
         <p className="mb-1 text-xs font-extrabold uppercase text-ink-soft">Ответ ученика</p>
         <p className="whitespace-pre-wrap text-sm text-ink">{review.answer}</p>
+        {review.hasImage && (
+          <a href={`/api/attempt-image/${review.attemptId}`} target="_blank" rel="noopener" className="mt-2 block overflow-hidden rounded-xl border border-line bg-white">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/attempt-image/${review.attemptId}`} alt="Решение ученика" loading="lazy" className="max-h-96 w-full object-contain" />
+            <span className="block px-3 py-1.5 text-[12px] font-bold text-ink-soft">Нажми, чтобы открыть крупно</span>
+          </a>
+        )}
       </div>
 
       <details className="mb-3 text-sm">
