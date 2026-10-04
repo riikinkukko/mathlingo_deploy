@@ -65,7 +65,15 @@ export default function TariffsPage() {
               </p>
               {pass.available && (
                 <p className="mb-3 mt-1 text-sm font-bold text-ink">
-                  или «До ЕГЭ» — {pass.priceRub.toLocaleString("ru-RU")} ₽ разово, Pro до {pass.untilLabel}
+                  или «До ЕГЭ» — {pass.priceRub.toLocaleString("ru-RU")} ₽ разово
+                  {pass.regularPriceRub && (
+                    <>
+                      {" "}
+                      <s className="font-normal text-ink-soft">{pass.regularPriceRub.toLocaleString("ru-RU")} ₽</s> (ранняя цена до{" "}
+                      {pass.earlyUntilLabel})
+                    </>
+                  )}
+                  , Pro до {pass.untilLabel}
                 </p>
               )}
               <FeatureList items={STUDENT_PRO_FEATURES} accent />

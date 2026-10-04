@@ -15,23 +15,38 @@ export function getStudentProPrice() {
   };
 }
 
+const ruDate = (d: Date) =>
+  d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" }).replace(/\s?г\.$/, "");
+
 /**
  * «До ЕГЭ» — разовая оплата Pro до конца экзаменационного сезона. Продаём,
  * только пока до конца сезона больше месяца (летом — ждём новый сезон).
+ *
+ * Ранняя цена: до даты YOOKASSA_EXAM_EARLY_UNTIL действует сниженная цена, и
+ * обычная показывается зачёркнутой. После этой даты цена сама становится
+ * обычной — так зачёркнутая цена честная, а не придуманная «скидка».
  */
 export function getStudentExamPass(now: Date = new Date()) {
   const until = new Date(`${EXAM_ACCESS_UNTIL}T23:59:59+03:00`);
-  const priceRub = Number(process.env.YOOKASSA_EXAM_PRICE_RUB || 1490);
+  const regularPriceRub = Number(process.env.YOOKASSA_EXAM_PRICE_RUB || 1490);
+  const earlyPrice = Number(process.env.YOOKASSA_EXAM_EARLY_PRICE_RUB || 1190);
+  const earlyUntilRaw = process.env.YOOKASSA_EXAM_EARLY_UNTIL || "2026-12-31";
+  const earlyUntil = /^\d{4}-\d{2}-\d{2}$/.test(earlyUntilRaw) ? new Date(`${earlyUntilRaw}T23:59:59+03:00`) : null;
+  const early = !!earlyUntil && now.getTime() <= earlyUntil.getTime() && earlyPrice > 0 && earlyPrice < regularPriceRub;
+  const priceRub = early ? earlyPrice : regularPriceRub;
   const daysLeft = Math.ceil((until.getTime() - now.getTime()) / 86_400_000);
   const months = Math.max(1, Math.round(daysLeft / 30));
   return {
     priceRub,
+    /** обычная цена — показывается зачёркнутой, пока действует ранняя */
+    regularPriceRub: early ? regularPriceRub : null,
+    earlyUntilLabel: early ? ruDate(earlyUntil!) : null,
     until,
     daysLeft,
     available: daysLeft > 30,
     /** во что обходится месяц (для сравнения с помесячной оплатой) */
     perMonth: Math.round(priceRub / months),
-    untilLabel: until.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" }).replace(/\s?г\.$/, ""),
+    untilLabel: ruDate(until),
   };
 }
 

@@ -187,7 +187,8 @@ export default async function ProgramPage({
                     <form action={startPaymentAction}>
                       <input type="hidden" name="product" value="exam" />
                       <PayButton className="btn-primary w-full !h-12 !bg-amber !text-[15px] sm:w-auto">
-                        «До ЕГЭ» — {examPass.priceRub.toLocaleString("ru-RU")} ₽ разово
+                        «До ЕГЭ» — {examPass.priceRub.toLocaleString("ru-RU")} ₽
+                        {examPass.regularPriceRub && <s className="ml-2 opacity-70">{examPass.regularPriceRub.toLocaleString("ru-RU")} ₽</s>}
                       </PayButton>
                     </form>
                   )}

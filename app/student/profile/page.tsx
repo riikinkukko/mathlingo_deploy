@@ -1,3 +1,4 @@
+import { getStudentChecks } from "@/lib/paid-review";
 import { getSessionUser } from "@/lib/auth";
 import {
   computeOverallStats,
@@ -33,6 +34,7 @@ export default async function ProfilePage({
   searchParams: { telegram?: string; error?: string };
 }) {
   const user = (await getSessionUser())!;
+  const hasChecks = (await getStudentChecks(user.id)).length > 0;
   const xp = await computeXp(user.id);
   const { streak, freezes } = await settleStreak(user.id);
   const level = getLevelInfo(xp);
@@ -231,6 +233,13 @@ export default async function ProfilePage({
             );
           })}
         </div>
+
+        {hasChecks && (
+          <a href="/student/checks" className="mt-6 card flex items-center justify-between p-4 transition hover:border-pine">
+            <span className="font-display text-base font-black text-ink">Мои проверки</span>
+            <span className="text-sm font-bold text-pine">Открыть</span>
+          </a>
+        )}
 
         <div className="mt-6 card p-5">
           <h2 className="mb-1 font-display text-base font-black text-ink">Уведомления в Telegram</h2>

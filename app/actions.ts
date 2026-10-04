@@ -62,6 +62,7 @@ import { AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
+import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from "@/lib/promo";
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
@@ -187,7 +188,10 @@ export async function reviewAttemptAction(
 
   const students = await getStudentsOfTeacher(teacher.id);
   const studentIds = new Set(students.map((s) => s.id));
-  if (!studentIds.has(attempt.studentId)) return { error: "Доступ запрещён" };
+  // Чужое решение можно проверить, только если это оплаченная платная
+  // проверка, а проверяющий — эксперт платформы.
+  const paidOrder = !studentIds.has(attempt.studentId) && isReviewer(teacher) ? await getPaidOrderForAttempt(attemptId) : null;
+  if (!studentIds.has(attempt.studentId) && !paidOrder) return { error: "Доступ запрещён" };
 
   const problem = await getProblem(attempt.problemId);
   const skill = problem?.skillId ? await getSkill(problem.skillId) : undefined;
@@ -211,13 +215,21 @@ export async function reviewAttemptAction(
       .where(eq(schema.attemptImages.attemptId, attemptId));
   }
 
+  if (paidOrder) await markReviewOrderDone(paidOrder.id);
+
   await db.transaction(async (tx) => {
     await pushNotification(tx, {
       userId: attempt.studentId,
       type: "review_decided",
-      title: decision === "approved" ? `Решение одобрено ✓` : `Решение нужно доработать`,
+      title: paidOrder
+        ? decision === "approved"
+          ? "Эксперт проверил решение: засчитано ✓"
+          : "Эксперт проверил решение: есть что исправить"
+        : decision === "approved"
+          ? `Решение одобрено ✓`
+          : `Решение нужно доработать`,
       body: `Навык «${skill?.title ?? ""}»${feedback ? `: ${feedback}` : ""}${marked ? " · есть пометки на фото" : ""}`,
-      link: `/student`,
+      link: paidOrder ? "/student/checks" : `/student`,
     });
 
     // Если одобрение делает навык полностью пройденным (и это была "урочная"

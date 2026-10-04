@@ -11,6 +11,7 @@ import TeacherSetupChecklist from "@/components/TeacherSetupChecklist";
 import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
 import { debtText, hasDebt } from "@/lib/money";
 import { teacherPlanState, TEACHER_TIERS } from "@/lib/teacher-plan";
+import { countPaidChecksWaiting, isReviewer } from "@/lib/paid-review";
 
 // Через сколько дней без активности ученик считается "потерявшимся".
 const INACTIVE_DAYS = 3;
@@ -28,6 +29,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
   const plan = teacherPlanState(user);
+  const paidChecks = isReviewer(user) ? await countPaidChecksWaiting() : 0;
 
   const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup, groups] = await Promise.all([
     getTeacherHomeStats(user.id),
@@ -91,6 +93,14 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
               }
             />
           </div>
+        )}
+        {paidChecks > 0 && (
+          <a href="/teacher/checks" className="card mb-4 flex items-center justify-between gap-3 border-2 !border-violet/40 p-3.5 transition hover:!border-violet">
+            <p className="text-sm font-bold text-ink">
+              Платные проверки: {paidChecks} {pluralRu(paidChecks, ["решение ждёт", "решения ждут", "решений ждут"])} эксперта
+            </p>
+            <span className="shrink-0 text-xs font-bold text-violet">Проверить</span>
+          </a>
         )}
         {showDone && (
           <LessonDoneBanner lesson={doneLesson} studentName={students.find((st) => st.id === doneLesson.studentId)?.name} />

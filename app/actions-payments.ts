@@ -9,6 +9,7 @@ import { checkPromo, discountedPrice } from "@/lib/promo";
 import type { User } from "@/lib/types";
 import { getStudentExamPass } from "@/lib/tariffs";
 import { getOrCreatePayRequest, getPayRequest } from "@/lib/pay-requests";
+import { isPaidReviewEnabled, prepareReviewOrder } from "@/lib/paid-review";
 
 /** Скидка по промокоду из формы: цена и код для платежа (или ошибка). */
 async function applyPromoToPrice(
@@ -198,4 +199,41 @@ export async function startTeacherPaymentAction(_prevState: unknown, formData: F
   }
 
   redirect(confirmationUrl);
+}
+
+// ---------- Платная проверка решения ----------
+
+/**
+ * Заказ проверки развёрнутого решения экспертом. Вызывается из карточки
+ * задачи после самопроверки; возвращает адрес формы оплаты ЮKassa.
+ */
+export async function startReviewPaymentAction(attemptId: string): Promise<{ url?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !isStandaloneStudent(user)) return { error: "Проверка доступна ученикам без репетитора" };
+  if (!isPaidReviewEnabled() || !isYooKassaConfigured()) return { error: "Проверка сейчас недоступна" };
+  const prep = await prepareReviewOrder(user.id, attemptId);
+  if ("error" in prep) return { error: prep.error };
+  const { order } = prep;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  try {
+    const payment = await createYooKassaPayment({
+      amountRub: order.priceRub,
+      description: "Планиметрика — проверка развёрнутого решения экспертом",
+      returnUrl: `${appUrl}/student/checks?paid=1`,
+      idempotenceKey: genId("idem"),
+      metadata: { userId: user.id, type: "review_check", orderId: order.id },
+    });
+    await createPendingPayment({
+      userId: user.id,
+      yookassaPaymentId: payment.id,
+      amountRub: order.priceRub,
+      periodDays: 0,
+      paymentType: "review_check",
+      reviewOrderId: order.id,
+    });
+    return { url: payment.confirmationUrl };
+  } catch (e) {
+    console.error("Ошибка создания платежа ЮKassa (проверка решения):", e);
+    return { error: "Не удалось создать платёж. Попробуйте ещё раз через пару минут." };
+  }
 }

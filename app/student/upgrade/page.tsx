@@ -159,9 +159,14 @@ export default async function UpgradePage({
                       <input type="hidden" name="product" value="exam" />
                       {activePromo && <input type="hidden" name="promo" value={activePromo.code} />}
                       <PayButton className="btn-primary w-full !h-auto !flex-col !gap-0.5 !bg-amber !py-3 !text-xs">
-                        <span className="block">«До ЕГЭ» — {passPrice.toLocaleString("ru-RU")} ₽ разово</span>
+                        <span className="block">
+                          «До ЕГЭ» — {passPrice.toLocaleString("ru-RU")} ₽ разово
+                          {pass.regularPriceRub && !activePromo && (
+                            <s className="ml-1.5 opacity-70">{pass.regularPriceRub.toLocaleString("ru-RU")} ₽</s>
+                          )}
+                        </span>
                         <span className="block text-[11px] font-bold normal-case tracking-normal opacity-90">
-                          Pro до {pass.untilLabel} · около {pass.perMonth} ₽ в месяц
+                          {pass.earlyUntilLabel ? `Ранняя цена до ${pass.earlyUntilLabel} · ` : ""}Pro до {pass.untilLabel}
                         </span>
                       </PayButton>
                     </form>

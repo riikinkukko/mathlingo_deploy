@@ -263,8 +263,29 @@ export const payments = pgTable("payments", {
   isRecurringSetup: boolean("is_recurring_setup").notNull().default(false),
   // Промокод со скидкой, применённый к этому платежу (учёт — при успехе).
   promoCode: text("promo_code"),
+  // Для payment_type='review_check': какую платную проверку оплачивает.
+  reviewOrderId: text("review_order_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   paidAt: timestamp("paid_at", { withTimezone: true }),
+});
+
+// Платная проверка развёрнутого решения (для учеников без репетитора):
+// эксперт платформы проверяет одну попытку, ставит пометки на фото.
+// status: awaiting_payment → paid (ждёт эксперта) → done.
+export const reviewOrders = pgTable("review_orders", {
+  id: text("id").primaryKey(),
+  attemptId: text("attempt_id")
+    .notNull()
+    .unique()
+    .references(() => attempts.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  priceRub: integer("price_rub").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  paidAt: timestamp("paid_at", { withTimezone: true }),
+  doneAt: timestamp("done_at", { withTimezone: true }),
 });
 
 // «Попросить родителя»: ссылка /pay/<token>, по которой взрослый без аккаунта

@@ -1,4 +1,6 @@
 import { db } from "./db/client";
+import { getPaidReviewPrice, isPaidReviewEnabled } from "./paid-review";
+import { isYooKassaConfigured } from "./yookassa";
 import * as schema from "./db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import {
@@ -219,6 +221,9 @@ export async function performSubmitAttempt(
       explanation: problem.explanation,
       correctAnswer: problem.correctAnswer,
       selfChecked: true,
+      attemptId: selfId,
+      // Предложение платной проверки экспертом (если включена и оплата работает).
+      paidReviewPrice: isPaidReviewEnabled() && isYooKassaConfigured() ? getPaidReviewPrice() : null,
     };
   }
 

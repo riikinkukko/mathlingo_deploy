@@ -21,6 +21,14 @@ test("«До ЕГЭ» продаётся, пока до конца сезона 
   assert.equal(getStudentExamPass(new Date(END - 20 * DAY)).available, false);
 });
 
+test("ранняя цена до 31 декабря, потом — обычная, зачёркнутая только пока действует ранняя", () => {
+  const dec = getStudentExamPass(new Date("2026-12-31T20:00:00+03:00"));
+  assert.deepEqual([dec.priceRub, dec.regularPriceRub], [1190, 1490]);
+  assert.match(dec.earlyUntilLabel!, /31 декабря 2026/);
+  const jan = getStudentExamPass(new Date("2027-01-01T00:00:01+03:00"));
+  assert.deepEqual([jan.priceRub, jan.regularPriceRub, jan.earlyUntilLabel], [1490, null, null]);
+});
+
 test("оплата «До ЕГЭ»: Pro до конца сезона, более длинный Pro не урезается", async () => {
   const s = await makeUser({ role: "STUDENT", plan: "free" });
   const yk = `yk_${RUN}_exam1`;

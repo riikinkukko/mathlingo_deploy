@@ -53,20 +53,24 @@ export default function LessonFlow({
   const [hadMistake, setHadMistake] = useState(false);
   const [wasAlreadyComplete] = useState(allSolvedInitially);
   const [showCelebration, setShowCelebration] = useState(false);
+  // После развёрнутого решения ученик читает эталон (и может заказать
+  // проверку) — праздничный экран тогда открывается кнопкой, а не сам.
+  const [holdCelebration, setHoldCelebration] = useState(false);
   // Для итога урока: когда начали и в каких задачах ошибались.
   const [startedAt] = useState(() => Date.now());
   const [mistakeIds, setMistakeIds] = useState<Set<string>>(new Set());
 
   const solvedCount = Object.values(states).filter((s) => s.status === "solved").length;
 
-  function handleSolved(problemId: string) {
+  function handleSolved(problemId: string, detailed = false) {
     setStates((prev) => ({ ...prev, [problemId]: { status: "solved" } }));
     setCombo((c) => c + 1);
     const newSolvedCount = Object.values({ ...states, [problemId]: { status: "solved" as const } }).filter(
       (s) => s.status === "solved"
     ).length;
     if (!wasAlreadyComplete && newSolvedCount === problems.length) {
-      setTimeout(() => setShowCelebration(true), 500);
+      if (detailed) setHoldCelebration(true);
+      else setTimeout(() => setShowCelebration(true), 500);
     }
   }
 
@@ -152,7 +156,7 @@ export default function LessonFlow({
         previousAnswer={currentState.previousAnswer}
         review={currentState.review}
         source="lesson"
-        onSolved={() => handleSolved(current.id)}
+        onSolved={() => handleSolved(current.id, current.answerType === "DETAILED")}
         onWrong={() => handleWrong(current.id)}
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
         canAskTeacher={canAskTeacher}
@@ -165,9 +169,15 @@ export default function LessonFlow({
           <div className="mx-auto max-w-2xl">
             {isLast ? (
               solvedCount === problems.length ? (
-                <a href={nextHref} className="btn-primary !h-14 w-full !text-base">
-                  {nextLabel}
-                </a>
+                holdCelebration ? (
+                  <button type="button" onClick={() => setShowCelebration(true)} className="btn-primary !h-14 w-full !text-base">
+                    Завершить урок
+                  </button>
+                ) : (
+                  <a href={nextHref} className="btn-primary !h-14 w-full !text-base">
+                    {nextLabel}
+                  </a>
+                )
               ) : (
                 <button
                   type="button"

@@ -21,12 +21,18 @@ import {
   Payment,
 } from "./types";
 import { EXAM_ACCESS_UNTIL } from "./exam-plan";
+import { markReviewOrderPaid, notifyReviewers } from "./paid-review";
 import { rewardReferralOnPayment, recordPromoPayment, REFERRAL_BONUS_DAYS, type ReferralReward } from "./promo";
 
 // ---------- Мапперы: строка Drizzle (null) -> тип приложения (undefined) ----------
 // Драйзл возвращает null для необязательных колонок, а наши типы исторически
 // используют undefined (?), поэтому нормализуем на границе слоя данных —
 // остальной код (условия вида if (x.skillId)) не пришлось трогать.
+
+/** Строка users из базы → User (для модулей, которые читают таблицу сами). */
+export function mapUserRow(row: typeof schema.users.$inferSelect): User {
+  return mapUser(row);
+}
 
 function mapUser(row: typeof schema.users.$inferSelect): User {
   return {
@@ -1891,8 +1897,9 @@ export async function createPendingPayment(params: {
   yookassaPaymentId: string;
   amountRub: number;
   periodDays: number;
-  paymentType?: "student_pro" | "teacher_pro";
+  paymentType?: "student_pro" | "teacher_pro" | "review_check";
   isRecurringSetup?: boolean;
+  reviewOrderId?: string | null;
   /** репетитор: 'standard' | 'pro'; ученик: 'exam' — тариф «До ЕГЭ» */
   tier?: "standard" | "pro" | "exam";
   billingPeriod?: "month" | "year";
@@ -1911,6 +1918,7 @@ export async function createPendingPayment(params: {
     tier: params.tier ?? null,
     billingPeriod: params.billingPeriod ?? null,
     promoCode: params.promoCode ?? null,
+    reviewOrderId: params.reviewOrderId ?? null,
   });
   return id;
 }
@@ -1951,6 +1959,7 @@ export async function markPaymentSucceeded(
   if (payment.status === "succeeded") return true; // уже обработан — не продлеваем повторно
 
   let referral = null as ReferralReward | null;
+  let paidReview = null as { studentName: string } | null;
   await db.transaction(async (tx) => {
     // Атомарно «забираем» платёж: ЮKassa может прислать одно уведомление
     // несколько раз, в том числе одновременно. Проверка статуса выше и
@@ -1967,7 +1976,10 @@ export async function markPaymentSucceeded(
     const userRows = await tx.select().from(schema.users).where(eq(schema.users.id, payment.userId)).limit(1);
     const user = userRows[0] ? mapUser(userRows[0]) : undefined;
 
-    if (payment.paymentType === "teacher_pro") {
+    if (payment.paymentType === "review_check") {
+      // Платная проверка решения: тариф не трогаем, решение уходит эксперту.
+      if (payment.reviewOrderId) paidReview = await markReviewOrderPaid(tx, payment.reviewOrderId);
+    } else if (payment.paymentType === "teacher_pro") {
       // Старые платежи (до ступеней) — «Профи» на месяц.
       const tier = (payment.tier as "standard" | "pro" | null) ?? "pro";
       const period = (payment.billingPeriod as "month" | "year" | null) ?? "month";
@@ -2019,6 +2031,8 @@ export async function markPaymentSucceeded(
     }
     if (payment.promoCode) await recordPromoPayment(tx, payment.promoCode, payment.userId, payment.id);
   });
+  const pr = paidReview as { studentName: string } | null;
+  if (pr) await notifyReviewers(pr.studentName);
   const r = referral as ReferralReward | null;
   if (r) {
     await pushNotification(db, {

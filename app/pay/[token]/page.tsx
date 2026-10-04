@@ -110,10 +110,14 @@ export default async function PayForStudentPage({
               <input type="hidden" name="product" value="exam" />
               <div className="flex items-baseline justify-between gap-3">
                 <p className="text-[17px] font-black text-ink">До ЕГЭ</p>
-                <p className="text-[22px] font-black text-ink">{rub(pass.priceRub)}</p>
+                <p className="text-[22px] font-black text-ink">
+                  {pass.regularPriceRub && <s className="mr-2 text-[15px] font-bold text-ink-soft">{rub(pass.regularPriceRub)}</s>}
+                  {rub(pass.priceRub)}
+                </p>
               </div>
               <p className="mt-1 text-[14px] text-ink-soft">
                 Один платёж — Pro до {pass.untilLabel}, включая пересдачи. Около {rub(pass.perMonth)} в месяц.
+                {pass.earlyUntilLabel && ` Ранняя цена действует до ${pass.earlyUntilLabel}.`}
               </p>
               <PayButton className="mt-3 h-12 w-full rounded-2xl bg-pine text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark">
                 Оплатить {rub(pass.priceRub)}

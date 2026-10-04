@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useRef, useEffect } from "react";
+import PaidReviewOffer from "./PaidReviewOffer";
 import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
@@ -118,6 +119,7 @@ export default function ProblemCard({
   const [noEnergy, setNoEnergy] = useState(false);
   const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
+  const [reviewOffer, setReviewOffer] = useState<{ attemptId: string; priceRub: number } | null>(null);
   // Отказ сервера (задача в идущей контрольной, время вышло и т. п.) — раньше
   // молча игнорировался, и кнопка «Проверить» просто ничего не делала.
   const [serverError, setServerError] = useState<string | null>(null);
@@ -157,7 +159,12 @@ export default function ProblemCard({
       if (res.kind === "correct") {
         setCorrectResult({ explanation: res.explanation, correctAnswer: res.correctAnswer });
         setWrongState(null);
-        if ("selfChecked" in res && res.selfChecked) setSelfChecked(true);
+        if ("selfChecked" in res && res.selfChecked) {
+          setSelfChecked(true);
+          if ("paidReviewPrice" in res && res.paidReviewPrice && res.attemptId) {
+            setReviewOffer({ attemptId: res.attemptId, priceRub: res.paidReviewPrice });
+          }
+        }
         const wasAlreadySolved = solved;
         setSolved(true);
         if (!wasAlreadySolved) {
@@ -557,6 +564,7 @@ export default function ProblemCard({
               )}
             </p>
             <p className="relative text-ink-soft">{correctResult.explanation}</p>
+            {selfChecked && reviewOffer && <PaidReviewOffer attemptId={reviewOffer.attemptId} priceRub={reviewOffer.priceRub} />}
           </div>
         </div>
       )}

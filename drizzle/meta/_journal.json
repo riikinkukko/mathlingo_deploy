@@ -253,6 +253,13 @@
       "when": 1791125796757,
       "tag": "0035_pay_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1791126482014,
+      "tag": "0036_paid_review",
+      "breakpoints": true
     }
   ]
 }
