@@ -234,7 +234,8 @@ export type NotificationType =
   | "skill_completed"
   | "streak_frozen"
   | "teacher_nudge"
-  | "weekly_report";
+  | "weekly_report"
+  | "plan_reminder";
 
 export interface Notification {
   id: string;

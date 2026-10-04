@@ -232,6 +232,13 @@
       "when": 1791075428767,
       "tag": "0032_teacher_tiers",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1791123272398,
+      "tag": "0033_trial_reminders",
+      "breakpoints": true
     }
   ]
 }

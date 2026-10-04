@@ -42,6 +42,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "streak_frozen",
   "teacher_nudge",
   "weekly_report",
+  "plan_reminder",
 ]);
 
 // ---------------- Таблицы ----------------
@@ -115,6 +116,9 @@ export const users = pgTable("users", {
   teacherBillingPeriod: text("teacher_billing_period"),
   // Пробный «Профи» до этой даты (новым репетиторам — 14 дней, без карты).
   teacherTrialUntil: timestamp("teacher_trial_until", { withTimezone: true }),
+  // Какое напоминание об окончании пробного уже ушло: "3d" | "last" | "ended"
+  // (lib/trial-reminders.ts). Ставится атомарно до отправки — без повторов.
+  teacherTrialReminded: text("teacher_trial_reminded"),
   // Владелец платформы (вы) — полностью вне обычной системы тарифов, а
   // не просто "вечный Pro": лимит на учеников для него не проверяется
   // вообще, ни при каких условиях. Отдельно от isAdmin (тот — про доступ

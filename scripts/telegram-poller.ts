@@ -62,6 +62,7 @@ async function main() {
   const { sendLessonStatusPrompts, sendTeacherDigests } = await import("../lib/teacher-telegram");
   const { sendParentWeeklyReports } = await import("../lib/parent-weekly");
   const { sendStudentEveningReminders } = await import("../lib/student-reminders");
+  const { sendTrialReminders } = await import("../lib/trial-reminders");
   const { reportError } = await import("../lib/alerts");
   const alert = (where: string, e: unknown) => {
     const err = e instanceof Error ? e : new Error(String(e));
@@ -90,6 +91,8 @@ async function main() {
         if (w > 0) console.log(`[telegram-poller] Недельных отчётов родителям: ${w}`);
         const e = await sendStudentEveningReminders();
         if (e > 0) console.log(`[telegram-poller] Вечерних напоминаний ученикам: ${e}`);
+        const t = await sendTrialReminders();
+        if (t > 0) console.log(`[telegram-poller] Напоминаний об окончании пробного: ${t}`);
       } catch (e) {
         console.error("[telegram-poller] Ошибка уведомлений репетитору:", e);
         alert("Сводки и напоминания", e);

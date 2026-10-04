@@ -6,9 +6,11 @@ import CapacitorBootstrap from "@/components/CapacitorBootstrap";
 import Analytics from "@/components/Analytics";
 
 export const metadata: Metadata = {
+  // Абсолютные адреса для og:image и canonical.
+  metadataBase: new URL("https://planimetrika.online"),
   title: "Планиметрика — платформа для подготовки к ЕГЭ",
   description:
-    "Теория, задачи и прогресс по планиметрии для ученика, родителя и репетитора",
+    "Подготовка к ЕГЭ по профильной математике: уроки для ученика, кабинет репетитора и прогресс для родителя",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
