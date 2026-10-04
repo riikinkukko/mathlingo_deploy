@@ -11,7 +11,8 @@ import {
 import { upgradeToProAction, downgradeToFreeAction } from "@/app/actions";
 import { startPaymentAction } from "@/app/actions-payments";
 import { isYooKassaConfigured } from "@/lib/yookassa";
-import { getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
+import { getStudentExamPass, getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
+import AskParentButton from "@/components/AskParentButton";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
@@ -40,7 +41,7 @@ export default async function UpgradePage({
   const minutesLeft = minutesUntilNextEnergy(user);
   const rechargeBlocked = isEnergyRechargeBlocked(user);
   const realPayments = isYooKassaConfigured();
-  const { priceRub, periodDays } = getStudentProPrice();
+  const { priceRub } = getStudentProPrice();
 
   const promoRaw = searchParams.promo ?? cookies().get(PROMO_COOKIE)?.value;
   let promoError = searchParams.promoError ?? null;
@@ -56,6 +57,11 @@ export default async function UpgradePage({
     if (p) promoSuccess = `Промокод ${p.code} применён: ${promoLabel(p)}.`;
   }
   const payPrice = activePromo ? discountedPrice(priceRub, activePromo.percent) : priceRub;
+  const pass = getStudentExamPass();
+  const passPrice = activePromo ? discountedPrice(pass.priceRub, activePromo.percent) : pass.priceRub;
+  const proUntilLabel = user.proUntil
+    ? new Date(user.proUntil).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" })
+    : null;
 
   return (
     <StudentShell active="profile" title="Тариф">
@@ -131,8 +137,7 @@ export default async function UpgradePage({
               Pro
             </p>
             <p className="mb-3 font-display text-xl font-black text-ink">
-              {payPrice} ₽ / {periodDays} дн.
-              {payPrice !== priceRub && <s className="ml-2 text-sm font-bold text-ink-soft">{priceRub} ₽</s>}
+              от {pass.available ? Math.min(pass.perMonth, payPrice) : payPrice} ₽ в месяц
               {!realPayments && <span className="ml-1 text-xs font-semibold text-ink-soft">(демо-режим оплаты)</span>}
             </p>
             <ul className="space-y-2 text-sm text-ink-soft">
@@ -143,15 +148,32 @@ export default async function UpgradePage({
                 </li>
               ))}
             </ul>
+            {isPro && proUntilLabel && (
+              <p className="mt-4 rounded-xl bg-white/70 px-3 py-2 text-[13px] font-bold text-ink">Pro действует до {proUntilLabel}</p>
+            )}
             {!isPro &&
               (realPayments ? (
                 <>
-                  <form action={startPaymentAction} className="mt-4">
+                  {pass.available && (
+                    <form action={startPaymentAction} className="mt-4">
+                      <input type="hidden" name="product" value="exam" />
+                      {activePromo && <input type="hidden" name="promo" value={activePromo.code} />}
+                      <PayButton className="btn-primary w-full !h-auto !flex-col !gap-0.5 !bg-amber !py-3 !text-xs">
+                        <span className="block">«До ЕГЭ» — {passPrice.toLocaleString("ru-RU")} ₽ разово</span>
+                        <span className="block text-[11px] font-bold normal-case tracking-normal opacity-90">
+                          Pro до {pass.untilLabel} · около {pass.perMonth} ₽ в месяц
+                        </span>
+                      </PayButton>
+                    </form>
+                  )}
+                  <form action={startPaymentAction} className="mt-2">
+                    <input type="hidden" name="product" value="month" />
                     {activePromo && <input type="hidden" name="promo" value={activePromo.code} />}
-                    <PayButton className="btn-primary w-full !bg-amber !text-xs">
-                      Оплатить через ЮKassa
+                    <PayButton className="btn-secondary w-full !text-xs">
+                      Месяц — {payPrice} ₽
                     </PayButton>
                   </form>
+                  <AskParentButton className="mt-3" />
                   <p className="mt-2 text-center text-[11px] leading-snug text-ink-soft">
                     Нажимая «Оплатить», вы принимаете условия{" "}
                     <a href="/legal/offer" target="_blank" className="font-bold text-pine hover:underline">
@@ -172,7 +194,7 @@ export default async function UpgradePage({
 
         <p className="mt-6 text-center text-xs text-ink-soft">
           {realPayments
-            ? "Оплата через ЮKassa — разовый платёж за период, без автопродления."
+            ? "Оплата через ЮKassa — разовый платёж за период, без автопродления. Если платит родитель — нажми «Попросить родителя» и отправь ему ссылку."
             : "Это MVP-демонстрация: переключение тарифа мгновенное и бесплатное, реальной оплаты нет."}
         </p>
       </div>

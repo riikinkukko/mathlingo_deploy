@@ -1,4 +1,5 @@
 import { FREE_MAX_ENERGY } from "./queries";
+import { EXAM_ACCESS_UNTIL } from "./exam-plan";
 
 /**
  * Единый источник тарифов: публичная страница /tariffs (её требует ЮKassa —
@@ -11,6 +12,26 @@ export function getStudentProPrice() {
   return {
     priceRub: Number(process.env.YOOKASSA_PRICE_RUB || 249),
     periodDays: Number(process.env.YOOKASSA_PERIOD_DAYS || 30),
+  };
+}
+
+/**
+ * «До ЕГЭ» — разовая оплата Pro до конца экзаменационного сезона. Продаём,
+ * только пока до конца сезона больше месяца (летом — ждём новый сезон).
+ */
+export function getStudentExamPass(now: Date = new Date()) {
+  const until = new Date(`${EXAM_ACCESS_UNTIL}T23:59:59+03:00`);
+  const priceRub = Number(process.env.YOOKASSA_EXAM_PRICE_RUB || 1490);
+  const daysLeft = Math.ceil((until.getTime() - now.getTime()) / 86_400_000);
+  const months = Math.max(1, Math.round(daysLeft / 30));
+  return {
+    priceRub,
+    until,
+    daysLeft,
+    available: daysLeft > 30,
+    /** во что обходится месяц (для сравнения с помесячной оплатой) */
+    perMonth: Math.round(priceRub / months),
+    untilLabel: until.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" }).replace(/\s?г\.$/, ""),
   };
 }
 

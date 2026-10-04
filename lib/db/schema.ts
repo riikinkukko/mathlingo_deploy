@@ -267,6 +267,17 @@ export const payments = pgTable("payments", {
   paidAt: timestamp("paid_at", { withTimezone: true }),
 });
 
+// «Попросить родителя»: ссылка /pay/<token>, по которой взрослый без аккаунта
+// оплачивает Pro ученику. Одна действующая ссылка на ученика, 14 дней.
+export const payRequests = pgTable("pay_requests", {
+  token: text("token").primaryKey(),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
 // ---------------- Промокоды ----------------
 // percent — скидка в % на ПЕРВУЮ оплату (продления — по полной цене);
 // days — сразу +N дней: репетитору к оплаченному тарифу или к пробному

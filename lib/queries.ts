@@ -20,6 +20,7 @@ import {
   Attempt,
   Payment,
 } from "./types";
+import { EXAM_ACCESS_UNTIL } from "./exam-plan";
 import { rewardReferralOnPayment, recordPromoPayment, REFERRAL_BONUS_DAYS, type ReferralReward } from "./promo";
 
 // ---------- Мапперы: строка Drizzle (null) -> тип приложения (undefined) ----------
@@ -1892,7 +1893,8 @@ export async function createPendingPayment(params: {
   periodDays: number;
   paymentType?: "student_pro" | "teacher_pro";
   isRecurringSetup?: boolean;
-  tier?: "standard" | "pro";
+  /** репетитор: 'standard' | 'pro'; ученик: 'exam' — тариф «До ЕГЭ» */
+  tier?: "standard" | "pro" | "exam";
   billingPeriod?: "month" | "year";
   promoCode?: string | null;
 }): Promise<string> {
@@ -2007,7 +2009,12 @@ export async function markPaymentSucceeded(
         user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()
           ? new Date(user.proUntil)
           : new Date();
-      const proUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
+      // «До ЕГЭ» — до конца сезона (если Pro уже дольше — не урезаем);
+      // помесячный — к текущему сроку добавляется оплаченный период.
+      const proUntil =
+        payment.tier === "exam"
+          ? new Date(Math.max(base.getTime(), new Date(`${EXAM_ACCESS_UNTIL}T23:59:59+03:00`).getTime()))
+          : new Date(base.getTime() + payment.periodDays * 86400 * 1000);
       await tx.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, payment.userId));
     }
     if (payment.promoCode) await recordPromoPayment(tx, payment.promoCode, payment.userId, payment.id);

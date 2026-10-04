@@ -7,6 +7,8 @@ import { createYooKassaPayment, isYooKassaConfigured } from "@/lib/yookassa";
 import { TEACHER_TIERS, isBillingPeriod, isTeacherTier, periodDays, tierPrice } from "@/lib/teacher-plan";
 import { checkPromo, discountedPrice } from "@/lib/promo";
 import type { User } from "@/lib/types";
+import { getStudentExamPass } from "@/lib/tariffs";
+import { getOrCreatePayRequest, getPayRequest } from "@/lib/pay-requests";
 
 /** Скидка по промокоду из формы: цена и код для платежа (или ошибка). */
 async function applyPromoToPrice(
@@ -27,8 +29,58 @@ async function applyPromoToPrice(
 const PRICE_RUB = Number(process.env.YOOKASSA_PRICE_RUB || 249);
 const PERIOD_DAYS = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
-// Тариф репетитора — отдельная цена/период, тоже настраиваемые без деплоя.
-// Цены тарифов репетитора — в lib/teacher-plan.ts (ступени и периоды).
+type StudentProduct = "month" | "exam";
+
+/**
+ * Платёж ученика: Pro на месяц или «До ЕГЭ» (до конца сезона). Возвращает
+ * адрес формы ЮKassa или код ошибки для страницы, с которой пришли.
+ */
+async function createStudentPayment(params: {
+  student: User;
+  product: StudentProduct;
+  formData?: FormData;
+  returnUrl: string;
+  /** платит взрослый по ссылке «Попросить родителя» */
+  byParent?: boolean;
+}): Promise<{ url: string } | { error: string; promo?: boolean }> {
+  const { student, product } = params;
+  const pass = getStudentExamPass();
+  if (product === "exam" && !pass.available) return { error: "exam_unavailable" };
+  const base = product === "exam" ? pass.priceRub : PRICE_RUB;
+  const priced = await applyPromoToPrice(params.formData, student, base);
+  if ("error" in priced) return { error: priced.error, promo: true };
+  const days = product === "exam" ? pass.daysLeft : PERIOD_DAYS;
+  try {
+    const payment = await createYooKassaPayment({
+      amountRub: priced.amountRub,
+      description:
+        product === "exam"
+          ? `Планиметрика Pro «До ЕГЭ» — до ${pass.untilLabel}${params.byParent ? ` (для ${student.name})` : ""}`
+          : `Планиметрика Pro — ${PERIOD_DAYS} дней${params.byParent ? ` (для ${student.name})` : ""}`,
+      returnUrl: params.returnUrl,
+      idempotenceKey: genId("idem"),
+      metadata: { userId: student.id, product, ...(params.byParent ? { byParent: "1" } : {}) },
+    });
+    await createPendingPayment({
+      userId: student.id,
+      yookassaPaymentId: payment.id,
+      amountRub: priced.amountRub,
+      periodDays: days,
+      paymentType: "student_pro",
+      // для ученика tier='exam' значит «До ЕГЭ»: Pro до конца сезона
+      tier: product === "exam" ? "exam" : undefined,
+      promoCode: priced.promoCode,
+    });
+    return { url: payment.confirmationUrl };
+  } catch (e) {
+    console.error("Ошибка создания платежа ЮKassa:", e);
+    return { error: "payment_failed" };
+  }
+}
+
+function parseProduct(v: FormDataEntryValue | null | undefined): StudentProduct {
+  return v === "exam" ? "exam" : "month";
+}
 
 export async function startPaymentAction(formData?: FormData) {
   const user = await getSessionUser();
@@ -36,44 +88,49 @@ export async function startPaymentAction(formData?: FormData) {
     redirect("/student");
   }
   if (!isYooKassaConfigured()) {
-    // ЮKassa не настроена (нет ключей в переменных окружения) — такого не
-    // должно случиться, если кнопка показывается только при настроенной
-    // оплате (см. /student/upgrade), но на всякий случай не роняем всё
-    // приложение, а просто возвращаем на страницу тарифа.
+    // ЮKassa не настроена — кнопка в этом случае не показывается, но на
+    // всякий случай не роняем приложение, а возвращаем на страницу тарифа.
     redirect("/student/upgrade?error=payment_not_configured");
   }
-
-  const priced = await applyPromoToPrice(formData, user!, PRICE_RUB);
-  if ("error" in priced) redirect(`/student/upgrade?promoError=${encodeURIComponent(priced.error)}`);
-  const { amountRub: studentAmount, promoCode: studentPromo } = priced as { amountRub: number; promoCode: string | null };
-
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const idempotenceKey = genId("idem");
-
-  let confirmationUrl: string;
-  try {
-    const payment = await createYooKassaPayment({
-      amountRub: studentAmount,
-      description: `Планиметрика Pro — ${PERIOD_DAYS} дней`,
-      returnUrl: `${appUrl}/student/upgrade?paid=1`,
-      idempotenceKey,
-      metadata: { userId: user!.id },
-    });
-    await createPendingPayment({
-      userId: user!.id,
-      yookassaPaymentId: payment.id,
-      amountRub: studentAmount,
-      periodDays: PERIOD_DAYS,
-      paymentType: "student_pro",
-      promoCode: studentPromo,
-    });
-    confirmationUrl = payment.confirmationUrl;
-  } catch (e) {
-    console.error("Ошибка создания платежа ЮKassa:", e);
-    redirect("/student/upgrade?error=payment_failed");
+  const res = await createStudentPayment({
+    student: user!,
+    product: parseProduct(formData?.get("product")),
+    formData,
+    returnUrl: `${appUrl}/student/upgrade?paid=1`,
+  });
+  if ("error" in res) {
+    redirect(res.promo ? `/student/upgrade?promoError=${encodeURIComponent(res.error)}` : `/student/upgrade?error=${res.error}`);
   }
+  redirect((res as { url: string }).url);
+}
 
-  redirect(confirmationUrl);
+// ---------- «Попросить родителя» ----------
+
+/** Ссылка для взрослого: оплатить ученику Pro без своего аккаунта. */
+export async function createPayRequestAction(): Promise<{ url?: string; error?: string }> {
+  const user = await getSessionUser();
+  if (!user || !isStandaloneStudent(user)) return { error: "Доступно ученикам без репетитора" };
+  const token = await getOrCreatePayRequest(user.id);
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
+  return { url: `${appUrl}/pay/${token}` };
+}
+
+/** Оплата по ссылке родителя: страница /pay/<token>, вход не нужен. */
+export async function startParentPaymentAction(formData: FormData) {
+  const token = String(formData.get("token") || "");
+  const req = await getPayRequest(token);
+  if (!req) redirect(`/pay/${encodeURIComponent(token)}`);
+  if (!isYooKassaConfigured()) redirect(`/pay/${token}?error=payment_not_configured`);
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const res = await createStudentPayment({
+    student: req!.student,
+    product: parseProduct(formData.get("product")),
+    returnUrl: `${appUrl}/pay/${token}?paid=1`,
+    byParent: true,
+  });
+  if ("error" in res) redirect(`/pay/${token}?error=${encodeURIComponent(res.error)}`);
+  redirect((res as { url: string }).url);
 }
 
 /**

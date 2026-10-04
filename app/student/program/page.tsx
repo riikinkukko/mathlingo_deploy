@@ -13,6 +13,8 @@ import { isYooKassaConfigured } from "@/lib/yookassa";
 import { pluralRu } from "@/lib/pluralize";
 import { upgradeToProAction } from "@/app/actions";
 import { startPaymentAction } from "@/app/actions-payments";
+import AskParentButton from "@/components/AskParentButton";
+import { getStudentExamPass } from "@/lib/tariffs";
 import StudentShell from "@/components/StudentShell";
 import { IconCheck, IconLock } from "@/components/icons";
 
@@ -39,6 +41,7 @@ export default async function ProgramPage({
   const isFreeStandalone = standalone && !isEffectivelyPro(user);
   const realPayments = isYooKassaConfigured();
   const { priceRub, periodDays } = getStudentProPrice();
+  const examPass = getStudentExamPass();
 
   const chapterInfo = await Promise.all(
     curriculumFiltered[0].chapters.map(async ({ chapter, skills }) => {
@@ -80,13 +83,13 @@ export default async function ProgramPage({
                 key={chapter.id}
                 className={`rounded-2xl p-4 ${chapter.order === 1 ? "bg-pine-light" : "bg-pine-light/40"}`}
               >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pine font-display text-base font-black text-white">
                       {chapter.order}
                     </span>
-                    <div>
-                      <p className="font-display text-[15px] font-black text-ink">{chapter.title}</p>
+                    <div className="min-w-0">
+                      <p className="break-words font-display text-[15px] font-black text-ink [hyphens:auto]">{chapter.title}</p>
                       <p className="text-[12.5px] text-ink-soft">
                         {skills.length} {pluralRu(skills.length, ["навык", "навыка", "навыков"])} ·{" "}
                         {fullyOpen
@@ -104,9 +107,9 @@ export default async function ProgramPage({
                   ) : (
                     <a
                       href={`/student/skill/${firstSkill.id}`}
-                      className="shrink-0 rounded-pill border-2 border-pine px-4 py-2 text-[12.5px] font-extrabold text-pine transition hover:bg-pine hover:text-white"
+                      className="shrink-0 whitespace-nowrap rounded-pill border-2 border-pine px-3.5 py-2 text-[12.5px] font-extrabold text-pine transition hover:bg-pine hover:text-white"
                     >
-                      Попробовать 1 навык
+                      Попробовать
                     </a>
                   )}
                 </div>
@@ -179,11 +182,23 @@ export default async function ProgramPage({
                 <li>• Авторские пробники и вся программа целиком</li>
               </ul>
               {realPayments ? (
-                <form action={startPaymentAction} className="mt-5">
-                  <PayButton className="btn-primary !h-12 !bg-amber !text-[15px]">
-                    Оплатить {priceRub} ₽ / {periodDays} дн. →
-                  </PayButton>
-                </form>
+                <div className="mt-5 space-y-2">
+                  {examPass.available && (
+                    <form action={startPaymentAction}>
+                      <input type="hidden" name="product" value="exam" />
+                      <PayButton className="btn-primary w-full !h-12 !bg-amber !text-[15px] sm:w-auto">
+                        «До ЕГЭ» — {examPass.priceRub.toLocaleString("ru-RU")} ₽ разово
+                      </PayButton>
+                    </form>
+                  )}
+                  <form action={startPaymentAction}>
+                    <input type="hidden" name="product" value="month" />
+                    <button type="submit" className="text-[14px] font-bold text-white/80 underline underline-offset-4 hover:text-white">
+                      или {priceRub} ₽ за {periodDays} дней
+                    </button>
+                  </form>
+                  <AskParentButton tone="dark" className="max-w-sm pt-2" />
+                </div>
               ) : (
                 <form action={upgradeToProAction} className="mt-5">
                   <button className="btn-primary !h-12 !bg-amber !text-[15px]" type="submit">

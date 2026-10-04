@@ -1,7 +1,7 @@
 import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
 import { IconCheck, IconCrown } from "@/components/icons";
-import { getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
+import { getStudentExamPass, getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
 import TeacherPlanPicker from "@/components/TeacherPlanPicker";
 import { TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
@@ -31,6 +31,7 @@ function FeatureList({ items, accent }: { items: string[]; accent?: boolean }) {
 
 export default function TariffsPage() {
   const student = getStudentProPrice();
+  const pass = getStudentExamPass();
 
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
@@ -59,12 +60,18 @@ export default function TariffsPage() {
               <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-amber">
                 <IconCrown className="h-4 w-4" /> Pro
               </p>
-              <p className="mb-3 font-display text-xl font-black text-ink">
+              <p className="font-display text-xl font-black text-ink">
                 {student.priceRub} ₽ / {student.periodDays} дн.
               </p>
+              {pass.available && (
+                <p className="mb-3 mt-1 text-sm font-bold text-ink">
+                  или «До ЕГЭ» — {pass.priceRub.toLocaleString("ru-RU")} ₽ разово, Pro до {pass.untilLabel}
+                </p>
+              )}
               <FeatureList items={STUDENT_PRO_FEATURES} accent />
               <p className="mt-4 rounded-xl bg-white/70 p-3 text-xs text-ink-soft">
-                Разовая оплата за период. Автоматического продления нет — по
+                Разовая оплата за период (30 дней или до окончания экзаменационного сезона). Оплатить может и родитель — по
+                ссылке из приложения, без регистрации. Автоматического продления нет — по
                 окончании периода доступ к Pro прекращается, пока вы не оплатите
                 снова.
               </p>
