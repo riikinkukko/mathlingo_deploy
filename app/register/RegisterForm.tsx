@@ -12,7 +12,7 @@ function SubmitButton() {
   );
 }
 
-export default function RegisterForm() {
+export default function RegisterForm({ promo }: { promo?: string }) {
   const [state, formAction] = useFormState<{ error?: string }, FormData>(registerAction, {});
 
   return (
@@ -29,6 +29,12 @@ export default function RegisterForm() {
         <label className="label" htmlFor="password">Пароль</label>
         <input className="input" id="password" name="password" type="password" required placeholder="минимум 6 символов" />
       </div>
+      <details className="group" open={!!promo}>
+        <summary className="cursor-pointer list-none text-[13px] font-bold text-ink-soft hover:text-pine [&::-webkit-details-marker]:hidden">
+          Есть промокод?
+        </summary>
+        <input className="input mt-2 uppercase" name="promo" defaultValue={promo} autoComplete="off" aria-label="Промокод" placeholder="Промокод" />
+      </details>
       <label className="flex items-start gap-2.5 text-[13px] leading-snug text-ink-soft">
         <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 accent-pine" />
         <span>

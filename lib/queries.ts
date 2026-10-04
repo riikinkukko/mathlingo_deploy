@@ -20,6 +20,7 @@ import {
   Attempt,
   Payment,
 } from "./types";
+import { rewardReferralOnPayment, recordPromoPayment, REFERRAL_BONUS_DAYS, type ReferralReward } from "./promo";
 
 // ---------- Мапперы: строка Drizzle (null) -> тип приложения (undefined) ----------
 // Драйзл возвращает null для необязательных колонок, а наши типы исторически
@@ -1893,6 +1894,7 @@ export async function createPendingPayment(params: {
   isRecurringSetup?: boolean;
   tier?: "standard" | "pro";
   billingPeriod?: "month" | "year";
+  promoCode?: string | null;
 }): Promise<string> {
   const id = genId("pay");
   await db.insert(schema.payments).values({
@@ -1906,6 +1908,7 @@ export async function createPendingPayment(params: {
     isRecurringSetup: params.isRecurringSetup ?? false,
     tier: params.tier ?? null,
     billingPeriod: params.billingPeriod ?? null,
+    promoCode: params.promoCode ?? null,
   });
   return id;
 }
@@ -1945,6 +1948,7 @@ export async function markPaymentSucceeded(
   if (!payment) return false;
   if (payment.status === "succeeded") return true; // уже обработан — не продлеваем повторно
 
+  let referral = null as ReferralReward | null;
   await db.transaction(async (tx) => {
     // Атомарно «забираем» платёж: ЮKassa может прислать одно уведомление
     // несколько раз, в том числе одновременно. Проверка статуса выше и
@@ -1996,6 +2000,8 @@ export async function markPaymentSucceeded(
             : {}),
         })
         .where(eq(schema.users.id, payment.userId));
+      // «Пригласи коллегу»: первая оплата приглашённого — обоим +30 дней.
+      referral = await rewardReferralOnPayment(tx, payment.userId);
     } else {
       const base =
         user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()
@@ -2004,7 +2010,18 @@ export async function markPaymentSucceeded(
       const proUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
       await tx.update(schema.users).set({ plan: "pro", proUntil }).where(eq(schema.users.id, payment.userId));
     }
+    if (payment.promoCode) await recordPromoPayment(tx, payment.promoCode, payment.userId, payment.id);
   });
+  const r = referral as ReferralReward | null;
+  if (r) {
+    await pushNotification(db, {
+      userId: r.inviterId,
+      type: "plan_reminder",
+      title: `+${REFERRAL_BONUS_DAYS} дней за приглашение`,
+      body: `Коллега по вашей ссылке (${r.inviteeName}) оплатил(а) тариф — вам начислено ${REFERRAL_BONUS_DAYS} дней.`,
+      link: "/teacher/upgrade",
+    }).catch((e) => console.error("Уведомление о бонусе за приглашение не ушло:", e));
+  }
   return true;
 }
 

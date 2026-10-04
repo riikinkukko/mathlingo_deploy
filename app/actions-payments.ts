@@ -5,6 +5,22 @@ import { getSessionUser } from "@/lib/auth";
 import { isStandaloneStudent, createPendingPayment, genId } from "@/lib/queries";
 import { createYooKassaPayment, isYooKassaConfigured } from "@/lib/yookassa";
 import { TEACHER_TIERS, isBillingPeriod, isTeacherTier, periodDays, tierPrice } from "@/lib/teacher-plan";
+import { checkPromo, discountedPrice } from "@/lib/promo";
+import type { User } from "@/lib/types";
+
+/** Скидка по промокоду из формы: цена и код для платежа (или ошибка). */
+async function applyPromoToPrice(
+  formData: FormData | undefined,
+  user: User,
+  price: number
+): Promise<{ amountRub: number; promoCode: string | null } | { error: string }> {
+  const raw = formData?.get("promo");
+  if (!raw || !String(raw).trim()) return { amountRub: price, promoCode: null };
+  const check = await checkPromo(raw, user);
+  if (!check.ok) return { error: check.error };
+  if (check.promo.kind !== "percent") return { error: "Этот промокод даёт дни, а не скидку — активируйте его отдельно" };
+  return { amountRub: discountedPrice(price, check.promo.value), promoCode: check.promo.code };
+}
 
 // Цена и период по умолчанию — можно поменять без деплоя кода через
 // переменные окружения, если решите пересмотреть тариф.
@@ -14,7 +30,7 @@ const PERIOD_DAYS = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 // Тариф репетитора — отдельная цена/период, тоже настраиваемые без деплоя.
 // Цены тарифов репетитора — в lib/teacher-plan.ts (ступени и периоды).
 
-export async function startPaymentAction() {
+export async function startPaymentAction(formData?: FormData) {
   const user = await getSessionUser();
   if (!user || !isStandaloneStudent(user)) {
     redirect("/student");
@@ -27,13 +43,17 @@ export async function startPaymentAction() {
     redirect("/student/upgrade?error=payment_not_configured");
   }
 
+  const priced = await applyPromoToPrice(formData, user!, PRICE_RUB);
+  if ("error" in priced) redirect(`/student/upgrade?promoError=${encodeURIComponent(priced.error)}`);
+  const { amountRub: studentAmount, promoCode: studentPromo } = priced as { amountRub: number; promoCode: string | null };
+
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const idempotenceKey = genId("idem");
 
   let confirmationUrl: string;
   try {
     const payment = await createYooKassaPayment({
-      amountRub: PRICE_RUB,
+      amountRub: studentAmount,
       description: `Планиметрика Pro — ${PERIOD_DAYS} дней`,
       returnUrl: `${appUrl}/student/upgrade?paid=1`,
       idempotenceKey,
@@ -42,9 +62,10 @@ export async function startPaymentAction() {
     await createPendingPayment({
       userId: user!.id,
       yookassaPaymentId: payment.id,
-      amountRub: PRICE_RUB,
+      amountRub: studentAmount,
       periodDays: PERIOD_DAYS,
       paymentType: "student_pro",
+      promoCode: studentPromo,
     });
     confirmationUrl = payment.confirmationUrl;
   } catch (e) {
@@ -80,7 +101,9 @@ export async function startTeacherPaymentAction(_prevState: unknown, formData: F
   const tier = formData.get("tier");
   const period = formData.get("period");
   if (!isTeacherTier(tier) || !isBillingPeriod(period)) return { error: "Выберите тариф и период" };
-  const amountRub = tierPrice(tier, period);
+  const priced = await applyPromoToPrice(formData, user!, tierPrice(tier, period));
+  if ("error" in priced) return { error: priced.error };
+  const { amountRub, promoCode } = priced;
   const days = periodDays(period);
   const tierName = TEACHER_TIERS[tier].name;
   if (!isYooKassaConfigured()) {
@@ -109,6 +132,7 @@ export async function startTeacherPaymentAction(_prevState: unknown, formData: F
       isRecurringSetup: true,
       tier,
       billingPeriod: period,
+      promoCode,
     });
     confirmationUrl = payment.confirmationUrl;
   } catch (e) {

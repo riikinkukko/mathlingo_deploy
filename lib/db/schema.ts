@@ -119,6 +119,12 @@ export const users = pgTable("users", {
   // Какое напоминание об окончании пробного уже ушло: "3d" | "last" | "ended"
   // (lib/trial-reminders.ts). Ставится атомарно до отправки — без повторов.
   teacherTrialReminded: text("teacher_trial_reminded"),
+  // «Пригласи коллегу»: личный код ссылки /register/teacher?ref=… (создаётся
+  // при первом показе), кто пригласил этого репетитора и когда обоим выдан
+  // бонус (после первой оплаты приглашённого) — см. lib/promo.ts.
+  referralCode: text("referral_code").unique(),
+  referredBy: text("referred_by"),
+  referralRewardedAt: timestamp("referral_rewarded_at", { withTimezone: true }),
   // Владелец платформы (вы) — полностью вне обычной системы тарифов, а
   // не просто "вечный Pro": лимит на учеников для него не проверяется
   // вообще, ни при каких условиях. Отдельно от isAdmin (тот — про доступ
@@ -255,9 +261,46 @@ export const payments = pgTable("payments", {
   // автосписаний (см. users.yookassaPaymentMethodId). false для разовых
   // ученических Pro-платежей и для платежей без явного согласия на автоплатёж.
   isRecurringSetup: boolean("is_recurring_setup").notNull().default(false),
+  // Промокод со скидкой, применённый к этому платежу (учёт — при успехе).
+  promoCode: text("promo_code"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   paidAt: timestamp("paid_at", { withTimezone: true }),
 });
+
+// ---------------- Промокоды ----------------
+// percent — скидка в % на ПЕРВУЮ оплату (продления — по полной цене);
+// days — сразу +N дней: репетитору к оплаченному тарифу или к пробному
+// «Профи», ученику — к Pro. Каждый пользователь применяет код один раз.
+export const promoKindEnum = pgEnum("promo_kind", ["percent", "days"]);
+
+export const promoCodes = pgTable("promo_codes", {
+  code: text("code").primaryKey(), // в верхнем регистре
+  kind: promoKindEnum("kind").notNull(),
+  value: integer("value").notNull(),
+  audience: text("audience").notNull(), // teacher | student
+  maxUses: integer("max_uses"),
+  usedCount: integer("used_count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  active: boolean("active").notNull().default(true),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const promoRedemptions = pgTable(
+  "promo_redemptions",
+  {
+    id: text("id").primaryKey(),
+    code: text("code")
+      .notNull()
+      .references(() => promoCodes.code, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    paymentId: text("payment_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ oncePerUser: uniqueIndex("promo_redemptions_code_user_uq").on(t.code, t.userId) })
+);
 
 export const parentLinks = pgTable(
   "parent_links",

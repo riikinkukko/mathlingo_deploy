@@ -8,6 +8,13 @@ import TeacherSubscriptionCard from "./TeacherSubscriptionCard";
 import TeacherPlanPicker from "@/components/TeacherPlanPicker";
 import { TEACHER_FREE_LIMIT, TEACHER_TIERS, teacherPlanState } from "@/lib/teacher-plan";
 import { pluralRu } from "@/lib/pluralize";
+import { cookies } from "next/headers";
+import PromoBox from "@/components/PromoBox";
+import ReferralCard from "@/components/ReferralCard";
+import { checkPromo, ensureReferralCode, getReferralStats, promoLabel, PROMO_COOKIE, REFERRAL_BONUS_DAYS } from "@/lib/promo";
+import { db } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -20,7 +27,7 @@ import TrackGoal from "@/components/TrackGoal";
 export default async function TeacherUpgradePage({
   searchParams,
 }: {
-  searchParams: { paid?: string; error?: string };
+  searchParams: { paid?: string; error?: string; promo?: string; promoError?: string; promoOk?: string };
 }) {
   const user = (await getSessionUser())!;
   if (user.role !== "TEACHER") redirect("/login");
@@ -32,6 +39,25 @@ export default async function TeacherUpgradePage({
   const plan = teacherPlanState(user);
   // Оплатил до появления ступеней (тариф не указан) — продлится как «Профи», дешевле.
   const legacyPayer = isPro && !user.teacherTier && !!user.yookassaPaymentMethodId;
+
+  // Код-скидка: из ссылки (?promo=) или запомненный в куке. Ошибку показываем,
+  // только если код пришёл явно — устаревшая кука молча игнорируется.
+  const promoRaw = searchParams.promo ?? cookies().get(PROMO_COOKIE)?.value;
+  let promoError = searchParams.promoError ?? null;
+  let activePromo: { code: string; percent: number; label: string } | null = null;
+  if (promoRaw && !isOwner) {
+    const check = await checkPromo(promoRaw, user);
+    if (check.ok && check.promo.kind === "percent") activePromo = { code: check.promo.code, percent: check.promo.value, label: check.label };
+    else if (!check.ok && searchParams.promo) promoError = check.error;
+  }
+  let promoSuccess: string | null = null;
+  if (searchParams.promoOk) {
+    const [p] = await db.select().from(schema.promoCodes).where(eq(schema.promoCodes.code, searchParams.promoOk.toUpperCase())).limit(1);
+    if (p) promoSuccess = `Промокод ${p.code} применён: ${promoLabel(p)}.`;
+  }
+  const refCode = isOwner ? null : await ensureReferralCode(user.id);
+  const refStats = refCode ? await getReferralStats(user.id) : null;
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://planimetrika.online").replace(/\/$/, "");
 
   return (
     <TeacherShell active="upgrade" title="Тариф">
@@ -113,13 +139,28 @@ export default async function TeacherUpgradePage({
               {!realPayments && (
                 <p className="mb-3 text-center text-xs font-semibold text-ink-soft">Демо-режим: оплата не подключена.</p>
               )}
-              <TeacherPlanPicker mode="buy" current={plan.paidTier ?? "free"} realPayments={realPayments} />
+              <PromoBox active={activePromo} error={promoError} success={promoSuccess} />
+              <TeacherPlanPicker
+                mode="buy"
+                current={plan.paidTier ?? "free"}
+                realPayments={realPayments}
+                promo={activePromo ? { code: activePromo.code, percent: activePromo.percent } : null}
+              />
 
               <p className="mt-6 text-center text-xs text-ink-soft">
                 Оплата через ЮKassa с автопродлением до отмены. Отменить можно самостоятельно в любой момент — карточка
                 со способом оплаты появится здесь после первой оплаты. При смене тарифа неиспользованные дни
                 пересчитываются в дни нового тарифа — ничего не сгорает.
               </p>
+
+              {refCode && refStats && (
+                <ReferralCard
+                  url={`${appUrl}/register/teacher?ref=${refCode}`}
+                  bonusDays={REFERRAL_BONUS_DAYS}
+                  joined={refStats.joined}
+                  rewarded={refStats.rewarded}
+                />
+              )}
             </>
           )}
         </div>

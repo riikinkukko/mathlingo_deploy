@@ -1,10 +1,15 @@
 import RegisterTeacherForm from "./RegisterTeacherForm";
 import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
+import { findTeacherByReferral, normalizePromoCode, REFERRAL_BONUS_DAYS } from "@/lib/promo";
 
 export const metadata = { title: "Регистрация репетитора — Планиметрика" };
 
-export default function RegisterTeacherPage() {
+export const dynamic = "force-dynamic";
+
+export default async function RegisterTeacherPage({ searchParams }: { searchParams: { ref?: string; promo?: string } }) {
+  const inviter = await findTeacherByReferral(searchParams.ref);
+  const promo = normalizePromoCode(searchParams.promo) ?? undefined;
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
       <div className="flex flex-1 items-center justify-center px-4">
@@ -19,8 +24,13 @@ export default function RegisterTeacherPage() {
               приложении. 14 дней тарифа «Профи» бесплатно, дальше — до 3 учеников бесплатно или тариф от 690 ₽/мес.
             </p>
           </div>
+          {inviter && (
+            <p className="mb-3 rounded-2xl bg-pine-light px-4 py-3 text-sm font-semibold text-pine-darker">
+              Вас пригласил(а) {inviter.name}. После первой оплаты тарифа вам обоим — +{REFERRAL_BONUS_DAYS} дней.
+            </p>
+          )}
           <div className="card p-6">
-            <RegisterTeacherForm />
+            <RegisterTeacherForm refCode={inviter ? searchParams.ref!.trim().toUpperCase() : undefined} promo={promo} />
           </div>
           <p className="mt-4 text-center text-sm text-ink-soft">
             Уже есть аккаунт?{" "}

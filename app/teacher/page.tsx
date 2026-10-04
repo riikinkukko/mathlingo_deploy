@@ -159,6 +159,12 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
           </a>
         )}
 
+        {!isOwner && students.length > 0 && (
+          <a href="/teacher/upgrade#invite" className="mb-4 -mt-2 block px-1 text-[13px] font-bold text-pine-dark hover:underline">
+            Пригласите коллегу — +30 дней тарифа вам обоим
+          </a>
+        )}
+
         <div id="students" className="mb-4 flex scroll-mt-24 flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-black text-ink">Мои ученики</h1>

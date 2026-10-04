@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
@@ -62,6 +62,7 @@ import { AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
+import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from "@/lib/promo";
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
@@ -649,6 +650,17 @@ async function checkRegistrationEmail(email: string): Promise<string | null> {
   return null;
 }
 
+/** Промокод из ссылки или формы регистрации: «+N дней» — сразу, скидка —
+ * ждёт первой оплаты в куке. Неподходящий код регистрацию не срывает. */
+async function applyPromoAtRegistration(userId: string, promoRaw: FormDataEntryValue | null) {
+  if (!promoRaw || !String(promoRaw).trim()) return;
+  const created = await getUserById(userId);
+  if (!created) return;
+  const check = await checkPromo(promoRaw, created);
+  if (check.ok && check.promo.kind === "days") await redeemDaysPromo(check.promo.code, created);
+  else if (check.ok) cookies().set(PROMO_COOKIE, check.promo.code, { maxAge: 30 * 86400, httpOnly: true, sameSite: "lax", path: "/" });
+}
+
 export async function registerAction(_prevState: unknown, formData: FormData) {
   const name = String(formData.get("name") || "").trim().slice(0, 80);
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
@@ -706,6 +718,8 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     console.error("Не удалось отправить письмо верификации:", e)
   );
 
+  await applyPromoAtRegistration(userId, formData.get("promo"));
+
   const token = await createSessionToken(userId, "STUDENT");
   await setSessionCookie(token);
   redirect("/onboarding?ym=register");
@@ -741,12 +755,15 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
   await recordRegistrationAttempt(clientIp, "TEACHER");
 
   const userId = genId("u");
+  // «Пригласи коллегу»: кто прислал ссылку (бонус обоим — после первой оплаты).
+  const inviter = await findTeacherByReferral(formData.get("ref"));
   await db.insert(schema.users).values({
     id: userId,
     name,
     email,
     passwordHash: await hashPassword(password),
     role: "TEACHER" as Role,
+    referredBy: inviter?.id ?? null,
     consentGivenAt: new Date(),
     // 14 дней «Профи» без карты: завести всех учеников и попробовать всё.
     teacherTrialUntil: new Date(Date.now() + TEACHER_TRIAL_DAYS * 86_400_000),
@@ -761,6 +778,8 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
   await sendVerificationEmail(email, verificationToken).catch((e) =>
     console.error("Не удалось отправить письмо верификации:", e)
   );
+
+  await applyPromoAtRegistration(userId, formData.get("promo"));
 
   const token = await createSessionToken(userId, "TEACHER");
   await setSessionCookie(token);

@@ -17,6 +17,12 @@ import Mascot from "@/components/Mascot";
 import { IconCheck, IconCrown } from "@/components/icons";
 import TrackGoal from "@/components/TrackGoal";
 import PayButton from "@/components/PayButton";
+import PromoBox from "@/components/PromoBox";
+import { cookies } from "next/headers";
+import { checkPromo, discountedPrice, promoLabel, PROMO_COOKIE } from "@/lib/promo";
+import { db } from "@/lib/db/client";
+import * as schema from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 const PRO_FEATURES = STUDENT_PRO_FEATURES;
 const FREE_FEATURES = STUDENT_FREE_FEATURES;
@@ -24,7 +30,7 @@ const FREE_FEATURES = STUDENT_FREE_FEATURES;
 export default async function UpgradePage({
   searchParams,
 }: {
-  searchParams: { paid?: string; error?: string };
+  searchParams: { paid?: string; error?: string; promo?: string; promoError?: string; promoOk?: string };
 }) {
   const user = (await getSessionUser())!;
   if (!isStandaloneStudent(user)) redirect("/student");
@@ -35,6 +41,21 @@ export default async function UpgradePage({
   const rechargeBlocked = isEnergyRechargeBlocked(user);
   const realPayments = isYooKassaConfigured();
   const { priceRub, periodDays } = getStudentProPrice();
+
+  const promoRaw = searchParams.promo ?? cookies().get(PROMO_COOKIE)?.value;
+  let promoError = searchParams.promoError ?? null;
+  let activePromo: { code: string; percent: number; label: string } | null = null;
+  if (promoRaw && !isPro) {
+    const check = await checkPromo(promoRaw, user);
+    if (check.ok && check.promo.kind === "percent") activePromo = { code: check.promo.code, percent: check.promo.value, label: check.label };
+    else if (!check.ok && searchParams.promo) promoError = check.error;
+  }
+  let promoSuccess: string | null = null;
+  if (searchParams.promoOk) {
+    const [p] = await db.select().from(schema.promoCodes).where(eq(schema.promoCodes.code, searchParams.promoOk.toUpperCase())).limit(1);
+    if (p) promoSuccess = `Промокод ${p.code} применён: ${promoLabel(p)}.`;
+  }
+  const payPrice = activePromo ? discountedPrice(priceRub, activePromo.percent) : priceRub;
 
   return (
     <StudentShell active="profile" title="Тариф">
@@ -58,6 +79,8 @@ export default async function UpgradePage({
             если не поможет, напишите в поддержку.
           </div>
         )}
+
+        {(!isPro || promoSuccess) && realPayments && <PromoBox active={activePromo} error={promoError} success={promoSuccess} />}
 
         {!isPro && (
           <div className="card mb-6 p-5 text-center">
@@ -108,7 +131,8 @@ export default async function UpgradePage({
               Pro
             </p>
             <p className="mb-3 font-display text-xl font-black text-ink">
-              {priceRub} ₽ / {periodDays} дн.
+              {payPrice} ₽ / {periodDays} дн.
+              {payPrice !== priceRub && <s className="ml-2 text-sm font-bold text-ink-soft">{priceRub} ₽</s>}
               {!realPayments && <span className="ml-1 text-xs font-semibold text-ink-soft">(демо-режим оплаты)</span>}
             </p>
             <ul className="space-y-2 text-sm text-ink-soft">
@@ -123,6 +147,7 @@ export default async function UpgradePage({
               (realPayments ? (
                 <>
                   <form action={startPaymentAction} className="mt-4">
+                    {activePromo && <input type="hidden" name="promo" value={activePromo.code} />}
                     <PayButton className="btn-primary w-full !bg-amber !text-xs">
                       Оплатить через ЮKassa
                     </PayButton>

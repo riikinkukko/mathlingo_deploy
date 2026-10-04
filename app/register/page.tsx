@@ -1,8 +1,10 @@
 import RegisterForm from "./RegisterForm";
 import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
+import { normalizePromoCode } from "@/lib/promo";
 
-export default function RegisterPage() {
+export default function RegisterPage({ searchParams }: { searchParams: { promo?: string } }) {
+  const promo = normalizePromoCode(searchParams.promo) ?? undefined;
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
       <div className="flex flex-1 items-center justify-center px-4">
@@ -18,7 +20,7 @@ export default function RegisterPage() {
             </p>
           </div>
           <div className="card p-6">
-            <RegisterForm />
+            <RegisterForm promo={promo} />
           </div>
           <p className="mt-4 text-center text-sm text-ink-soft">
             Уже есть аккаунт?{" "}

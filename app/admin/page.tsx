@@ -22,6 +22,9 @@ export default async function AdminPage() {
             <a href="/admin/payments" className="btn-secondary !text-xs">
               Все платежи
             </a>
+            <a href="/admin/promo" className="btn-secondary !text-xs">
+              Промокоды
+            </a>
           </div>
         </div>
       </header>

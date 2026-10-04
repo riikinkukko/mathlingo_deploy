@@ -24,16 +24,29 @@ function PayButton({ label }: { label: string }) {
   );
 }
 
-function BuyForm({ tier, period }: { tier: TeacherTier; period: BillingPeriod }) {
+export interface PickerPromo {
+  code: string;
+  percent: number;
+}
+
+/** Цена первой оплаты со скидкой (как на сервере: целые рубли, не меньше 1). */
+function firstPrice(price: number, promo?: PickerPromo | null) {
+  return promo ? Math.max(1, Math.round((price * (100 - promo.percent)) / 100)) : price;
+}
+
+function BuyForm({ tier, period, promo }: { tier: TeacherTier; period: BillingPeriod; promo?: PickerPromo | null }) {
   const [state, action] = useFormState<{ error?: string }, FormData>(startTeacherPaymentAction, {});
   const price = TEACHER_TIERS[tier][period];
+  const first = firstPrice(price, promo);
   return (
     <form action={action} className="mt-4 space-y-3">
       <input type="hidden" name="tier" value={tier} />
       <input type="hidden" name="period" value={period} />
+      {promo && <input type="hidden" name="promo" value={promo.code} />}
       <label className="flex items-start gap-2.5 text-[11px] leading-snug text-ink-soft">
         <input type="checkbox" name="recurringConsent" required className="mt-0.5 h-4 w-4 shrink-0 accent-pine" />
         <span>
+          {first !== price && <>Первое списание — {rub(first)} (скидка по промокоду). </>}
           Я соглашаюсь на автоматическое списание {rub(price)} {period === "year" ? "раз в год (каждые 365 дней)" : "каждые 30 дней"} до
           отмены подписки. Отменить можно в любой момент в разделе «Тариф». Подробнее — в{" "}
           <a href="/legal/offer" target="_blank" className="font-bold text-pine hover:underline">
@@ -43,7 +56,7 @@ function BuyForm({ tier, period }: { tier: TeacherTier; period: BillingPeriod })
         </span>
       </label>
       {state?.error && <p className="rounded-lg bg-coral-light px-3 py-2 text-xs text-coral">{state.error}</p>}
-      <PayButton label={`Оплатить ${rub(price)}`} />
+      <PayButton label={`Оплатить ${rub(first)}`} />
     </form>
   );
 }
@@ -56,8 +69,11 @@ export default function TeacherPlanPicker({
   mode,
   current = "free",
   realPayments = true,
+  promo = null,
 }: {
   mode: "public" | "buy";
+  /** код-скидка на первую оплату (только в кабинете) */
+  promo?: PickerPromo | null;
   /** что действует сейчас (для подсветки) */
   current?: "free" | TeacherTier;
   realPayments?: boolean;
@@ -65,19 +81,23 @@ export default function TeacherPlanPicker({
   const [period, setPeriod] = useState<BillingPeriod>("month");
   const [chosen, setChosen] = useState<TeacherTier | null>(null);
 
-  const cards: { key: "free" | TeacherTier; title: string; limit: string; price: string; sub: string; accent?: boolean }[] = [
+  const cards: { key: "free" | TeacherTier; title: string; limit: string; price: string; was?: string; sub: string; accent?: boolean }[] = [
     { key: "free", title: "Бесплатно", limit: `до ${TEACHER_FREE_LIMIT} учеников`, price: "0 ₽", sub: "навсегда" },
     ...(["standard", "pro"] as TeacherTier[]).map((t) => {
       const cfg = TEACHER_TIERS[t];
+      const discounted = mode === "buy" && promo ? firstPrice(cfg[period], promo) : cfg[period];
       return {
         key: t,
         title: cfg.name,
         limit: cfg.blurb,
-        price: rub(cfg[period]),
+        price: rub(discounted),
+        was: discounted !== cfg[period] ? rub(cfg[period]) : undefined,
         sub:
-          period === "year"
-            ? `в год · ${rub(Math.round(cfg.year / 12))} в месяц`
-            : "в месяц",
+          discounted !== cfg[period]
+            ? `первая оплата, дальше ${rub(cfg[period])} ${period === "year" ? "в год" : "в месяц"}`
+            : period === "year"
+              ? `в год · ${rub(Math.round(cfg.year / 12))} в месяц`
+              : "в месяц",
         accent: t === "standard",
       };
     }),
@@ -125,7 +145,10 @@ export default function TeacherPlanPicker({
                 </span>
               )}
               <p className="text-[12px] font-black uppercase tracking-wide text-ink-soft">{c.title}</p>
-              <p className="mt-1 font-display text-[26px] font-black leading-none text-ink">{c.price}</p>
+              <p className="mt-1 font-display text-[26px] font-black leading-none text-ink">
+                {c.price}
+                {c.was && <s className="ml-2 text-[15px] font-bold text-ink-soft">{c.was}</s>}
+              </p>
               <p className="mt-1 text-[12px] text-ink-soft">{c.sub}</p>
               <p className="mt-3 text-[15px] font-extrabold text-ink">{c.limit}</p>
               <p className="mt-1 text-[12px] leading-snug text-ink-soft">{COMMON}</p>
@@ -160,9 +183,9 @@ export default function TeacherPlanPicker({
       {mode === "buy" && chosen && (
         <div className="mx-auto mt-4 max-w-md rounded-[20px] border border-line-soft bg-white p-4">
           <p className="font-display text-[16px] font-black text-ink">
-            «{TEACHER_TIERS[chosen].name}», {period === "year" ? "год" : "месяц"} — {rub(TEACHER_TIERS[chosen][period])}
+            «{TEACHER_TIERS[chosen].name}», {period === "year" ? "год" : "месяц"} — {rub(firstPrice(TEACHER_TIERS[chosen][period], promo))}
           </p>
-          <BuyForm key={`${chosen}-${period}`} tier={chosen} period={period} />
+          <BuyForm key={`${chosen}-${period}`} tier={chosen} period={period} promo={promo} />
         </div>
       )}
     </div>
