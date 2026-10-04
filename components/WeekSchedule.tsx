@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { setLessonStatusAction } from "@/app/actions-schedule";
 import GroupLessonActions from "./GroupLessonActions";
 import LessonDeleteControl from "./LessonDeleteControl";
+import AddLessonForm from "./AddLessonForm";
 import type { LessonMember } from "@/lib/lesson-collapse";
 import { pluralRu } from "@/lib/pluralize";
 
@@ -17,7 +18,7 @@ export interface WeekItem {
   title: string;
   shortTitle: string;
   topic: string | null;
-  status: "planned" | "done" | "cancelled";
+  status: "planned" | "done" | "cancelled" | "missed";
   seriesId: string | null;
   studentId: string;
   groupId: string | null;
@@ -49,6 +50,8 @@ export default function WeekSchedule({
   todayHref,
   isCurrentWeek,
   nowMin,
+  students = [],
+  groups = [],
 }: {
   days: WeekDay[];
   hourFrom: number;
@@ -60,13 +63,32 @@ export default function WeekSchedule({
   isCurrentWeek: boolean;
   /** минуты от полуночи по Москве — для красной линии «сейчас» */
   nowMin: number;
+  /** для создания занятия нажатием на пустое место */
+  students?: { id: string; name: string }[];
+  groups?: { id: string; name: string; count: number }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<{ item: WeekItem; day: WeekDay } | null>(null);
+  // Новое занятие: нажатие на пустое место дня → время с шагом 30 минут.
+  const [draft, setDraft] = useState<{ day: WeekDay; startsAt: string; label: string } | null>(null);
+  function onEmptyTap(e: React.MouseEvent<HTMLDivElement>, d: WeekDay) {
+    if (e.target !== e.currentTarget || students.length === 0) return;
+    const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+    const min = Math.min(23 * 60 + 30, Math.max(0, Math.floor((hourFrom * 60 + (y / HOUR_PX) * 60) / 30) * 30));
+    const hh = String(Math.floor(min / 60)).padStart(2, "0");
+    const mm = String(min % 60).padStart(2, "0");
+    setDraft({ day: d, startsAt: `${d.key}T${hh}:${mm}`, label: `${d.fullLabel}, ${hh}:${mm}` });
+  }
   const touch = useRef<{ x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hours = Array.from({ length: hourTo - hourFrom }, (_, i) => hourFrom + i);
   const total = days.reduce((n, d) => n + d.items.length, 0);
+
+  // Данные недели обновились (перенос, отметка, удаление) — карточка занятия
+  // показывала бы устаревшее время, закрываем её.
+  useEffect(() => {
+    setOpen(null);
+  }, [days]);
 
   // Закрыть карточку занятия по Esc.
   useEffect(() => {
@@ -161,7 +183,12 @@ export default function WeekSchedule({
           </div>
 
           {days.map((d) => (
-            <div key={d.key} className={`relative min-w-0 flex-1 border-l border-line-soft/70 ${d.isToday ? "bg-pine-light/20" : ""}`}>
+            <div
+              key={d.key}
+              onClick={(e) => onEmptyTap(e, d)}
+              title={students.length ? "Нажмите на свободное время, чтобы добавить занятие" : undefined}
+              className={`relative min-w-0 flex-1 cursor-copy border-l border-line-soft/70 ${d.isToday ? "bg-pine-light/20" : ""}`}
+            >
               {d.isToday && nowMin >= hourFrom * 60 && nowMin <= hourTo * 60 && (
                 <div
                   aria-hidden
@@ -175,7 +202,7 @@ export default function WeekSchedule({
                 const needsMark = it.status === "planned" && new Date(it.startsAt).getTime() <= now;
                 const group = !!it.members;
                 const tone =
-                  it.status === "done"
+                  it.status === "done" || it.status === "missed"
                     ? "bg-line-soft text-ink-soft border-line"
                     : needsMark
                       ? "bg-amber-light text-ink border-amber"
@@ -223,11 +250,30 @@ export default function WeekSchedule({
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-violet" /> группа</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-amber" /> отметить</span>
         <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-sm bg-line" /> проведено</span>
-        <span className="ml-auto lg:hidden">смахните, чтобы листать</span>
+        <span className="w-full text-ink-soft/80 sm:ml-auto sm:w-auto">
+          Нажмите на свободное время — новое занятие<span className="lg:hidden"> · смахните — другая неделя</span>
+        </span>
       </div>
 
       {open && (
         <LessonSheet item={open.item} day={open.day} onClose={() => setOpen(null)} />
+      )}
+      {draft && (
+        <div className="fixed inset-0 z-[55] flex items-end justify-center lg:items-center" role="dialog" aria-label="Новое занятие">
+          <button type="button" aria-label="Закрыть" onClick={() => setDraft(null)} className="absolute inset-0 bg-ink/40" />
+          <div className="relative max-h-[92vh] w-full max-w-md overflow-y-auto rounded-t-[28px] bg-paper p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:rounded-[28px]">
+            <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-line lg:hidden" />
+            <p className="px-1 font-display text-[19px] font-black text-ink">Новое занятие</p>
+            <p className="mb-2 px-1 text-[13px] text-ink-soft">{draft.label}</p>
+            <AddLessonForm
+              key={draft.startsAt}
+              students={students}
+              groups={groups}
+              defaultStartsAt={draft.startsAt}
+              onSaved={() => setDraft(null)}
+            />
+          </div>
+        </div>
       )}
     </section>
   );
@@ -256,8 +302,15 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
         )}
         <p className="mt-2 text-[14px] text-ink-soft">{item.topic || <span className="italic">Тема не указана</span>}</p>
 
-        {item.status === "done" ? (
-          <p className="mt-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-extrabold text-pine-dark">✓ Занятие проведено</p>
+        {item.status === "done" || item.status === "missed" ? (
+          <p className="mt-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-extrabold text-pine-dark">
+            {item.status === "missed" ? "Отмечено: не пришёл" : "✓ Занятие проведено"}
+            {group && item.members!.some((m) => m.status === "missed") && (
+              <span className="mt-0.5 block text-[12px] font-bold text-ink-soft">
+                Не пришли: {item.members!.filter((m) => m.status === "missed").map((m) => m.studentName.split(" ")[0]).join(", ")}
+              </span>
+            )}
+          </p>
         ) : (
           <div className="mt-4 flex items-start gap-2">
             {group && item.groupLessonId ? (
@@ -280,9 +333,25 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
                     {started ? "Не было" : "Отменить"}
                   </button>
                 </form>
+                {started && (
+                  <form action={setLessonStatusAction} className="col-span-2">
+                    <input type="hidden" name="lessonId" value={item.id} />
+                    <input type="hidden" name="status" value="missed" />
+                    <input type="hidden" name="from" value="schedule" />
+                    <button type="submit" className="h-10 w-full rounded-xl text-[14px] font-bold text-ink-soft underline-offset-2 hover:underline">
+                      Ученик не пришёл без предупреждения
+                    </button>
+                  </form>
+                )}
               </div>
             )}
-            <LessonDeleteControl lessonId={item.id} seriesId={item.seriesId} from="schedule" wholeGroup={group} />
+            <LessonDeleteControl
+              lessonId={item.id}
+              seriesId={item.seriesId}
+              from="schedule"
+              wholeGroup={group}
+              reschedule={{ startsAt: item.startsAt, durationMin: item.durationMin, title: item.title }}
+            />
           </div>
         )}
       </div>

@@ -35,6 +35,8 @@ export default function AddLessonForm({
   students,
   groups = [],
   groupId,
+  defaultStartsAt,
+  onSaved,
 }: {
   studentId?: string;
   students?: { id: string; name: string }[];
@@ -42,6 +44,10 @@ export default function AddLessonForm({
   groups?: { id: string; name: string; count: number }[];
   /** страница группы: группа фиксирована */
   groupId?: string;
+  /** «YYYY-MM-DDTHH:MM» — время, выбранное нажатием на пустое место сетки */
+  defaultStartsAt?: string;
+  /** после успешного сохранения (например, закрыть окно) */
+  onSaved?: () => void;
   /** оставлено для совместимости со старыми вызовами */
   from?: "student" | "schedule";
 }) {
@@ -58,6 +64,7 @@ export default function AddLessonForm({
     // Повтор сбрасываем, чтобы следующее сохранение случайно не создало ещё серию.
     if (repeatRef.current) repeatRef.current.value = "1";
     setShowSaved(true);
+    onSaved?.();
     const t = setTimeout(() => setShowSaved(false), 3000);
     return () => clearTimeout(t);
   }, [state]);
@@ -111,7 +118,7 @@ export default function AddLessonForm({
             id="startsAt"
             name="startsAt"
             type="datetime-local"
-            defaultValue={nextHourMsk()}
+            defaultValue={defaultStartsAt ?? nextHourMsk()}
             required
           />
         </div>

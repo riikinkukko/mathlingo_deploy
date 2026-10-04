@@ -112,8 +112,8 @@ export default function GroupLessonActions({
         {present.size === members.length
           ? "Были все — занятие засчитается каждому."
           : present.size === 0
-            ? "Никого не было — занятие никому не засчитается."
-            : `Отсутствующим (${members.length - present.size}) занятие не засчитается в баланс.`}
+            ? "Никто не пришёл. Если занятие отменили — нажмите «Отмена» и затем «Не было»."
+            : `Отсутствующие (${members.length - present.size}) — «не пришёл». Оплачивается ли пропуск — настройка в «Оплатах».`}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <button type="submit" className="h-11 rounded-xl bg-pine text-[15px] font-black text-white hover:bg-pine-dark">

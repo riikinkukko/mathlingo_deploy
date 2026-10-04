@@ -4,11 +4,11 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { getScheduledLessonById } from "./queries";
+import { getScheduledLessonById, getUserById } from "./queries";
 import { sendPaymentReminder } from "./payment-reminders";
 import type { ScheduledLesson } from "./types";
 
-export type LessonMark = "done" | "cancelled";
+export type LessonMark = "done" | "cancelled" | "missed";
 
 export type ApplyLessonStatusResult =
   | { ok: true; lesson: ScheduledLesson }
@@ -31,12 +31,21 @@ export async function applyLessonStatus(
   // Повторная та же отметка ничего не меняет — и не шлёт родителю второе напоминание.
   if (lesson.status === status) return { ok: true, lesson };
 
-  await db.update(schema.scheduledLessons).set({ status }).where(eq(schema.scheduledLessons.id, lessonId));
+  // Цену фиксируем в момент отметки: если репетитор потом поменяет цену,
+  // уже засчитанные занятия не пересчитаются.
+  let priceRub: number | null = null;
+  if (status === "done" || status === "missed") {
+    const student = await getUserById(lesson.studentId);
+    priceRub = (lesson.groupLessonId ? student?.groupLessonPriceRub ?? student?.lessonPriceRub : student?.lessonPriceRub) ?? null;
+  }
+  await db.update(schema.scheduledLessons).set({ status, priceRub }).where(eq(schema.scheduledLessons.id, lessonId));
 
   // Проведённое занятие меняет баланс оплат → при включённых напоминаниях
   // родитель узнает, что оплаченные занятия заканчиваются / закончились.
   // Сбой отправки не должен мешать самой отметке.
-  if (status === "done") {
+  // «Не пришёл» меняет баланс, только если у репетитора пропуск оплачивается.
+  const charged = status === "done" || (status === "missed" && !!(await getUserById(teacherId))?.chargeMissed);
+  if (charged) {
     try {
       await sendPaymentReminder(teacherId, lesson.studentId, "auto");
     } catch (e) {

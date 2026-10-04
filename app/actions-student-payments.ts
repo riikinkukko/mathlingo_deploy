@@ -73,6 +73,9 @@ export async function addStudentPaymentAction(
 
   const fields = parsePaymentFields(formData);
   if ("error" in fields) return { error: fields.error };
+  // С ценой занятия «за сколько занятий» считаем сами — для истории оплат.
+  const student = await getUserById(studentId);
+  if (student?.lessonPriceRub) fields.lessonsCount = Math.min(100, Math.floor(fields.amountRub / student.lessonPriceRub));
 
   await db.insert(schema.studentPayments).values({
     id: genId("sp"),
@@ -185,4 +188,45 @@ export async function sendPaymentReminderNowAction(
   const sent = await sendPaymentReminder(teacher.id, studentId, "manual");
   if (sent === 0) return { error: "Не удалось отправить напоминание" };
   return { ok: true, at: Date.now(), sent };
+}
+
+export type PriceState = { ok?: boolean; error?: string; at?: number } | null;
+
+function parsePrice(v: FormDataEntryValue | null): number | null | "bad" {
+  const raw = String(v ?? "").replace(/\s/g, "");
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 && n <= 100_000 ? n : "bad";
+}
+
+/** Цена занятия ученика (и в группе). Пусто — учёт в занятиях, как раньше. */
+export async function saveLessonPriceAction(_prev: PriceState, formData: FormData): Promise<PriceState> {
+  const teacher = await getSessionUser();
+  const studentId = String(formData.get("studentId") || "");
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+  const price = parsePrice(formData.get("lessonPriceRub"));
+  const groupPrice = parsePrice(formData.get("groupLessonPriceRub"));
+  if (price === "bad" || groupPrice === "bad") return { error: "Цена — целое число рублей до 100 000" };
+  if (groupPrice !== null && price === null) return { error: "Сначала укажите цену индивидуального занятия" };
+  await db
+    .update(schema.users)
+    .set({ lessonPriceRub: price, groupLessonPriceRub: groupPrice })
+    .where(eq(schema.users.id, studentId));
+  revalidateAll(studentId);
+  return { ok: true, at: Date.now() };
+}
+
+/** Настройка репетитора: оплачивается ли пропуск без предупреждения («не пришёл»). */
+export async function saveChargeMissedAction(_prev: PriceState, formData: FormData): Promise<PriceState> {
+  const teacher = await getSessionUser();
+  if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  await db
+    .update(schema.users)
+    .set({ chargeMissed: formData.get("chargeMissed") === "on" })
+    .where(eq(schema.users.id, teacher.id));
+  revalidatePath("/teacher");
+  revalidatePath("/teacher/payments");
+  revalidatePath("/teacher/schedule");
+  return { ok: true, at: Date.now() };
 }

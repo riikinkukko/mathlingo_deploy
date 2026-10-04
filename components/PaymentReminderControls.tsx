@@ -6,6 +6,8 @@ import {
   setPaymentRemindersAction,
   sendPaymentReminderNowAction,
   savePaymentInstructionsAction,
+  saveLessonPriceAction,
+  saveChargeMissedAction,
   ReminderState,
 } from "@/app/actions-student-payments";
 
@@ -137,6 +139,97 @@ export function PaymentInstructionsForm({ value }: { value?: string }) {
         <SaveButton />
         {saved && <span className="text-sm font-bold text-pine">✓ Сохранено</span>}
       </div>
+    </form>
+  );
+}
+
+/** Цена занятия ученика: с ней долг и остаток считаются в рублях. */
+export function LessonPriceForm({
+  studentId,
+  price,
+  groupPrice,
+  inGroup,
+}: {
+  studentId: string;
+  price: number | null;
+  groupPrice: number | null;
+  /** ученик в какой-нибудь группе — показываем поле цены группового занятия */
+  inGroup: boolean;
+}) {
+  const [state, action] = useFormState<ReminderState, FormData>(saveLessonPriceAction, null);
+  const saved = useFlash(state);
+  return (
+    <form action={action} className="card mb-4 space-y-3 p-4">
+      <input type="hidden" name="studentId" value={studentId} />
+      <div className={`grid gap-3 ${inGroup ? "grid-cols-2" : ""}`}>
+        <div>
+          <label className="label" htmlFor="lessonPriceRub">Цена занятия, ₽</label>
+          <input
+            className="input"
+            id="lessonPriceRub"
+            name="lessonPriceRub"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={100000}
+            defaultValue={price ?? ""}
+            placeholder="например, 2000"
+          />
+        </div>
+        {inGroup && (
+          <div>
+            <label className="label" htmlFor="groupLessonPriceRub">В группе, ₽</label>
+            <input
+              className="input"
+              id="groupLessonPriceRub"
+              name="groupLessonPriceRub"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={100000}
+              defaultValue={groupPrice ?? ""}
+              placeholder="как обычное"
+            />
+          </div>
+        )}
+      </div>
+      <p className="text-[11px] text-ink-soft">
+        С ценой долг и остаток считаются в рублях. Новая цена применяется к следующим занятиям — уже засчитанные не
+        пересчитываются. Оставьте пустым, чтобы вести учёт в занятиях.
+      </p>
+      {state?.error && <p className="text-sm font-semibold text-coral">{state.error}</p>}
+      <div className="flex items-center gap-3">
+        <SaveButton />
+        {saved && <span className="text-sm font-bold text-pine">✓ Сохранено</span>}
+      </div>
+    </form>
+  );
+}
+
+/** Правило для пропусков: оплачивается ли «не пришёл» (без предупреждения). */
+export function ChargeMissedForm({ value }: { value: boolean }) {
+  const [state, action] = useFormState<ReminderState, FormData>(saveChargeMissedAction, null);
+  const saved = useFlash(state);
+  const formRef = useRef<HTMLFormElement>(null);
+  return (
+    <form ref={formRef} action={action} className="card mb-6 p-4">
+      <label className="flex cursor-pointer items-start gap-3">
+        <input
+          type="checkbox"
+          name="chargeMissed"
+          defaultChecked={value}
+          onChange={() => formRef.current?.requestSubmit()}
+          className="mt-0.5 h-5 w-5 shrink-0 accent-pine"
+        />
+        <span>
+          <span className="block text-[15px] font-extrabold text-ink">Пропуск без предупреждения оплачивается</span>
+          <span className="block text-[12px] text-ink-soft">
+            Если ученик не пришёл на занятие (отметка «Не пришёл» или снятая галочка в группе), оно засчитывается в
+            оплату. Отменённое занятие не засчитывается никогда.
+          </span>
+          {saved && <span className="mt-1 block text-sm font-bold text-pine">✓ Сохранено</span>}
+        </span>
+      </label>
     </form>
   );
 }

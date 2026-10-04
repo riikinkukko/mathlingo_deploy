@@ -2,25 +2,30 @@
 
 import { useState } from "react";
 import { deleteLessonAction, deleteLessonSeriesFromAction } from "@/app/actions-schedule";
+import RescheduleDialog from "./RescheduleDialog";
 
 /**
- * Кнопка удаления занятия. Сначала открывается подтверждение (раньше разовое
- * удалялось с одного нажатия — легко промахнуться на телефоне). Для занятия
- * из еженедельной серии — выбор: только это или это и все следующие.
+ * Меню действий с занятием: «Перенести…» и удаление. Удаление — с
+ * подтверждением (с одного нажатия легко промахнуться на телефоне); для
+ * занятия из еженедельной серии — выбор: только это или это и все следующие.
  */
 export default function LessonDeleteControl({
   lessonId,
   seriesId,
   from,
   wholeGroup = false,
+  reschedule,
 }: {
   lessonId: string;
   seriesId: string | null;
   from: "student" | "schedule" | "group" | "home";
-  /** групповое занятие в общем списке: удалить у всех учеников группы */
+  /** групповое занятие в общем списке: действие для всех учеников группы */
   wholeGroup?: boolean;
+  /** есть — в меню появляется «Перенести…» (только у запланированных занятий) */
+  reschedule?: { startsAt: string; durationMin: number; title?: string };
 }) {
   const [open, setOpen] = useState(false);
+  const [moving, setMoving] = useState(false);
 
   const hidden = (
     <>
@@ -34,22 +39,40 @@ export default function LessonDeleteControl({
     <div className="relative">
       <button
         type="button"
-        aria-label="Удалить занятие"
+        aria-label={reschedule ? "Действия с занятием" : "Удалить занятие"}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex h-10 w-10 items-center justify-center rounded-pill text-[15px] font-bold text-coral transition hover:bg-coral-light lg:h-8 lg:w-8"
+        className={`flex h-10 w-10 items-center justify-center rounded-pill text-[15px] font-bold transition lg:h-8 lg:w-8 ${
+          reschedule ? "text-ink-soft hover:bg-line-soft" : "text-coral hover:bg-coral-light"
+        }`}
       >
-        ✕
+        {reschedule ? (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></svg>
+        ) : (
+          "✕"
+        )}
       </button>
       {open && (
-        <div className="absolute right-0 top-11 z-20 w-56 rounded-xl border border-line bg-white p-1.5 shadow-soft">
+        <div className="absolute right-0 top-11 z-20 w-60 rounded-xl border border-line bg-white p-1.5 shadow-soft">
+          {reschedule && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setMoving(true);
+              }}
+              className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold text-ink hover:bg-paper"
+            >
+              Перенести…
+            </button>
+          )}
           <form action={deleteLessonAction}>
             {hidden}
             <button
               type="submit"
               className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-coral hover:bg-coral-light"
             >
-              {seriesId ? "Только это занятие" : wholeGroup ? "Удалить занятие группы" : "Удалить занятие"}
+              {seriesId ? "Удалить только это" : wholeGroup ? "Удалить занятие группы" : "Удалить занятие"}
             </button>
           </form>
           {seriesId && (
@@ -59,7 +82,7 @@ export default function LessonDeleteControl({
                 type="submit"
                 className="w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-coral hover:bg-coral-light"
               >
-                Это и все следующие
+                Удалить это и все следующие
               </button>
             </form>
           )}
@@ -71,6 +94,17 @@ export default function LessonDeleteControl({
             Отмена
           </button>
         </div>
+      )}
+      {moving && reschedule && (
+        <RescheduleDialog
+          lessonId={lessonId}
+          startsAt={reschedule.startsAt}
+          durationMin={reschedule.durationMin}
+          seriesId={seriesId}
+          wholeGroup={wholeGroup}
+          title={reschedule.title}
+          onClose={() => setMoving(false)}
+        />
       )}
     </div>
   );

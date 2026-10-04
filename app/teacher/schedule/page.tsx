@@ -109,7 +109,11 @@ export default async function SchedulePage({
 
             {week && (
               <div className="mb-6">
-                <WeekSchedule {...week} />
+                <WeekSchedule
+                  {...week}
+                  students={[...students].sort((a, b) => a.name.localeCompare(b.name, "ru")).map((s) => ({ id: s.id, name: s.name }))}
+                  groups={groups.map((g) => ({ id: g.id, name: g.name, count: g.members.length }))}
+                />
               </div>
             )}
 

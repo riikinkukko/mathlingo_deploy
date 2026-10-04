@@ -53,7 +53,7 @@ export function collapseGroupLessons<T extends Row>(rows: T[]): CollapsedLesson<
     // Статус занятия группы: пока кто-то не отмечен — «planned»; иначе «done»,
     // если был хоть кто-то, и «cancelled», если не было никого.
     const st = item.members.map((m) => m.status);
-    item.status = st.includes("planned") ? "planned" : st.includes("done") ? "done" : "cancelled";
+    item.status = st.includes("planned") ? "planned" : st.includes("done") ? "done" : st.includes("missed") ? "missed" : "cancelled";
   }
   return out;
 }

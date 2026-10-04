@@ -179,7 +179,7 @@ export async function setLessonStatusAction(formData: FormData) {
   // занятия в редиректе «утекали» бы id ученика/группы.
   if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) redirect("/teacher/schedule?error=1");
   const back = backTo(from, lesson.studentId, lesson.groupId);
-  if (status !== "done" && status !== "cancelled") redirect(`${back}?error=1`);
+  if (status !== "done" && status !== "cancelled" && status !== "missed") redirect(`${back}?error=1`);
 
   // Та же логика, что у кнопок «Было / Не было» в Telegram.
   await applyLessonStatus(teacher.id, lessonId, status);
@@ -289,7 +289,9 @@ export async function setGroupLessonStatusAction(formData: FormData) {
 
   for (const r of rows) {
     if (!lessonIds.has(r.id)) continue;
-    const status = mode === "attendance" && present.has(r.studentId) ? "done" : "cancelled";
+    // Отсутствующий на групповом занятии — «не пришёл» (занятие было): оплачивается
+    // или нет — по настройке репетитора. «Отменить» — занятия не было ни у кого.
+    const status = mode === "cancel" ? "cancelled" : present.has(r.studentId) ? "done" : "missed";
     await applyLessonStatus(teacher.id, r.id, status, { onlyIfPlanned: true });
     revalidatePath(`/teacher/student/${r.studentId}`);
   }
@@ -298,4 +300,99 @@ export async function setGroupLessonStatusAction(formData: FormData) {
   revalidatePath("/teacher");
   if (rows[0].groupId) revalidatePath(`/teacher/groups/${rows[0].groupId}`);
   redirect(`${back}?ok=lesson`);
+}
+
+export type RescheduleState = { ok?: boolean; error?: string; at?: number; count?: number } | null;
+
+/**
+ * Перенос занятия. scope=one — только это занятие (у группового — у всей
+ * группы, если wholeGroup), scope=following — это и все следующие занятия
+ * серии сдвигаются на ту же разницу во времени. Переносятся только
+ * запланированные. Ученикам — уведомление о новом времени.
+ */
+export async function rescheduleLessonAction(_prev: RescheduleState, formData: FormData): Promise<RescheduleState> {
+  const teacher = await getSessionUser();
+  const lessonId = String(formData.get("lessonId") || "");
+  const scope = formData.get("scope") === "following" ? "following" : "one";
+  const wholeGroup = formData.get("wholeGroup") === "1";
+  const lesson = await getScheduledLessonById(lessonId);
+  if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) return { error: "Занятие не найдено" };
+  if (lesson.status !== "planned") return { error: "Переносить можно только запланированное занятие" };
+
+  const newStart = parseMskDateTime(String(formData.get("startsAt") || ""));
+  if (!newStart) return { error: "Укажите новую дату и время" };
+  const durationMin = Math.max(15, Math.min(300, Number(formData.get("durationMin")) || lesson.durationMin));
+  const oldStart = new Date(lesson.startsAt);
+  const delta = newStart.getTime() - oldStart.getTime();
+  if (delta === 0 && durationMin === lesson.durationMin) return { error: "Время не изменилось" };
+
+  const L = schema.scheduledLessons;
+  const sameStudentOrGroup =
+    wholeGroup && lesson.groupLessonId
+      ? undefined // строки всех учеников группы
+      : eq(L.studentId, lesson.studentId);
+  const rows =
+    scope === "following" && lesson.seriesId
+      ? await db
+          .select({ id: L.id, studentId: L.studentId, startsAt: L.startsAt })
+          .from(L)
+          .where(
+            and(
+              eq(L.seriesId, lesson.seriesId),
+              eq(L.teacherId, teacher.id),
+              eq(L.status, "planned"),
+              gte(L.startsAt, oldStart),
+              ...(sameStudentOrGroup ? [sameStudentOrGroup] : [])
+            )
+          )
+      : wholeGroup && lesson.groupLessonId
+        ? await db
+            .select({ id: L.id, studentId: L.studentId, startsAt: L.startsAt })
+            .from(L)
+            .where(and(eq(L.groupLessonId, lesson.groupLessonId), eq(L.teacherId, teacher.id), eq(L.status, "planned")))
+        : [{ id: lesson.id, studentId: lesson.studentId, startsAt: oldStart }];
+  if (rows.length === 0) return { error: "Нечего переносить" };
+
+  // Перенос одного ученика из группового занятия (со страницы ученика):
+  // его строки становятся индивидуальными, иначе в общем расписании они
+  // склеились бы с группой по старому времени.
+  const detach = !!lesson.groupLessonId && !wholeGroup;
+  const newSeriesId = detach && scope === "following" && lesson.seriesId ? genId("ser") : undefined;
+
+  await db.transaction(async (tx) => {
+    for (const r of rows) {
+      await tx
+        .update(L)
+        // Напоминания по новому времени должны уйти заново.
+        .set({
+          startsAt: new Date(r.startsAt.getTime() + delta),
+          durationMin,
+          remindedAt: null,
+          teacherPromptedAt: null,
+          ...(detach ? { groupLessonId: null, groupId: null } : {}),
+          ...(newSeriesId ? { seriesId: newSeriesId } : detach ? { seriesId: null } : {}),
+        })
+        .where(eq(L.id, r.id));
+    }
+    const studentIds = Array.from(new Set(rows.map((r) => r.studentId)));
+    const lessonsCount = new Set(rows.map((r) => r.startsAt.getTime())).size;
+    for (const sid of studentIds) {
+      await pushNotification(tx, {
+        userId: sid,
+        type: "lesson_scheduled",
+        title: lessonsCount > 1 ? "Расписание изменилось" : `Занятие перенесено на ${formatMsk(newStart)}`,
+        body:
+          lessonsCount > 1
+            ? `Занятия с ${formatMsk(oldStart)} теперь ${WEEKDAY_DATIVE[weekdayMsk(newStart)]} в ${timeMsk(newStart)}.`
+            : `Было: ${formatMsk(oldStart)}.`,
+        link: "/student",
+      });
+    }
+  });
+
+  revalidatePath("/teacher/schedule");
+  revalidatePath("/teacher");
+  for (const sid of new Set(rows.map((r) => r.studentId))) revalidatePath(`/teacher/student/${sid}`);
+  if (lesson.groupId) revalidatePath(`/teacher/groups/${lesson.groupId}`);
+  return { ok: true, at: Date.now(), count: new Set(rows.map((r) => r.startsAt.getTime())).size };
 }

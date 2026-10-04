@@ -211,6 +211,20 @@
       "when": 1791069817796,
       "tag": "0029_attempt_image_markup",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1791073741007,
+      "tag": "0030_lesson_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791074075153,
+      "tag": "0031_unique_assignment_session",
+      "breakpoints": true
     }
   ]
 }

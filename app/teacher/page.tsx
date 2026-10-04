@@ -9,6 +9,7 @@ import TeacherTodayCard from "@/components/TeacherTodayCard";
 import LessonDoneBanner from "@/components/LessonDoneBanner";
 import TeacherSetupChecklist from "@/components/TeacherSetupChecklist";
 import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
+import { debtText, hasDebt } from "@/lib/money";
 
 const FREE_STUDENT_LIMIT = 3;
 // Через сколько дней без активности ученик считается "потерявшимся".
@@ -68,9 +69,9 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
       .sort((a, b) => b.idleDays - a.idleDays)
       .map(({ id, name, days, nudged }) => ({ id, name, days, nudged })),
     debts: balances
-      .filter((b) => b.balance < 0)
+      .filter(hasDebt)
       .sort((a, b) => a.balance - b.balance)
-      .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance })),
+      .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance, label: debtText(b) })),
     unmarkedLessons: countDistinctLessons(unmarked.filter((l) => !todayIds.has(l.id))),
     openQuestions,
   };
@@ -192,7 +193,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
         <div className="space-y-2">
           {cards.map(({ s, stats, pendingCount, overdue }) => {
             const initials = s.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
-            const debt = balances.find((b) => b.studentId === s.id && b.balance < 0);
+            const debt = balances.find((b) => b.studentId === s.id && hasDebt(b));
             const mock = latestMocks.get(s.id);
             return (
               <a
@@ -218,7 +219,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
                     ))}
                     {debt && (
                       <span className="rounded-pill bg-coral-light px-2 py-0.5 text-[11px] font-black text-coral-text">
-                        долг {-debt.balance}
+                        долг {debtText(debt)}
                       </span>
                     )}
                   </span>

@@ -10,6 +10,7 @@
 import { db } from "./db/client";
 import { getUserById, getStudentBalance, getParentsOfStudent, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
+import { formatRub } from "./money";
 
 const LESSONS: [string, string, string] = ["занятие", "занятия", "занятий"];
 
@@ -58,8 +59,15 @@ export async function sendPaymentReminder(teacherId: string, studentId: string, 
   const balance = await getStudentBalance(teacherId, studentId);
   if (!balance) return 0;
 
-  const msg = messageFor(balance.balance, student.name, kind);
+  let msg = messageFor(balance.balance, student.name, kind);
   if (!msg) return 0;
+  // С ценой в рублях — называем сумму: «К оплате 3 200 ₽».
+  if (balance.balanceRub !== null && balance.balanceRub < 0) {
+    const first = student.name.split(" ")[0] || student.name;
+    msg = { title: `К оплате ${formatRub(-balance.balanceRub)} — ${first}`, body: "Пожалуйста, оплатите проведённые занятия." };
+  } else if (balance.balanceRub !== null && balance.balanceRub > 0 && kind === "manual" && balance.balance > 1) {
+    msg = { ...msg, body: `Остаток оплаты: ${formatRub(balance.balanceRub)}. ${msg.body}` };
+  }
 
   const how = teacher.paymentInstructions?.trim();
   const body = how ? `${msg.body}\nКак оплатить: ${how}` : msg.body;

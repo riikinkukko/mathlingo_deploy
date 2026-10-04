@@ -78,8 +78,10 @@ export default function TeacherTodayCard({
                       {l.status === "planned" && !started ? ` · ${untilLabel(l.startsAt, now)}` : ""}
                     </span>
                   </a>
-                  {l.status === "done" && (
-                    <span className="shrink-0 rounded-pill bg-white/15 px-2.5 py-1 text-[11px] font-black">✓ было</span>
+                  {(l.status === "done" || l.status === "missed") && (
+                    <span className="shrink-0 rounded-pill bg-white/15 px-2.5 py-1 text-[11px] font-black">
+                      {l.status === "missed" ? "не пришёл" : "✓ было"}
+                    </span>
                   )}
                   {needsMark && (
                     <span className="shrink-0 rounded-pill bg-amber-light px-2 py-0.5 text-[11px] font-black text-amber-dark">

@@ -31,19 +31,27 @@ function todayMsk(): string {
 export default function AddPaymentForm({
   studentId,
   students,
+  priceRub,
 }: {
   studentId?: string;
-  students?: { id: string; name: string }[];
+  /** priceRub — цена занятия ученика: если есть, «за сколько занятий» не спрашиваем */
+  students?: { id: string; name: string; priceRub?: number | null }[];
+  /** цена занятия ученика (страница ученика) */
+  priceRub?: number | null;
 }) {
   const [state, formAction] = useFormState<AddPaymentState, FormData>(addStudentPaymentAction, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [selected, setSelected] = useState(studentId ?? "");
+  const [amount, setAmount] = useState("");
+  const price = studentId ? priceRub ?? null : students?.find((s) => s.id === selected)?.priceRub ?? null;
 
   useEffect(() => {
     if (!state?.ok || !formRef.current) return;
     const f = formRef.current;
-    (f.elements.namedItem("amountRub") as HTMLInputElement).value = "";
-    (f.elements.namedItem("lessonsCount") as HTMLInputElement).value = "1";
+    setAmount("");
+    const lc = f.elements.namedItem("lessonsCount") as HTMLInputElement | null;
+    if (lc) lc.value = "1";
     (f.elements.namedItem("paidAt") as HTMLInputElement).value = todayMsk();
     (f.elements.namedItem("note") as HTMLInputElement).value = "";
     setShowSaved(true);
@@ -58,7 +66,14 @@ export default function AddPaymentForm({
       {!studentId && students && (
         <div>
           <label className="label" htmlFor="pay-studentId">Ученик</label>
-          <select className="input" id="pay-studentId" name="studentId" required defaultValue="">
+          <select
+            className="input"
+            id="pay-studentId"
+            name="studentId"
+            required
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
             <option value="" disabled>
               Выберите ученика…
             </option>
@@ -84,22 +99,33 @@ export default function AddPaymentForm({
             step={1}
             placeholder="например, 6000"
             required
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
           />
         </div>
-        <div>
-          <label className="label" htmlFor="pay-lessons">За сколько занятий</label>
-          <input
-            className="input"
-            id="pay-lessons"
-            name="lessonsCount"
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={100}
-            step={1}
-            defaultValue={1}
-          />
-        </div>
+        {price ? (
+          // Цена занятия известна — баланс считается в рублях, количество занятий не нужно.
+          <div className="flex flex-col justify-end pb-2 text-[13px] text-ink-soft">
+            {Number(amount) > 0
+              ? `≈ ${Math.floor(Number(amount) / price)} по ${price.toLocaleString("ru-RU")} ₽`
+              : `цена занятия ${price.toLocaleString("ru-RU")} ₽`}
+          </div>
+        ) : (
+          <div>
+            <label className="label" htmlFor="pay-lessons">За сколько занятий</label>
+            <input
+              className="input"
+              id="pay-lessons"
+              name="lessonsCount"
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={100}
+              step={1}
+              defaultValue={1}
+            />
+          </div>
+        )}
         <div>
           <label className="label" htmlFor="pay-date">Дата оплаты</label>
           <input className="input" id="pay-date" name="paidAt" type="date" defaultValue={todayMsk()} />

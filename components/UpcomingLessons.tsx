@@ -134,7 +134,13 @@ export default function UpcomingLessons({
                       from={from === "group" ? "group" : "schedule"}
                       past={past}
                     />
-                    <LessonDeleteControl lessonId={l.id} seriesId={l.seriesId} from={from} wholeGroup />
+                    <LessonDeleteControl
+                      lessonId={l.id}
+                      seriesId={l.seriesId}
+                      from={from}
+                      wholeGroup
+                      reschedule={{ startsAt: l.startsAt, durationMin: l.durationMin, title: groupTitle(l.groupName) }}
+                    />
                   </div>
                 )}
                 {!readOnly && !l.members && (
@@ -161,7 +167,26 @@ export default function UpcomingLessons({
                       {past ? "Не было" : "Отменить"}
                     </button>
                   </form>
-                  <LessonDeleteControl lessonId={l.id} seriesId={l.seriesId} from={from} />
+                  {past && (
+                    <form action={setLessonStatusAction} className="flex-1 lg:flex-none">
+                      <input type="hidden" name="lessonId" value={l.id} />
+                      <input type="hidden" name="status" value="missed" />
+                      <input type="hidden" name="from" value={from} />
+                      <button
+                        type="submit"
+                        title="Ученик не пришёл без предупреждения"
+                        className="h-10 w-full rounded-pill border border-line px-3 text-[13px] font-bold text-ink-soft transition hover:bg-line-soft lg:h-8 lg:w-auto lg:text-[12px]"
+                      >
+                        Не пришёл
+                      </button>
+                    </form>
+                  )}
+                  <LessonDeleteControl
+                    lessonId={l.id}
+                    seriesId={l.seriesId}
+                    from={from}
+                    reschedule={{ startsAt: l.startsAt, durationMin: l.durationMin, title: l.studentName }}
+                  />
                 </div>
                 )}
               </div>

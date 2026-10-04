@@ -41,8 +41,10 @@ import UpcomingLessons from "@/components/UpcomingLessons";
 import { lessonTimeRange } from "@/lib/lesson-time";
 import AddPaymentForm from "@/components/AddPaymentForm";
 import PaymentHistory from "@/components/PaymentHistory";
-import BalanceSummary, { balanceLabel } from "@/components/BalanceSummary";
-import { PaymentReminderControls } from "@/components/PaymentReminderControls";
+import BalanceSummary, { balanceText } from "@/components/BalanceSummary";
+import { debtText, hasDebt } from "@/lib/money";
+import { PaymentReminderControls, LessonPriceForm } from "@/components/PaymentReminderControls";
+import { getGroupNamesByStudent } from "@/lib/groups";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
@@ -138,6 +140,7 @@ export default async function StudentDetailPage({
       getWeeklyStats(student.id, 12),
       getUnmarkedPastLessons(teacher.id, student.id),
     ]);
+  const inGroup = ((await getGroupNamesByStudent(teacher.id)).get(student.id) ?? []).length > 0;
   const solved12w = weekly.reduce((s, w) => s + w.solved, 0);
   const notesUpdatedLabel = notesData.updatedAt
     ? new Date(notesData.updatedAt).toLocaleString("ru-RU", {
@@ -163,9 +166,9 @@ export default async function StudentDetailPage({
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-display text-[22px] font-black text-ink">{student.name}</h1>
             <div className="mt-1 flex flex-wrap gap-1.5">
-              {balance && balance.balance < 0 && (
+              {balance && hasDebt(balance) && (
                 <span className="rounded-pill bg-coral-light px-2.5 py-0.5 text-[12px] font-black text-coral-text">
-                  Долг {-balance.balance} {pluralRu(-balance.balance, ["занятие", "занятия", "занятий"])}
+                  Долг {debtText(balance)}
                 </span>
               )}
               {student.targetScore && (
@@ -416,10 +419,16 @@ export default async function StudentDetailPage({
         {tab === "payments" && (<>
         <CollapsibleSection
           title="Оплаты"
-          summary={balance ? balanceLabel(balance.balance) : undefined}
+          summary={balance ? balanceText(balance) : undefined}
           defaultOpen
         >
           {balance && <BalanceSummary balance={balance} />}
+          <LessonPriceForm
+            studentId={student.id}
+            price={student.lessonPriceRub ?? null}
+            groupPrice={student.groupLessonPriceRub ?? null}
+            inGroup={inGroup}
+          />
           <PaymentReminderControls
             studentId={student.id}
             enabled={!!student.paymentRemindersEnabled}
@@ -431,7 +440,7 @@ export default async function StudentDetailPage({
             hasInstructions={!!teacher.paymentInstructions}
           />
           <div className="mb-4">
-            <AddPaymentForm studentId={student.id} />
+            <AddPaymentForm studentId={student.id} priceRub={student.lessonPriceRub ?? null} />
           </div>
           <PaymentHistory payments={payments} showStudent={false} from="student" />
         </CollapsibleSection>

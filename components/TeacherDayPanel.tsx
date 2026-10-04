@@ -27,7 +27,7 @@ export interface DayPanelData {
   /** ученики, которые давно не заходили */
   inactive: DayPanelStudent[];
   /** ученики с долгом по оплате (lessons — сколько занятий не оплачено) */
-  debts: { id: string; name: string; lessons: number }[];
+  debts: { id: string; name: string; lessons: number; label?: string }[];
   /** прошедшие занятия, не отмеченные «Было/Не было» */
   unmarkedLessons: number;
   /** вопросы учеников «Не понял» без ответа */
@@ -91,7 +91,9 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
       title: debts.length === 1 ? `Долг: ${debts[0].name}` : `Долги: ${debts.length} ${pluralRu(debts.length, ["ученик", "ученика", "учеников"])}`,
       sub:
         debts.length === 1
-          ? `${debts[0].lessons} ${pluralRu(debts[0].lessons, ["занятие не оплачено", "занятия не оплачены", "занятий не оплачено"])}`
+          ? debts[0].label?.includes("₽")
+            ? `не оплачено ${debts[0].label}`
+            : `${debts[0].lessons} ${pluralRu(debts[0].lessons, ["занятие не оплачено", "занятия не оплачены", "занятий не оплачено"])}`
           : names(debts),
     });
   if (overdue.length > 0)

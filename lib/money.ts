@@ -38,3 +38,19 @@ export function monthNameRu(offsetMonths = 0): string {
     timeZone: "UTC",
   });
 }
+
+type BalanceLike = { balance: number; balanceRub: number | null };
+
+/** Сумма долга для подписи: «3 200 ₽» (если у ученика цена в рублях) или «2 занятия». */
+export function debtText(b: BalanceLike): string {
+  if (b.balanceRub !== null) return formatRub(Math.max(0, -b.balanceRub));
+  const n = Math.max(0, -b.balance);
+  const mod10 = n % 10, mod100 = n % 100;
+  const word = mod10 === 1 && mod100 !== 11 ? "занятие" : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14) ? "занятия" : "занятий";
+  return `${n} ${word}`;
+}
+
+/** Есть ли долг: в рублях — любая недоплата, в занятиях — отрицательный баланс. */
+export function hasDebt(b: BalanceLike): boolean {
+  return b.balanceRub !== null ? b.balanceRub < 0 : b.balance < 0;
+}

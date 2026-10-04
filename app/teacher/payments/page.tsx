@@ -5,13 +5,13 @@ import {
   getRecentPaymentsForTeacher,
 } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
-import { formatRub, formatDateRu, currentMonthRangeMsk, monthNameRu } from "@/lib/money";
+import { formatRub, formatDateRu, currentMonthRangeMsk, monthNameRu, hasDebt } from "@/lib/money";
 import TeacherShell from "@/components/TeacherShell";
 import AddPaymentForm from "@/components/AddPaymentForm";
 import PaymentHistory from "@/components/PaymentHistory";
 import CollapsibleSection from "@/components/CollapsibleSection";
-import { balanceLabel, balanceColor } from "@/components/BalanceSummary";
-import { PaymentInstructionsForm } from "@/components/PaymentReminderControls";
+import { balanceText, balanceTone } from "@/components/BalanceSummary";
+import { PaymentInstructionsForm, ChargeMissedForm } from "@/components/PaymentReminderControls";
 
 export default async function PaymentsPage() {
   const user = (await getSessionUser())!;
@@ -25,8 +25,10 @@ export default async function PaymentsPage() {
     getRecentPaymentsForTeacher(user.id),
   ]);
 
-  const debtors = balances.filter((b) => b.balance < 0);
-  const debtLessons = debtors.reduce((sum, b) => sum - b.balance, 0);
+  const debtors = balances.filter(hasDebt);
+  // Долги учеников с ценой — в рублях, остальных — в занятиях.
+  const debtRub = debtors.reduce((sum, b) => sum + (b.balanceRub !== null ? -b.balanceRub : 0), 0);
+  const debtLessons = debtors.reduce((sum, b) => sum + (b.balanceRub === null ? -b.balance : 0), 0);
   // Сначала должники (по размеру долга), потом остальные по имени.
   const sorted = [...balances].sort(
     (a, b) => a.balance - b.balance || a.studentName.localeCompare(b.studentName, "ru")
@@ -62,11 +64,13 @@ export default async function PaymentsPage() {
             <p
               className={`font-mono text-lg font-semibold leading-none ${debtors.length > 0 ? "text-coral" : "text-ink"}`}
             >
-              {debtLessons}
+              {debtRub > 0 ? formatRub(debtRub) : debtLessons}
             </p>
             <p className="mt-1 text-[11px] text-ink-soft">
               {debtors.length > 0
-                ? `${pluralRu(debtLessons, ["занятие", "занятия", "занятий"])} в долг · ${debtors.length} ${pluralRu(debtors.length, ["ученик", "ученика", "учеников"])}`
+                ? `${debtRub > 0 ? "" : `${pluralRu(debtLessons, ["занятие", "занятия", "занятий"])} `}в долг${
+                    debtRub > 0 && debtLessons > 0 ? ` + ${debtLessons} ${pluralRu(debtLessons, ["занятие", "занятия", "занятий"])}` : ""
+                  } · ${debtors.length} ${pluralRu(debtors.length, ["ученик", "ученика", "учеников"])}`
                 : "долгов нет"}
             </p>
           </div>
@@ -84,9 +88,10 @@ export default async function PaymentsPage() {
         ) : (
           <>
             <PaymentInstructionsForm value={user.paymentInstructions} />
+            <ChargeMissedForm value={!!user.chargeMissed} />
 
             <CollapsibleSection title="Записать оплату" defaultOpen={recent.length === 0}>
-              <AddPaymentForm students={balances.map((b) => ({ id: b.studentId, name: b.studentName }))} />
+              <AddPaymentForm students={balances.map((b) => ({ id: b.studentId, name: b.studentName, priceRub: b.priceRub }))} />
             </CollapsibleSection>
 
             <h2 className="mb-3 mt-6 font-display text-lg font-black text-ink">Балансы учеников</h2>
@@ -96,19 +101,19 @@ export default async function PaymentsPage() {
                   key={b.studentId}
                   href={`/teacher/student/${b.studentId}`}
                   className={`card flex flex-wrap items-center justify-between gap-3 p-3.5 transition hover:border-pine ${
-                    b.balance < 0 ? "border-l-4 !border-l-coral" : ""
+                    hasDebt(b) ? "border-l-4 !border-l-coral" : ""
                   }`}
                 >
                   <div className="min-w-0">
                     <p className="font-display text-sm font-black text-ink">{b.studentName}</p>
                     <p className="text-[11px] text-ink-soft">
-                      оплачено {b.paidLessons} · проведено {b.doneLessons}
+                      {b.priceRub !== null
+                        ? `оплачено ${formatRub(b.paidRub)} · засчитано ${b.chargedLessons} · цена ${formatRub(b.priceRub)}`
+                        : `оплачено ${b.paidLessons} · засчитано ${b.chargedLessons} · цена не указана`}
                       {b.lastPaidAt && ` · последняя оплата ${formatDateRu(b.lastPaidAt)}`}
                     </p>
                   </div>
-                  <span className={`text-sm font-bold ${balanceColor(b.balance)}`}>
-                    {balanceLabel(b.balance)}
-                  </span>
+                  <span className={`text-sm font-bold ${balanceTone(b)}`}>{balanceText(b)}</span>
                 </a>
               ))}
             </div>

@@ -41,6 +41,9 @@ export interface User {
   dreamUniversity?: string;
   paymentRemindersEnabled?: boolean;
   paymentInstructions?: string;
+  lessonPriceRub?: number | null;
+  groupLessonPriceRub?: number | null;
+  chargeMissed?: boolean;
   tgNotifyHomework?: boolean;
   tgNotifyLessons?: boolean;
   tgDailyDigest?: boolean;
@@ -254,7 +257,7 @@ export interface Payment {
   paidAt?: string;
 }
 
-export type LessonStatus = "planned" | "done" | "cancelled";
+export type LessonStatus = "planned" | "done" | "cancelled" | "missed";
 
 export interface ScheduledLesson {
   id: string;
@@ -307,8 +310,14 @@ export interface StudentBalance {
   paidLessons: number; // сколько занятий оплачено
   paidRub: number; // сколько денег всего
   doneLessons: number; // сколько проведено (по расписанию)
-  balance: number; // paidLessons − doneLessons; < 0 — долг
+  balance: number; // в занятиях: < 0 — долг (при цене в рублях — пересчёт из рублей)
   lastPaidAt: string | null;
+  /** засчитанные занятия: проведённые + «не пришёл», если пропуск оплачивается */
+  chargedLessons: number;
+  /** цена занятия ученика; null — учёт только в занятиях */
+  priceRub: number | null;
+  /** баланс в рублях (оплачено − стоимость засчитанных занятий); null — без цены */
+  balanceRub: number | null;
 }
 
 export interface DB {

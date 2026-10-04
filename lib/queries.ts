@@ -54,6 +54,9 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     dreamUniversity: row.dreamUniversity ?? undefined,
     paymentRemindersEnabled: row.paymentRemindersEnabled,
     paymentInstructions: row.paymentInstructions ?? undefined,
+    lessonPriceRub: row.lessonPriceRub ?? null,
+    groupLessonPriceRub: row.groupLessonPriceRub ?? null,
+    chargeMissed: row.chargeMissed,
     tgNotifyHomework: row.tgNotifyHomework,
     tgNotifyLessons: row.tgNotifyLessons,
     tgDailyDigest: row.tgDailyDigest,
@@ -853,7 +856,7 @@ export async function getStudentPaymentById(
 export async function getStudentBalances(
   teacherId: string
 ): Promise<import("./types").StudentBalance[]> {
-  const [students, paidRows, doneRows] = await Promise.all([
+  const [students, paidRows, chargedRows] = await Promise.all([
     getStudentsOfTeacher(teacherId),
     db
       .select({
@@ -865,35 +868,55 @@ export async function getStudentBalances(
       .from(schema.studentPayments)
       .where(eq(schema.studentPayments.teacherId, teacherId))
       .groupBy(schema.studentPayments.studentId),
-    db
-      .select({
-        studentId: schema.scheduledLessons.studentId,
-        doneLessons: sql<number>`count(*)::int`,
-      })
-      .from(schema.scheduledLessons)
-      .where(
-        and(
-          eq(schema.scheduledLessons.teacherId, teacherId),
-          eq(schema.scheduledLessons.status, "done")
-        )
-      )
-      .groupBy(schema.scheduledLessons.studentId),
+    // Засчитанные занятия: «было» + «не пришёл», если у репетитора пропуск
+    // оплачивается. Стоимость — зафиксированная при отметке цена, а если её
+    // нет (занятие отмечено до того, как появилась цена) — текущая цена ученика
+    // (у группового — групповая, если задана).
+    db.execute(sql`
+      select l.student_id as "studentId",
+        count(*) filter (where l.status = 'done')::int as "doneLessons",
+        count(*) filter (where l.status = 'done' or (l.status = 'missed' and t.charge_missed))::int as "chargedLessons",
+        coalesce(sum(coalesce(l.price_rub,
+          case when l.group_lesson_id is not null then coalesce(u.group_lesson_price_rub, u.lesson_price_rub) else u.lesson_price_rub end
+        )) filter (where l.status = 'done' or (l.status = 'missed' and t.charge_missed)), 0)::int as "chargedRub"
+      from scheduled_lessons l
+      join users u on u.id = l.student_id
+      join users t on t.id = l.teacher_id
+      where l.teacher_id = ${teacherId}
+      group by l.student_id
+    `),
   ]);
 
   const paidBy = new Map(paidRows.map((r) => [r.studentId, r]));
-  const doneBy = new Map(doneRows.map((r) => [r.studentId, r.doneLessons]));
+  type C = { studentId: string; doneLessons: number; chargedLessons: number; chargedRub: number };
+  const chargedBy = new Map((chargedRows.rows as C[]).map((r) => [r.studentId, r]));
 
   return students.map((s) => {
     const p = paidBy.get(s.id);
+    const c = chargedBy.get(s.id);
     const paidLessons = p?.paidLessons ?? 0;
-    const doneLessons = doneBy.get(s.id) ?? 0;
+    const paidRub = p?.paidRub ?? 0;
+    const doneLessons = Number(c?.doneLessons ?? 0);
+    const chargedLessons = Number(c?.chargedLessons ?? 0);
+    const price = s.lessonPriceRub ?? null;
+    const balanceRub = price ? paidRub - Number(c?.chargedRub ?? 0) : null;
+    // В рублях баланс в занятиях — пересчёт: долг 2500 ₽ при цене 2000 = 2 занятия.
+    const balance =
+      price && balanceRub !== null
+        ? balanceRub >= 0
+          ? Math.floor(balanceRub / price)
+          : -Math.ceil(-balanceRub / price)
+        : paidLessons - chargedLessons;
     return {
       studentId: s.id,
       studentName: s.name,
       paidLessons,
-      paidRub: p?.paidRub ?? 0,
+      paidRub,
       doneLessons,
-      balance: paidLessons - doneLessons,
+      chargedLessons,
+      balance,
+      priceRub: price,
+      balanceRub,
       lastPaidAt: p?.lastPaidAt ?? null,
     };
   });
@@ -1299,10 +1322,19 @@ export async function getOrCreateAssignmentSession(
     return { ...existing[0], startedAt: existing[0].startedAt.toISOString() };
   }
 
-  const id = genId("as");
-  const startedAt = new Date();
-  await db.insert(schema.assignmentSessions).values({ id, homeworkId, studentId, startedAt });
-  return { id, homeworkId, studentId, startedAt: startedAt.toISOString() };
+  // Уникальный индекс (homework, student): при двух одновременных открытиях
+  // вторая вставка ничего не делает, и обе получают одну и ту же сессию —
+  // иначе отсчёт времени контрольной мог взяться из «чужой» сессии.
+  await db
+    .insert(schema.assignmentSessions)
+    .values({ id: genId("as"), homeworkId, studentId, startedAt: new Date() })
+    .onConflictDoNothing();
+  const [row] = await db
+    .select()
+    .from(schema.assignmentSessions)
+    .where(and(eq(schema.assignmentSessions.homeworkId, homeworkId), eq(schema.assignmentSessions.studentId, studentId)))
+    .limit(1);
+  return { ...row, startedAt: row.startedAt.toISOString() };
 }
 
 // ---------- Планы (Free/Pro) и энергия для самостоятельных учеников ----------
@@ -1569,7 +1601,9 @@ export function minutesUntilNextEnergy(user: User): number {
  * энергии не осталось — вызывающий код должен показать заглушку вместо
  * задачи. Принимает tx для атомарности с остальными записями попытки. */
 export async function spendEnergy(tx: Tx, userId: string): Promise<boolean> {
-  const rows = await tx.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1);
+  // FOR UPDATE: две параллельные первые попытки не должны списать одну единицу
+  // энергии на двоих (обе прочитали бы одно и то же значение).
+  const rows = await tx.select().from(schema.users).where(eq(schema.users.id, userId)).limit(1).for("update");
   const row = rows[0];
   if (!row) return false;
   const user = mapUser(row);

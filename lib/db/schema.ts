@@ -9,6 +9,7 @@ import {
   pgEnum,
   primaryKey,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -141,6 +142,12 @@ export const users = pgTable("users", {
   // У РЕПЕТИТОРА: как ему заплатить (СБП по номеру, банк…) — добавляется в
   // напоминания родителям.
   paymentInstructions: text("payment_instructions"),
+  // Цена занятия для ученика (задаёт репетитор). NULL — учёт в занятиях, без рублей.
+  lessonPriceRub: integer("lesson_price_rub"),
+  // Цена группового занятия для ученика (NULL — как индивидуальное).
+  groupLessonPriceRub: integer("group_lesson_price_rub"),
+  // Настройка репетитора: пропуск без предупреждения («не пришёл») оплачивается.
+  chargeMissed: boolean("charge_missed").notNull().default(false),
   // Telegram у РЕПЕТИТОРА: что слать (по умолчанию всё включено, но пока
   // Telegram не привязан, ничего не уходит). digestSentOn — дата (МСК,
   // YYYY-MM-DD) последней утренней сводки, чтобы не прислать её дважды.
@@ -378,7 +385,7 @@ export const assignmentSessions = pgTable("assignment_sessions", {
     .references(() => users.id, { onDelete: "cascade" }),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
-  byHomeworkStudent: index("assignment_sessions_hw_student_idx").on(t.homeworkId, t.studentId),
+  byHomeworkStudent: uniqueIndex("assignment_sessions_hw_student_uq").on(t.homeworkId, t.studentId),
 }));
 
 export const lessonLogs = pgTable("lesson_logs", {
@@ -402,7 +409,8 @@ export const lessonLogs = pgTable("lesson_logs", {
 // Отличается от lessonLogs: там — записи о ПРОШЕДШИХ занятиях (постфактум,
 // с отчётом), здесь — ПРЕДСТОЯЩИЕ занятия (дата+время, статус). Одно занятие
 // может позже превратиться в запись журнала, но связь необязательная.
-export const lessonStatusEnum = pgEnum("lesson_status", ["planned", "done", "cancelled"]);
+// missed — ученик не пришёл (занятие было); оплачивается, если у репетитора включено chargeMissed.
+export const lessonStatusEnum = pgEnum("lesson_status", ["planned", "done", "cancelled", "missed"]);
 
 export const scheduledLessons = pgTable("scheduled_lessons", {
   id: text("id").primaryKey(),
@@ -432,6 +440,9 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // занятия (у серии — ещё и общий seriesId). Посещаемость — статус строки.
   groupId: text("group_id").references(() => studentGroups.id, { onDelete: "set null" }),
   groupLessonId: text("group_lesson_id"),
+  // Цена, по которой занятие засчитано (фиксируется при отметке): если цену
+  // потом поменяют, прошлые занятия не пересчитаются. NULL — текущая цена ученика.
+  priceRub: integer("price_rub"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byGroupLesson: index("scheduled_lessons_group_lesson_idx").on(t.groupLessonId),

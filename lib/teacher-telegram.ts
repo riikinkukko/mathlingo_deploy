@@ -29,6 +29,7 @@ import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
+import { debtText, hasDebt } from "./money";
 
 const TZ = "Europe/Moscow";
 /** Через сколько после конца занятия спрашиваем «было или не было». */
@@ -421,7 +422,7 @@ export async function buildTodayText(
   const dayItems = collapseGroupLessons(
     lessons.map(({ lesson, studentName, groupName }) => ({ ...lesson, studentName, groupName }))
   );
-  const debtors = balances.filter((b) => b.balance < 0).sort((a, b) => a.balance - b.balance);
+  const debtors = balances.filter(hasDebt).sort((a, b) => a.balance - b.balance);
 
   if (lessons.length === 0 && pending.length === 0 && unmarkedOld.length === 0 && debtors.length === 0 && inactive.length === 0)
     return null;
@@ -449,7 +450,7 @@ export async function buildTodayText(
   if (debtors.length) {
     const names = debtors
       .slice(0, 3)
-      .map((d) => `${esc(d.studentName.split(" ")[0])} (${-d.balance})`)
+      .map((d) => `${esc(d.studentName.split(" ")[0])} (${d.balanceRub !== null ? debtText(d) : -d.balance})`)
       .join(", ");
     lines.push(`💸 Долги по занятиям: ${names}${debtors.length > 3 ? ` и ещё ${debtors.length - 3}` : ""}`);
   }
