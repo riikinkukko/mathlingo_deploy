@@ -10,8 +10,8 @@ import LessonDoneBanner from "@/components/LessonDoneBanner";
 import TeacherSetupChecklist from "@/components/TeacherSetupChecklist";
 import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
 import { debtText, hasDebt } from "@/lib/money";
+import { teacherPlanState, TEACHER_TIERS } from "@/lib/teacher-plan";
 
-const FREE_STUDENT_LIMIT = 3;
 // Через сколько дней без активности ученик считается "потерявшимся".
 const INACTIVE_DAYS = 3;
 
@@ -27,6 +27,7 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
   const students = await getStudentsOfTeacher(user.id);
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
+  const plan = teacherPlanState(user);
 
   const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup, groups] = await Promise.all([
     getTeacherHomeStats(user.id),
@@ -132,18 +133,29 @@ export default async function TeacherDashboard({ searchParams }: { searchParams:
           </div>
         )}
 
-        {!isOwner && !isPro && (
+        {!isOwner && (plan.source !== "paid" || Number.isFinite(plan.limit)) && (
           <a
             href="/teacher/upgrade"
-            className={`card mb-4 flex items-center justify-between p-3.5 transition hover:border-pine ${
-              students.length >= FREE_STUDENT_LIMIT ? "border-2 !border-amber bg-amber-light/40" : ""
+            className={`card mb-4 flex items-center justify-between gap-3 p-3.5 transition hover:border-pine ${
+              students.length >= plan.limit || (plan.trialDaysLeft !== null && plan.trialDaysLeft <= 3)
+                ? "border-2 !border-amber bg-amber-light/40"
+                : ""
             }`}
           >
             <p className="text-sm font-semibold text-ink">
-              Тариф: <span className="font-bold text-pine-dark">Free</span> ·{" "}
-              {students.length}/{FREE_STUDENT_LIMIT} учеников
+              {plan.source === "trial" ? (
+                <>
+                  Пробный <span className="font-bold text-pine-dark">«Профи»</span> · осталось {plan.trialDaysLeft}{" "}
+                  {pluralRu(plan.trialDaysLeft ?? 0, ["день", "дня", "дней"])}
+                </>
+              ) : (
+                <>
+                  Тариф: <span className="font-bold text-pine-dark">{plan.tier === "free" ? "Бесплатный" : TEACHER_TIERS[plan.tier].name}</span> ·{" "}
+                  {students.length}/{plan.limit} учеников
+                </>
+              )}
             </p>
-            <span className="text-xs font-bold text-pine">Подробнее →</span>
+            <span className="shrink-0 text-xs font-bold text-pine">{plan.source === "trial" ? "Тарифы →" : "Подробнее →"}</span>
           </a>
         )}
 

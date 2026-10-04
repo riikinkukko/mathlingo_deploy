@@ -107,6 +107,14 @@ export const users = pgTable("users", {
   // сверх трёх (см. addStudentAction в app/actions.ts).
   teacherPlan: planEnum("teacher_plan").notNull().default("free"),
   teacherProUntil: timestamp("teacher_pro_until", { withTimezone: true }),
+  // Какой платный тариф репетитора оплачен: 'standard' («Репетитор», до 15
+  // учеников) или 'pro' («Профи», без лимита). NULL у оплативших до появления
+  // ступеней — считается «Профи». Действует, пока teacherPlan='pro' и срок не истёк.
+  teacherTier: text("teacher_tier"),
+  // Период автопродления: 'month' | 'year'.
+  teacherBillingPeriod: text("teacher_billing_period"),
+  // Пробный «Профи» до этой даты (новым репетиторам — 14 дней, без карты).
+  teacherTrialUntil: timestamp("teacher_trial_until", { withTimezone: true }),
   // Владелец платформы (вы) — полностью вне обычной системы тарифов, а
   // не просто "вечный Pro": лимит на учеников для него не проверяется
   // вообще, ни при каких условиях. Отдельно от isAdmin (тот — про доступ
@@ -236,6 +244,9 @@ export const payments = pgTable("payments", {
   // репетитору (teacherPlan/teacherProUntil). default для обратной
   // совместимости со старыми записями (все они были student_pro).
   paymentType: text("payment_type").notNull().default("student_pro"), // student_pro | teacher_pro
+  // Для teacher_pro: какой тариф оплачен ('standard' | 'pro') и за какой период.
+  tier: text("tier"),
+  billingPeriod: text("billing_period"),
   // true — при этом платеже способ оплаты был сохранён для будущих
   // автосписаний (см. users.yookassaPaymentMethodId). false для разовых
   // ученических Pro-платежей и для платежей без явного согласия на автоплатёж.

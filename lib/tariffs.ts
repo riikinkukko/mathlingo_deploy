@@ -14,13 +14,6 @@ export function getStudentProPrice() {
   };
 }
 
-export function getTeacherProPrice() {
-  return {
-    priceRub: Number(process.env.YOOKASSA_TEACHER_PRICE_RUB || 1499),
-    periodDays: Number(process.env.YOOKASSA_TEACHER_PERIOD_DAYS || 30),
-  };
-}
-
 export const TEACHER_FREE_STUDENT_LIMIT = 3;
 
 export const STUDENT_FREE_FEATURES = [
@@ -37,9 +30,4 @@ export const STUDENT_PRO_FEATURES = [
   "Подробная аналитика по темам (в разработке)",
 ];
 
-export const TEACHER_FREE_FEATURES = [
-  `До ${TEACHER_FREE_STUDENT_LIMIT} учеников`,
-  "Весь функционал платформы без ограничений",
-];
-
-export const TEACHER_PRO_FEATURES = ["Неограниченное число учеников", "Весь функционал платформы без ограничений"];
+// Тарифы репетитора (ступени, цены, пробный период) — в lib/teacher-plan.ts.

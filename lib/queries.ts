@@ -1,6 +1,7 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { randomBytes } from "crypto";
+import { convertRemainingDays } from "./teacher-plan";
 import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays } from "./streak";
@@ -45,6 +46,9 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     passwordChangedAt: row.passwordChangedAt ? row.passwordChangedAt.toISOString() : undefined,
     teacherPlan: row.teacherPlan ?? undefined,
     teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
+    teacherTier: (row.teacherTier as "standard" | "pro" | null) ?? null,
+    teacherBillingPeriod: (row.teacherBillingPeriod as "month" | "year" | null) ?? null,
+    teacherTrialUntil: row.teacherTrialUntil ? row.teacherTrialUntil.toISOString() : undefined,
     isPlatformOwner: row.isPlatformOwner,
     yookassaPaymentMethodId: row.yookassaPaymentMethodId ?? undefined,
     yookassaCardLast4: row.yookassaCardLast4 ?? undefined,
@@ -1887,6 +1891,8 @@ export async function createPendingPayment(params: {
   periodDays: number;
   paymentType?: "student_pro" | "teacher_pro";
   isRecurringSetup?: boolean;
+  tier?: "standard" | "pro";
+  billingPeriod?: "month" | "year";
 }): Promise<string> {
   const id = genId("pay");
   await db.insert(schema.payments).values({
@@ -1898,6 +1904,8 @@ export async function createPendingPayment(params: {
     status: "pending",
     paymentType: params.paymentType ?? "student_pro",
     isRecurringSetup: params.isRecurringSetup ?? false,
+    tier: params.tier ?? null,
+    billingPeriod: params.billingPeriod ?? null,
   });
   return id;
 }
@@ -1954,16 +1962,31 @@ export async function markPaymentSucceeded(
     const user = userRows[0] ? mapUser(userRows[0]) : undefined;
 
     if (payment.paymentType === "teacher_pro") {
-      const base =
-        user && user.teacherProUntil && new Date(user.teacherProUntil).getTime() > Date.now()
-          ? new Date(user.teacherProUntil)
-          : new Date();
-      const teacherProUntil = new Date(base.getTime() + payment.periodDays * 86400 * 1000);
+      // Старые платежи (до ступеней) — «Профи» на месяц.
+      const tier = (payment.tier as "standard" | "pro" | null) ?? "pro";
+      const period = (payment.billingPeriod as "month" | "year" | null) ?? "month";
+      const now = Date.now();
+      const active = !!user && user.teacherPlan === "pro" && !!user.teacherProUntil && new Date(user.teacherProUntil).getTime() > now;
+      const prevTier = (user?.teacherTier as "standard" | "pro" | null) ?? "pro";
+      const prevPeriod = (user?.teacherBillingPeriod as "month" | "year" | null) ?? "month";
+      let base = now;
+      if (active) {
+        const remaining = new Date(user!.teacherProUntil!).getTime() - now;
+        // Тот же тариф — просто продлеваем; другой — остаток пересчитывается
+        // в дни нового тарифа по цене за день (ничего не сгорает).
+        base =
+          prevTier === tier && prevPeriod === period
+            ? now + remaining
+            : now + convertRemainingDays(remaining, { tier: prevTier, period: prevPeriod }, { tier, period }) * 86_400_000;
+      }
+      const teacherProUntil = new Date(base + payment.periodDays * 86400 * 1000);
       await tx
         .update(schema.users)
         .set({
           teacherPlan: "pro",
           teacherProUntil,
+          teacherTier: tier,
+          teacherBillingPeriod: period,
           ...(savedMethod && payment.isRecurringSetup
             ? {
                 yookassaPaymentMethodId: savedMethod.id,

@@ -49,6 +49,8 @@ const config: Config = {
       fontFamily: {
         display: ["Nunito", "system-ui", "sans-serif"],
         sans: ["Nunito", "system-ui", "sans-serif"],
+        // «красная ручка репетитора» — только для пометок на лендинге
+        hand: ["Caveat", "cursive"],
         mono: [
           "ui-monospace",
           "SFMono-Regular",

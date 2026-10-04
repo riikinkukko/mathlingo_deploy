@@ -32,6 +32,9 @@ export interface User {
   passwordChangedAt?: string;
   teacherPlan?: "free" | "pro";
   teacherProUntil?: string;
+  teacherTier?: "standard" | "pro" | null;
+  teacherBillingPeriod?: "month" | "year" | null;
+  teacherTrialUntil?: string;
   isPlatformOwner?: boolean;
   yookassaPaymentMethodId?: string;
   yookassaCardLast4?: string;

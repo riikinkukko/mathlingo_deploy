@@ -4,13 +4,18 @@ import { getStudentsOfTeacher, isTeacherEffectivelyPro } from "@/lib/queries";
 import { isYooKassaConfigured } from "@/lib/yookassa";
 import TeacherShell from "@/components/TeacherShell";
 import Mascot from "@/components/Mascot";
-import TeacherUpgradeForm from "./TeacherUpgradeForm";
 import TeacherSubscriptionCard from "./TeacherSubscriptionCard";
-import { getTeacherProPrice } from "@/lib/tariffs";
-import TrackGoal from "@/components/TrackGoal";
-import { IconCheck, IconCrown } from "@/components/icons";
+import TeacherPlanPicker from "@/components/TeacherPlanPicker";
+import { TEACHER_FREE_LIMIT, TEACHER_TIERS, teacherPlanState } from "@/lib/teacher-plan";
+import { pluralRu } from "@/lib/pluralize";
 
-const FREE_STUDENT_LIMIT = 3;
+function fmtDate(d: Date | null) {
+  if (!d) return "—";
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", ...(sameYear ? {} : { year: "numeric" }) });
+}
+import TrackGoal from "@/components/TrackGoal";
+
 
 export default async function TeacherUpgradePage({
   searchParams,
@@ -24,7 +29,9 @@ export default async function TeacherUpgradePage({
   const isPro = isTeacherEffectivelyPro(user);
   const isOwner = !!user.isPlatformOwner;
   const realPayments = isYooKassaConfigured();
-  const { priceRub, periodDays } = getTeacherProPrice();
+  const plan = teacherPlanState(user);
+  // Оплатил до появления ступеней (тариф не указан) — продлится как «Профи», дешевле.
+  const legacyPayer = isPro && !user.teacherTier && !!user.yookassaPaymentMethodId;
 
   return (
     <TeacherShell active="upgrade" title="Тариф">
@@ -60,13 +67,39 @@ export default async function TeacherUpgradePage({
             </div>
           ) : (
             <>
-              <div className="card mb-6 p-5 text-center">
-                <p className="text-sm font-bold text-ink-soft">Учеников сейчас</p>
-                <p className="mt-1 font-display text-3xl font-black text-teal">
-                  {students.length}
-                  {!isPro && <span className="text-lg text-ink-soft"> / {FREE_STUDENT_LIMIT}</span>}
+              <div className="card mb-6 p-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="font-display text-lg font-black text-ink">
+                    {plan.source === "trial"
+                      ? `Пробный «Профи»: осталось ${plan.trialDaysLeft} ${pluralRu(plan.trialDaysLeft ?? 0, ["день", "дня", "дней"])}`
+                      : plan.source === "paid"
+                        ? `Тариф «${TEACHER_TIERS[plan.paidTier ?? "pro"].name}»`
+                        : "Бесплатный тариф"}
+                  </p>
+                  <p className="text-sm font-bold text-ink-soft">
+                    Учеников: {students.length}
+                    {Number.isFinite(plan.limit) ? ` из ${plan.limit}` : ""}
+                  </p>
+                </div>
+                <p className="mt-1 text-[13px] text-ink-soft">
+                  {plan.source === "trial"
+                    ? `До ${fmtDate(plan.until)} — без лимита учеников и со всеми функциями. Потом: бесплатно до ${TEACHER_FREE_LIMIT} учеников или тариф ниже. Ничего не удалится.`
+                    : plan.source === "paid"
+                      ? plan.until
+                        ? `${user.yookassaPaymentMethodId ? "Следующее списание" : "Оплачено до"} ${fmtDate(plan.until)}${
+                            user.teacherBillingPeriod ? ` · ${user.teacherBillingPeriod === "year" ? "за год" : "помесячно"}` : ""
+                          }.`
+                        : "Бессрочно."
+                      : students.length > TEACHER_FREE_LIMIT
+                        ? `У вас ${students.length} учеников — все остаются с вами, но добавить новых можно только на платном тарифе.`
+                        : `Бесплатно можно вести до ${TEACHER_FREE_LIMIT} учеников со всеми функциями.`}
                 </p>
-                {isPro && <p className="mt-1 text-xs text-pine-dark">Без ограничений — тариф активен</p>}
+                {legacyPayer && (
+                  <p className="mt-3 rounded-xl bg-pine-light px-3 py-2 text-[13px] font-bold text-pine-dark">
+                    Ваш тариф теперь называется «Профи» и стал дешевле: следующее списание — {TEACHER_TIERS.pro.month.toLocaleString("ru-RU")} ₽
+                    вместо 1 499 ₽.
+                  </p>
+                )}
               </div>
 
               {isPro && user.yookassaPaymentMethodId && (
@@ -77,51 +110,15 @@ export default async function TeacherUpgradePage({
                 />
               )}
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className={`card p-5 ${!isPro ? "border-2 !border-pine" : ""}`}>
-                  <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">Free</p>
-                  <p className="mb-3 font-display text-xl font-black text-ink">0 ₽</p>
-                  <ul className="space-y-2 text-sm text-ink-soft">
-                    <li className="flex items-start gap-2">
-                      <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" />
-                      До {FREE_STUDENT_LIMIT} учеников
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-ink-soft" />
-                      Весь функционал платформы без ограничений
-                    </li>
-                  </ul>
-                </div>
-
-                <div className={`card p-5 ${isPro ? "border-2 !border-amber" : ""} bg-gradient-to-br from-amber-light to-white`}>
-                  <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-amber">
-                    <IconCrown className="h-4 w-4" />
-                    Pro
-                  </p>
-                  <p className="mb-3 font-display text-xl font-black text-ink">
-                    {priceRub} ₽ / {periodDays} дн.
-                    {!realPayments && (
-                      <span className="ml-1 text-xs font-semibold text-ink-soft">(демо-режим оплаты)</span>
-                    )}
-                  </p>
-                  <ul className="space-y-2 text-sm text-ink-soft">
-                    <li className="flex items-start gap-2">
-                      <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-                      Неограниченное число учеников
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <IconCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-                      Автопродление каждые {periodDays} дней — платить вручную не нужно
-                    </li>
-                  </ul>
-                  {!isPro && realPayments && <TeacherUpgradeForm priceRub={priceRub} periodDays={periodDays} />}
-                </div>
-              </div>
+              {!realPayments && (
+                <p className="mb-3 text-center text-xs font-semibold text-ink-soft">Демо-режим: оплата не подключена.</p>
+              )}
+              <TeacherPlanPicker mode="buy" current={plan.paidTier ?? "free"} realPayments={realPayments} />
 
               <p className="mt-6 text-center text-xs text-ink-soft">
-                Оплата через ЮKassa — автоматическое продление каждые {periodDays} дней
-                до отмены. Отменить можно самостоятельно в любой момент — карточка со
-                способом оплаты появится здесь после первой оплаты.
+                Оплата через ЮKassa с автопродлением до отмены. Отменить можно самостоятельно в любой момент — карточка
+                со способом оплаты появится здесь после первой оплаты. При смене тарифа неиспользованные дни
+                пересчитываются в дни нового тарифа — ничего не сгорает.
               </p>
             </>
           )}

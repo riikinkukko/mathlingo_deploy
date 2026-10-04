@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { isStandaloneStudent, createPendingPayment, genId } from "@/lib/queries";
 import { createYooKassaPayment, isYooKassaConfigured } from "@/lib/yookassa";
+import { TEACHER_TIERS, isBillingPeriod, isTeacherTier, periodDays, tierPrice } from "@/lib/teacher-plan";
 
 // Цена и период по умолчанию — можно поменять без деплоя кода через
 // переменные окружения, если решите пересмотреть тариф.
@@ -11,8 +12,7 @@ const PRICE_RUB = Number(process.env.YOOKASSA_PRICE_RUB || 249);
 const PERIOD_DAYS = Number(process.env.YOOKASSA_PERIOD_DAYS || 30);
 
 // Тариф репетитора — отдельная цена/период, тоже настраиваемые без деплоя.
-const TEACHER_PRICE_RUB = Number(process.env.YOOKASSA_TEACHER_PRICE_RUB || 1499);
-const TEACHER_PERIOD_DAYS = Number(process.env.YOOKASSA_TEACHER_PERIOD_DAYS || 30);
+// Цены тарифов репетитора — в lib/teacher-plan.ts (ступени и периоды).
 
 export async function startPaymentAction() {
   const user = await getSessionUser();
@@ -77,6 +77,12 @@ export async function startTeacherPaymentAction(_prevState: unknown, formData: F
   if (consent !== "on") {
     return { error: "Нужно согласиться на условия автопродления, чтобы продолжить" };
   }
+  const tier = formData.get("tier");
+  const period = formData.get("period");
+  if (!isTeacherTier(tier) || !isBillingPeriod(period)) return { error: "Выберите тариф и период" };
+  const amountRub = tierPrice(tier, period);
+  const days = periodDays(period);
+  const tierName = TEACHER_TIERS[tier].name;
   if (!isYooKassaConfigured()) {
     redirect("/teacher/upgrade?error=payment_not_configured");
   }
@@ -87,20 +93,22 @@ export async function startTeacherPaymentAction(_prevState: unknown, formData: F
   let confirmationUrl: string;
   try {
     const payment = await createYooKassaPayment({
-      amountRub: TEACHER_PRICE_RUB,
-      description: `Планиметрика для репетитора — ${TEACHER_PERIOD_DAYS} дней`,
+      amountRub,
+      description: `Планиметрика для репетитора — тариф «${tierName}», ${period === "year" ? "год" : "месяц"}`,
       returnUrl: `${appUrl}/teacher/upgrade?paid=1`,
       idempotenceKey,
-      metadata: { userId: user!.id, type: "teacher_pro" },
+      metadata: { userId: user!.id, type: "teacher_pro", tier, period },
       savePaymentMethod: true,
     });
     await createPendingPayment({
       userId: user!.id,
       yookassaPaymentId: payment.id,
-      amountRub: TEACHER_PRICE_RUB,
-      periodDays: TEACHER_PERIOD_DAYS,
+      amountRub,
+      periodDays: days,
       paymentType: "teacher_pro",
       isRecurringSetup: true,
+      tier,
+      billingPeriod: period,
     });
     confirmationUrl = payment.confirmationUrl;
   } catch (e) {

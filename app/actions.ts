@@ -62,6 +62,7 @@ import { AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
+import { isTeacherPaidActive, teacherPlanState, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -330,9 +331,8 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   // Владелец платформы (isPlatformOwner) вне этого лимита вообще, как и
   // репетитор с активным teacherPlan='pro'. teacherProUntil===undefined
   // (выдано вручную из /admin бессрочно) тоже считается активным.
-  const isTeacherProActive =
-    teacher.teacherPlan === "pro" &&
-    (!teacher.teacherProUntil || new Date(teacher.teacherProUntil).getTime() > Date.now());
+  const isTeacherProActive = isTeacherPaidActive(teacher);
+  const plan = teacherPlanState(teacher);
   // Анти-абуз: бесплатные места для учеников — только после подтверждения
   // email. Иначе 10 аккаунтов на выдуманные адреса = 30 бесплатных мест.
   // Платящий репетитор и владелец платформы не затрагиваются.
@@ -342,12 +342,18 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
         "Чтобы добавлять учеников, подтвердите email — ссылка в письме после регистрации. Письмо можно отправить ещё раз вверху страницы.",
     };
   }
-  if (!teacher.isPlatformOwner && !isTeacherProActive) {
+  // Лимит учеников по тарифу: бесплатно 3, «Репетитор» 15, «Профи» и
+  // пробный период — без лимита. Уже добавленные ученики не отключаются.
+  if (Number.isFinite(plan.limit)) {
     const currentStudents = await getStudentsOfTeacher(teacher.id);
-    if (currentStudents.length >= 3) {
+    if (currentStudents.length >= plan.limit) {
       return {
+        limit: true as const,
+        current: currentStudents.length,
         error:
-          "На бесплатном тарифе можно добавить до 3 учеников. Чтобы добавить больше — оформите тариф репетитора.",
+          plan.tier === "free"
+            ? `На бесплатном тарифе — до ${plan.limit} учеников. Чтобы добавить ещё, выберите тариф.`
+            : `На тарифе «${TEACHER_TIERS[plan.tier].name}» — до ${plan.limit} учеников. Для большего числа — «Профи».`,
       };
     }
   }
@@ -742,6 +748,8 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
     passwordHash: await hashPassword(password),
     role: "TEACHER" as Role,
     consentGivenAt: new Date(),
+    // 14 дней «Профи» без карты: завести всех учеников и попробовать всё.
+    teacherTrialUntil: new Date(Date.now() + TEACHER_TRIAL_DAYS * 86_400_000),
     // teacherPlan по умолчанию 'free' — до 3 учеников бесплатно (лимит
     // проверяется в addStudentAction), дальше нужен платный тариф.
     // isPlatformOwner НЕ проставляем здесь никогда — этот флаг выдаётся

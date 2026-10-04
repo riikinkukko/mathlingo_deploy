@@ -15,7 +15,7 @@ function SubmitButton() {
 
 export default function AddStudentForm() {
   const [state, formAction] = useFormState<
-    { error?: string; success?: boolean; password?: string; email?: string; name?: string; studentId?: string },
+    { error?: string; limit?: boolean; success?: boolean; password?: string; email?: string; name?: string; studentId?: string },
     FormData
   >(addStudentAction, {});
 
@@ -50,7 +50,17 @@ export default function AddStudentForm() {
         </span>
       </label>
       {state?.error && (
-        <p className="rounded-lg bg-coral-light px-3 py-2 text-sm text-coral">{state.error}</p>
+        <p className="rounded-lg bg-coral-light px-3 py-2 text-sm text-coral">
+          {state.error}
+          {state.limit && (
+            <>
+              {" "}
+              <a href="/teacher/upgrade" className="font-black underline">
+                Выбрать тариф →
+              </a>
+            </>
+          )}
+        </p>
       )}
       <SubmitButton />
     </form>

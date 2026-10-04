@@ -4,8 +4,7 @@ import { createRecurringYooKassaPayment, isYooKassaConfigured } from "@/lib/yook
 
 export const dynamic = "force-dynamic";
 
-const TEACHER_PRICE_RUB = Number(process.env.YOOKASSA_TEACHER_PRICE_RUB || 1499);
-const TEACHER_PERIOD_DAYS = Number(process.env.YOOKASSA_TEACHER_PERIOD_DAYS || 30);
+import { TEACHER_TIERS, periodDays, tierPrice } from "@/lib/teacher-plan";
 
 /**
  * Вызывается системным cron на сервере раз в день (см. README — команда
@@ -38,9 +37,15 @@ export async function GET(req: Request) {
   const results = await Promise.allSettled(
     teachers.map(async (teacher) => {
       const idempotenceKey = `renewal-${teacher.id}-${today}`;
+      // Продлеваем тот тариф и период, что оплачен. Оплатившие до ступеней
+      // (tier не указан) продлеваются как «Профи» на месяц — дешевле, чем было.
+      const tier = teacher.teacherTier ?? "pro";
+      const period = teacher.teacherBillingPeriod ?? "month";
+      const amountRub = tierPrice(tier, period);
+      const days = periodDays(period);
       const payment = await createRecurringYooKassaPayment({
-        amountRub: TEACHER_PRICE_RUB,
-        description: `Планиметрика для репетитора — автопродление ${TEACHER_PERIOD_DAYS} дней`,
+        amountRub,
+        description: `Планиметрика для репетитора — автопродление тарифа «${TEACHER_TIERS[tier].name}», ${period === "year" ? "год" : "месяц"}`,
         paymentMethodId: teacher.yookassaPaymentMethodId!,
         idempotenceKey,
         metadata: { userId: teacher.id, type: "teacher_pro_renewal" },
@@ -48,9 +53,11 @@ export async function GET(req: Request) {
       await createPendingPayment({
         userId: teacher.id,
         yookassaPaymentId: payment.id,
-        amountRub: TEACHER_PRICE_RUB,
-        periodDays: TEACHER_PERIOD_DAYS,
+        amountRub,
+        periodDays: days,
         paymentType: "teacher_pro",
+        tier,
+        billingPeriod: period,
         // isRecurringSetup здесь НЕ true — это не первичная настройка
         // автосписания (она уже есть), просто очередной платёж по уже
         // сохранённому способу оплаты.

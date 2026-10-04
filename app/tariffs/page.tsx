@@ -1,14 +1,9 @@
 import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
 import { IconCheck, IconCrown } from "@/components/icons";
-import {
-  getStudentProPrice,
-  getTeacherProPrice,
-  STUDENT_FREE_FEATURES,
-  STUDENT_PRO_FEATURES,
-  TEACHER_FREE_FEATURES,
-  TEACHER_PRO_FEATURES,
-} from "@/lib/tariffs";
+import { getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_PRO_FEATURES } from "@/lib/tariffs";
+import TeacherPlanPicker from "@/components/TeacherPlanPicker";
+import { TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
 export const metadata = { title: "Тарифы — Планиметрика" };
 // Цены берутся из переменных окружения на сервере — страница не должна
@@ -36,7 +31,6 @@ function FeatureList({ items, accent }: { items: string[]; accent?: boolean }) {
 
 export default function TariffsPage() {
   const student = getStudentProPrice();
-  const teacher = getTeacherProPrice();
 
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
@@ -80,29 +74,14 @@ export default function TariffsPage() {
 
         <section className="mb-10">
           <h2 className="mb-1 font-display text-xl font-black text-ink">Для репетиторов</h2>
-          <p className="mb-4 text-sm text-ink-soft">Кабинет для ведения учеников: домашние задания, журнал, прогресс.</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="card p-5">
-              <p className="mb-1 text-xs font-extrabold uppercase tracking-wide text-ink-soft">Free</p>
-              <p className="mb-3 font-display text-xl font-black text-ink">0 ₽</p>
-              <FeatureList items={TEACHER_FREE_FEATURES} />
-            </div>
-            <div className="card bg-gradient-to-br from-amber-light to-white p-5">
-              <p className="mb-1 flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-amber">
-                <IconCrown className="h-4 w-4" /> Pro
-              </p>
-              <p className="mb-3 font-display text-xl font-black text-ink">
-                {teacher.priceRub} ₽ / {teacher.periodDays} дн.
-              </p>
-              <FeatureList items={TEACHER_PRO_FEATURES} accent />
-              <p className="mt-4 rounded-xl bg-white/70 p-3 text-xs text-ink-soft">
-                <strong className="text-ink">Подписка с автопродлением.</strong>{" "}
-                При оформлении вы даёте отдельное согласие на автоматическое
-                списание {teacher.priceRub} ₽ каждые {teacher.periodDays} дней с
-                привязанной банковской карты до момента отмены подписки.
-              </p>
-            </div>
-          </div>
+          <p className="mb-4 text-sm text-ink-soft">Кабинет для ведения учеников: расписание, оплаты, группы, домашние задания, проверка, прогресс.</p>
+          <TeacherPlanPicker mode="public" />
+          <p className="mt-4 rounded-xl bg-white p-3 text-xs text-ink-soft">
+            <strong className="text-ink">Подписка с автопродлением.</strong> Новым репетиторам — {TEACHER_TRIAL_DAYS} дней
+            тарифа «Профи» бесплатно, без привязки карты. При оформлении платного тарифа вы даёте отдельное согласие
+            на автоматическое списание выбранной суммы каждые 30 дней (помесячно) или каждые 365 дней (за год) с
+            привязанной банковской карты до момента отмены подписки.
+          </p>
         </section>
 
         <section className="card mb-6 p-5 text-sm leading-relaxed text-ink-soft">
