@@ -101,10 +101,8 @@ export async function deleteMockScoreAction(formData: FormData) {
   const teacher = await getSessionUser();
   const id = String(formData.get("mockId") || "");
   const mock = await getMockScoreById(id);
-  const back = mock ? `/teacher/student/${mock.studentId}` : "/teacher";
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!mock || mock.teacherId !== teacher.id) redirect(`${back}?error=1`);
+  if (!teacher || teacher.role !== "TEACHER" || !mock || mock.teacherId !== teacher.id) redirect("/teacher?error=1");
+  const back = `/teacher/student/${mock.studentId}`;
 
   await db.delete(schema.mockScores).where(eq(schema.mockScores.id, id));
   revalidateStudent(mock.studentId);

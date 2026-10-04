@@ -1,5 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
+import { randomBytes } from "crypto";
 import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays } from "./streak";
@@ -682,10 +683,42 @@ export async function getUnmarkedPastLessons(
   return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
 }
 
-/** Ближайшие запланированные занятия репетитора (со всеми учениками). */
+/** Ближайшие запланированные занятия репетитора (со всеми учениками).
+ * limit — в ЗАНЯТИЯХ, а не строках: у группового занятия строка на каждого
+ * ученика, и обрезка по строкам оставила бы последнюю группу «неполной». */
 export async function getUpcomingLessonsForTeacher(
   teacherId: string,
   limit = 20
+): Promise<import("./types").ScheduledLessonWithStudent[]> {
+  const planned = and(
+    eq(schema.scheduledLessons.teacherId, teacherId),
+    eq(schema.scheduledLessons.status, "planned"),
+    gte(schema.scheduledLessons.startsAt, new Date())
+  );
+  const lessonKey = sql<string>`coalesce(${schema.scheduledLessons.groupLessonId}, ${schema.scheduledLessons.id})`;
+  const keys = await db
+    .select({ key: lessonKey, first: sql`min(${schema.scheduledLessons.startsAt})` })
+    .from(schema.scheduledLessons)
+    .where(planned)
+    .groupBy(lessonKey)
+    .orderBy(sql`min(${schema.scheduledLessons.startsAt})`)
+    .limit(limit);
+  if (keys.length === 0) return [];
+  const rows = await db
+    .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
+    .where(and(planned, inArray(lessonKey, keys.map((k) => k.key))))
+    .orderBy(asc(schema.scheduledLessons.startsAt), asc(schema.users.name));
+  return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
+}
+
+/** Занятия репетитора за промежуток (для сетки на неделю): кроме отменённых. */
+export async function getLessonsForTeacherRange(
+  teacherId: string,
+  from: Date,
+  to: Date
 ): Promise<import("./types").ScheduledLessonWithStudent[]> {
   const rows = await db
     .select({ lesson: schema.scheduledLessons, studentName: schema.users.name, groupName: schema.studentGroups.name })
@@ -695,12 +728,12 @@ export async function getUpcomingLessonsForTeacher(
     .where(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
-        eq(schema.scheduledLessons.status, "planned"),
-        gte(schema.scheduledLessons.startsAt, new Date())
+        sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        gte(schema.scheduledLessons.startsAt, from),
+        sql`${schema.scheduledLessons.startsAt} < ${to}`
       )
     )
-    .orderBy(asc(schema.scheduledLessons.startsAt))
-    .limit(limit);
+    .orderBy(asc(schema.scheduledLessons.startsAt), asc(schema.users.name));
   return rows.map((r) => ({ ...mapScheduledLesson(r.lesson), studentName: r.studentName, groupName: r.groupName }));
 }
 
@@ -1576,6 +1609,21 @@ export async function getHomeworksForStudent(studentId: string): Promise<Homewor
  * - уроки/повторение: Free-самостоятельному — только навыки, доступные на
  *   Free, и без развёрнутых (DETAILED) задач. Ученикам репетитора и Pro — всё.
  */
+/** Программа для ученика: Free-ученику без теории закрытых навыков
+ * (структура видна, содержание — нет). Общая для всех API. */
+export function gateCurriculumForUser(user: User, curriculum: Awaited<ReturnType<typeof getCurriculum>>) {
+  if (!(user.role === "STUDENT" && isStandaloneStudent(user) && !isEffectivelyPro(user))) return curriculum;
+  return curriculum.map((t) => ({
+    ...t,
+    chapters: t.chapters.map((c) => ({
+      ...c,
+      skills: c.skills.map((sk) =>
+        isSkillAccessibleOnFree(sk, c.chapter.order, c.skills) ? sk : { ...sk, theoryCards: [], locked: true }
+      ),
+    })),
+  }));
+}
+
 export async function canStudentAccessProblem(
   user: User,
   problem: { id: string; skillId?: string; answerType: string },
@@ -1586,9 +1634,20 @@ export async function canStudentAccessProblem(
     const assignments = await getHomeworksForStudent(user.id);
     return assignments.some((h) => h.problemIds.includes(problem.id));
   }
+  // Авторская задача репетитора (без навыка) доступна только из задания или
+  // из повторения, если ученик уже решал её там; в уроке — нет.
+  if (!problem.skillId) {
+    if (source !== "review") return false;
+    const srs = await db
+      .select({ p: schema.srsStates.problemId })
+      .from(schema.srsStates)
+      .where(and(eq(schema.srsStates.studentId, user.id), eq(schema.srsStates.problemId, problem.id)))
+      .limit(1);
+    return srs.length > 0;
+  }
   const isFreeStandalone = isStandaloneStudent(user) && !isEffectivelyPro(user);
   if (!isFreeStandalone) return true;
-  if (problem.answerType === "DETAILED" || !problem.skillId) return false;
+  if (problem.answerType === "DETAILED") return false;
   const skillRows = await db.select().from(schema.skills).where(eq(schema.skills.id, problem.skillId)).limit(1);
   const skill = skillRows[0];
   if (!skill) return false;
@@ -2110,7 +2169,9 @@ export async function deleteProblemSafely(problemId: string): Promise<boolean> {
 // ---------- Генератор id (заменяет genId из старого lib/db.ts) ----------
 
 export function genId(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+  // Случайная часть — из криптостойкого генератора: id видны в ссылках и формах,
+  // их не должно быть возможно подобрать.
+  return `${prefix}_${Date.now().toString(36)}${randomBytes(6).toString("hex")}`;
 }
 
 // ---------- Прямые точечные запросы, которые раньше делали readDB() ----------

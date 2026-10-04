@@ -105,7 +105,7 @@ export async function createLessonAction(
 
   const startsAt = parseMskDateTime(String(formData.get("startsAt") || ""));
   const durationMin = Math.max(15, Math.min(300, Number(formData.get("durationMin")) || 60));
-  const topic = String(formData.get("topic") || "").trim() || null;
+  const topic = String(formData.get("topic") || "").trim().slice(0, 200) || null;
 
   if (!startsAt) return { error: "Укажите дату и время занятия" };
 
@@ -175,10 +175,10 @@ export async function setLessonStatusAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!lesson || lesson.teacherId !== teacher.id) redirect(`${back}?error=1`);
+  // Сначала проверка владельца, потом адрес возврата: иначе по чужому id
+  // занятия в редиректе «утекали» бы id ученика/группы.
+  if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) redirect("/teacher/schedule?error=1");
+  const back = backTo(from, lesson.studentId, lesson.groupId);
   if (status !== "done" && status !== "cancelled") redirect(`${back}?error=1`);
 
   // Та же логика, что у кнопок «Было / Не было» в Telegram.
@@ -197,10 +197,10 @@ export async function deleteLessonAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!lesson || lesson.teacherId !== teacher.id) redirect(`${back}?error=1`);
+  // Сначала проверка владельца, потом адрес возврата: иначе по чужому id
+  // занятия в редиректе «утекали» бы id ученика/группы.
+  if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) redirect("/teacher/schedule?error=1");
+  const back = backTo(from, lesson.studentId, lesson.groupId);
 
   // wholeGroup — удалить занятие у всей группы (из общего расписания);
   // со страницы ученика удаляется только его строка.
@@ -211,7 +211,9 @@ export async function deleteLessonAction(formData: FormData) {
       wholeGroup
         ? and(
             eq(schema.scheduledLessons.groupLessonId, lesson.groupLessonId!),
-            eq(schema.scheduledLessons.teacherId, teacher.id)
+            eq(schema.scheduledLessons.teacherId, teacher.id),
+            // Отмеченные строки остаются: от «было» зависит баланс оплат.
+            eq(schema.scheduledLessons.status, "planned")
           )
         : eq(schema.scheduledLessons.id, lessonId)
     );
@@ -234,10 +236,9 @@ export async function deleteLessonSeriesFromAction(formData: FormData) {
   const from = String(formData.get("from") || "schedule");
 
   const lesson = await getScheduledLessonById(lessonId);
-  const back = backTo(from, lesson?.studentId || "", lesson?.groupId);
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!lesson || lesson.teacherId !== teacher.id || !lesson.seriesId) redirect(`${back}?error=1`);
+  if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) redirect("/teacher/schedule?error=1");
+  const back = backTo(from, lesson.studentId, lesson.groupId);
+  if (!lesson.seriesId) redirect(`${back}?error=1`);
 
   // У групповой серии общий seriesId на всех учеников: со страницы ученика
   // удаляем серию только у него, из расписания/группы — у всей группы.
@@ -271,6 +272,9 @@ export async function setGroupLessonStatusAction(formData: FormData) {
   const mode = String(formData.get("mode") || "");
   const from = String(formData.get("from") || "schedule");
   const present = new Set(formData.getAll("present").map(String));
+  // Отмечаем только те строки, что были в форме (и ещё не отмечены): иначе
+  // ученик, которого уже отметили на его странице, затёрся бы в «не было».
+  const lessonIds = new Set(formData.getAll("lessonIds").map(String).slice(0, 100));
 
   const rows = groupLessonId
     ? await db
@@ -278,15 +282,15 @@ export async function setGroupLessonStatusAction(formData: FormData) {
         .from(schema.scheduledLessons)
         .where(eq(schema.scheduledLessons.groupLessonId, groupLessonId))
     : [];
-  const back = backTo(from, "", rows[0]?.groupId);
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (rows.length === 0 || rows.some((r) => r.teacherId !== teacher.id)) redirect(`${back}?error=1`);
+  if (!teacher || teacher.role !== "TEACHER" || rows.length === 0 || rows.some((r) => r.teacherId !== teacher.id))
+    redirect("/teacher/schedule?error=1");
+  const back = backTo(from, "", rows[0].groupId);
   if (mode !== "attendance" && mode !== "cancel") redirect(`${back}?error=1`);
 
   for (const r of rows) {
+    if (!lessonIds.has(r.id)) continue;
     const status = mode === "attendance" && present.has(r.studentId) ? "done" : "cancelled";
-    await applyLessonStatus(teacher.id, r.id, status);
+    await applyLessonStatus(teacher.id, r.id, status, { onlyIfPlanned: true });
     revalidatePath(`/teacher/student/${r.studentId}`);
   }
 

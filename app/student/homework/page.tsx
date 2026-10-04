@@ -66,6 +66,7 @@ export default async function HomeworkListPage() {
               const st = statusById.get(hw.id)!;
               const meta = KIND_META[hw.kind] ?? KIND_META.homework;
               const due = new Date(hw.dueDate).toLocaleDateString("ru-RU", {
+                timeZone: "Europe/Moscow",
                 day: "numeric",
                 month: "long",
               });

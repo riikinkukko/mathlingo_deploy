@@ -371,7 +371,7 @@ export default async function StudentDetailPage({
                     </p>
                     <p className="text-sm font-semibold text-ink">{hw.title}</p>
                     <p className="text-xs text-ink-soft">
-                      Срок: {new Date(hw.dueDate).toLocaleDateString("ru-RU")}
+                      Срок: {new Date(hw.dueDate).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}
                       {st.overdue && <span className="ml-2 text-coral">просрочено</span>}
                     </p>
                   </div>

@@ -1,11 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
-import { genId, getProblem, getUserById, pushNotification } from "@/lib/queries";
+import { canStudentAccessProblem, genId, getProblem, getUserById, pushNotification } from "@/lib/queries";
 import { cleanImageDataUrl } from "@/lib/image-data";
 
 const MAX_MESSAGE = 1000;
@@ -27,10 +27,17 @@ export async function askTeacherAction(
 ): Promise<{ ok: true } | { error: string }> {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT" || !user.teacherId) return { error: "Вопрос можно задать только своему репетитору" };
+  if (typeof problemId !== "string" || typeof message !== "string") return { error: "Некорректный запрос" };
   const problem = await getProblem(problemId);
   if (!problem) return { error: "Задача не найдена" };
+  // Только по задаче, которую ученик и так может открыть (иначе по id можно
+  // было бы вытащить текст любой задачи в уведомление).
+  const allowed =
+    (await canStudentAccessProblem(user, problem, "lesson")) ||
+    (await canStudentAccessProblem(user, problem, "assignment"));
+  if (!allowed) return { error: "Задача недоступна" };
   const text = message.trim().slice(0, MAX_MESSAGE);
-  const answer = studentAnswer.trim().slice(0, 300) || null;
+  const answer = (typeof studentAnswer === "string" ? studentAnswer : "").trim().slice(0, 300) || null;
   // Снимок черновика: только JPEG/PNG data URL разумного размера.
   const sketchVal = cleanImageDataUrl(sketch);
 
@@ -45,6 +52,15 @@ export async function askTeacherAction(
       )
     )
     .limit(1);
+
+  if (!open[0]) {
+    // Не больше 20 новых вопросов в сутки — чтобы не засыпать репетитора в Telegram.
+    const [{ n }] = (
+      await db.execute(sql`select count(*)::int as n from student_questions
+        where student_id = ${user.id} and created_at > now() - interval '24 hours'`)
+    ).rows as { n: number }[];
+    if (Number(n) >= 20) return { error: "Сегодня уже много вопросов — репетитор ответит на них, потом задай новые" };
+  }
 
   let id: string;
   if (open[0]) {

@@ -23,6 +23,10 @@ export default function GroupLessonActions({
   tone?: "light" | "dark";
 }) {
   const [open, setOpen] = useState(false);
+  // Отмечаем только ещё не отмеченных: уже отмеченных (на странице ученика)
+  // форма не трогает.
+  const allMembers = members;
+  members = members.filter((m) => m.status === "planned");
   const [present, setPresent] = useState<Set<string>>(() => new Set(members.map((m) => m.studentId)));
   const toggle = (id: string) =>
     setPresent((prev) => {
@@ -36,6 +40,9 @@ export default function GroupLessonActions({
     <>
       <input type="hidden" name="groupLessonId" value={groupLessonId} />
       <input type="hidden" name="from" value={from} />
+      {members.map((m) => (
+        <input key={m.lessonId} type="hidden" name="lessonIds" value={m.lessonId} />
+      ))}
     </>
   );
   const big = tone === "dark";
@@ -53,7 +60,7 @@ export default function GroupLessonActions({
               : "h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
           }
         >
-          {past || big ? "Было…" : "Провести…"}
+          {past ? "Было…" : "Провести…"}
         </button>
         <form action={setGroupLessonStatusAction}>
           {hidden}
@@ -66,7 +73,7 @@ export default function GroupLessonActions({
                 : "h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
             }
           >
-            {past || big ? "Не было" : "Отменить"}
+            {past ? "Не было" : "Отменить"}
           </button>
         </form>
       </div>
@@ -78,6 +85,11 @@ export default function GroupLessonActions({
       {hidden}
       <input type="hidden" name="mode" value="attendance" />
       <p className="mb-2 text-[13px] font-extrabold text-ink">Кто был на занятии?</p>
+      {allMembers.length > members.length && (
+        <p className="mb-2 text-[12px] text-ink-soft">
+          Уже отмечены: {allMembers.filter((m) => m.status !== "planned").map((m) => m.studentName.split(" ")[0]).join(", ")}
+        </p>
+      )}
       <div className="space-y-1.5">
         {members.map((m) => (
           <label

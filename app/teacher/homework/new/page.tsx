@@ -9,6 +9,7 @@ import SelectedSubmitBar from "./SelectedSubmitBar";
 import QuickHomework from "@/components/QuickHomework";
 import { weakSpotsSummary, availableExamNumbers } from "@/lib/quick-homework";
 import { getGroupForTeacher } from "@/lib/groups";
+import { addDaysKey, mskDayKey } from "@/lib/lesson-time";
 
 export default async function NewHomeworkPage({
   searchParams,
@@ -41,9 +42,8 @@ export default async function NewHomeworkPage({
       allSkillsFlat.map(async (skill) => [skill.id, await getProblemsForSkill(skill.id, true)] as const)
     )
   );
-  const defaultDue = new Date();
-  defaultDue.setDate(defaultDue.getDate() + 7);
-  const defaultDueStr = defaultDue.toISOString().slice(0, 10);
+  // Через неделю — по московскому календарю (toISOString дал бы дату по UTC).
+  const defaultDueStr = addDaysKey(mskDayKey(new Date()), 7);
 
   return (
     <TeacherShell active="students" title="Новое задание">

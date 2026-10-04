@@ -1,4 +1,4 @@
-import { getSessionUser } from "@/lib/auth";
+import { requireContentEditor } from "@/lib/content-guard";
 import { getCurriculum, getProblemsForSkill } from "@/lib/queries";
 import TeacherShell from "@/components/TeacherShell";
 import { createChapterAction } from "@/app/actions-content";
@@ -9,7 +9,7 @@ export default async function ContentOverviewPage({
 }: {
   searchParams: { error?: string };
 }) {
-  const teacher = (await getSessionUser())!;
+  const teacher = await requireContentEditor();
   const curriculum = await getCurriculum();
   const allSkills = curriculum.flatMap((t) => t.chapters).flatMap((c) => c.skills);
   const countPairs = await Promise.all(

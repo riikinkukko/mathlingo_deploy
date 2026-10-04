@@ -1,5 +1,5 @@
+import { requireContentEditor } from "@/lib/content-guard";
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
 import { getSkill, getChapter, getProblemsForSkill, countAttemptsForProblem } from "@/lib/queries";
 import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
@@ -12,7 +12,7 @@ export default async function SkillEditPage({
   params: { id: string };
   searchParams: { error?: string; deleteError?: string };
 }) {
-  const teacher = (await getSessionUser())!;
+  const teacher = await requireContentEditor();
   const skill = await getSkill(params.id);
   if (!skill) notFound();
   const chapter = await getChapter(skill.subtopicId);

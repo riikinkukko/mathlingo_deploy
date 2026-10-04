@@ -28,6 +28,8 @@ export async function applyLessonStatus(
   const lesson = await getScheduledLessonById(lessonId);
   if (!lesson || lesson.teacherId !== teacherId) return { ok: false, reason: "not_found" };
   if (onlyIfPlanned && lesson.status !== "planned") return { ok: false, reason: "already_marked", lesson };
+  // Повторная та же отметка ничего не меняет — и не шлёт родителю второе напоминание.
+  if (lesson.status === status) return { ok: true, lesson };
 
   await db.update(schema.scheduledLessons).set({ status }).where(eq(schema.scheduledLessons.id, lessonId));
 

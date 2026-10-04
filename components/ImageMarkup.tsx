@@ -240,14 +240,36 @@ export default function ImageMarkup({
     if (!c) return;
     setSaving(true);
     redraw();
-    // Подбираем качество, чтобы JPEG влез в лимит хранения.
+    // Подбираем качество (а если не хватает — уменьшаем размер), чтобы JPEG
+    // влез в лимит хранения: иначе сервер молча не сохранил бы пометки.
     let url = "";
-    for (const q of [0.85, 0.75, 0.62, 0.5]) {
-      url = c.toDataURL("image/jpeg", q);
-      if (url.length <= MAX_IMAGE_DATA_URL) break;
+    let src: HTMLCanvasElement = c;
+    for (let scale = 1; scale >= 0.5 && !url; scale -= 0.25) {
+      if (scale < 1) {
+        src = document.createElement("canvas");
+        src.width = Math.round(c.width * scale);
+        src.height = Math.round(c.height * scale);
+        src.getContext("2d")!.drawImage(c, 0, 0, src.width, src.height);
+      }
+      for (const q of [0.85, 0.75, 0.62, 0.5]) {
+        const u = src.toDataURL("image/jpeg", q);
+        if (u.length <= MAX_IMAGE_DATA_URL) {
+          url = u;
+          break;
+        }
+      }
     }
     setSaving(false);
+    if (!url) {
+      alertTooBig();
+      return;
+    }
     onDone(url, items);
+  }
+
+  const [tooBig, setTooBig] = useState(false);
+  function alertTooBig() {
+    setTooBig(true);
   }
 
   const tools: { id: Tool; label: string; icon: React.ReactNode }[] = [
@@ -349,6 +371,12 @@ export default function ImageMarkup({
             Отмена
           </button>
         </div>
+      )}
+
+      {tooBig && (
+        <p role="alert" className="bg-coral-light px-4 py-2 text-center text-[13px] font-bold text-coral-text">
+          Не получилось сохранить пометки: фото слишком большое. Уберите часть пометок или напишите комментарий текстом.
+        </p>
       )}
 
       <nav aria-label="Инструменты разметки" className="flex shrink-0 justify-center gap-1.5 bg-white px-2 pb-[max(12px,env(safe-area-inset-bottom))] pt-2.5">

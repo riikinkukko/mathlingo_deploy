@@ -1,12 +1,12 @@
+import { requireContentEditor } from "@/lib/content-guard";
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
 import { getSkill, getChapter } from "@/lib/queries";
 import TeacherShell from "@/components/TeacherShell";
 import ProblemForm from "@/components/ProblemForm";
 import { createProblemAction } from "@/app/actions-content";
 
 export default async function NewProblemPage({ params }: { params: { id: string } }) {
-  const teacher = (await getSessionUser())!;
+  const teacher = await requireContentEditor();
   const skill = await getSkill(params.id);
   if (!skill) notFound();
   const chapter = await getChapter(skill.subtopicId);

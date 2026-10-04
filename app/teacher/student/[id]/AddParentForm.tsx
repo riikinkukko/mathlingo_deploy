@@ -42,7 +42,13 @@ export default function AddParentForm({ studentId }: { studentId: string }) {
       )}
       {state?.success && (
         <p className="rounded-lg bg-pine-light px-3 py-2 text-sm text-pine-dark">
-          Готово. Пароль для входа: <span className="font-mono font-semibold">{state.password}</span>
+          {state.password ? (
+            <>
+              Готово. Пароль для входа: <span className="font-mono font-semibold">{state.password}</span>
+            </>
+          ) : (
+            "Готово. Родитель увидит ученика в своём кабинете — пароль у него прежний."
+          )}
         </p>
       )}
       <SubmitButton />

@@ -153,7 +153,7 @@ export async function getGroupLessons(
       )
     )
     .orderBy(asc(schema.scheduledLessons.startsAt), asc(schema.users.name))
-    .limit(400);
+    .limit(2000); // строки учеников: до 24 недель × 40 учеников
   const mapped: ScheduledLessonWithStudent[] = rows.map(({ l, studentName, groupName }) => ({
     id: l.id,
     teacherId: l.teacherId,

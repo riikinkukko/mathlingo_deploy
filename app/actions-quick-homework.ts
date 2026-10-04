@@ -8,6 +8,8 @@ import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, pushNotification } from "@/lib/queries";
 import { pickByNumbers, pickWeakProblems } from "@/lib/quick-homework";
 import { getGroupForTeacher } from "@/lib/groups";
+import { addDaysKey, mskDayKey, mskEndOfDay } from "@/lib/lesson-time";
+import { pluralRu } from "@/lib/pluralize";
 
 const COUNTS = [5, 10, 15];
 const DUE_DAYS = [3, 7];
@@ -25,10 +27,15 @@ export async function createQuickHomeworkAction(formData: FormData) {
   const mode = String(formData.get("mode")) === "numbers" ? "numbers" : "weak";
   const count = COUNTS.includes(Number(formData.get("count"))) ? Number(formData.get("count")) : 10;
   const dueDays = DUE_DAYS.includes(Number(formData.get("dueDays"))) ? Number(formData.get("dueDays")) : 7;
-  const numbers = formData
-    .getAll("numbers")
-    .map(Number)
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 30);
+  const numbers = Array.from(
+    new Set(
+      formData
+        .getAll("numbers")
+        .slice(0, 100)
+        .map(Number)
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 30)
+    )
+  );
 
   if (mode === "numbers" && numbers.length === 0) redirect(`${back}&quick=nonumbers`);
   const problemIds =
@@ -40,9 +47,8 @@ export async function createQuickHomeworkAction(formData: FormData) {
     mode === "weak"
       ? "Работа над ошибками"
       : `Практика: ${sorted.map((n) => `№${n}`).join(", ")}`;
-  const due = new Date();
-  due.setDate(due.getDate() + dueDays);
-  due.setHours(23, 59, 0, 0);
+  // До конца дня по Москве (сервер работает в UTC — setHours дал бы 02:59 МСК следующего дня).
+  const due = mskEndOfDay(addDaysKey(mskDayKey(new Date()), dueDays));
 
   await db.transaction(async (tx) => {
     await tx.insert(schema.homeworks).values({
@@ -61,7 +67,7 @@ export async function createQuickHomeworkAction(formData: FormData) {
       userId: studentId,
       type: "assignment_created",
       title: "Новое домашнее задание",
-      body: `${title} · ${problemIds.length} задач`,
+      body: `${title} · ${problemIds.length} ${pluralRu(problemIds.length, ["задача", "задачи", "задач"])}`,
       link: `/student/homework`,
     });
   });
@@ -86,10 +92,15 @@ async function createQuickGroupHomework(formData: FormData) {
   const mode = String(formData.get("mode")) === "numbers" ? "numbers" : "weak";
   const count = COUNTS.includes(Number(formData.get("count"))) ? Number(formData.get("count")) : 10;
   const dueDays = DUE_DAYS.includes(Number(formData.get("dueDays"))) ? Number(formData.get("dueDays")) : 7;
-  const numbers = formData
-    .getAll("numbers")
-    .map(Number)
-    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 30);
+  const numbers = Array.from(
+    new Set(
+      formData
+        .getAll("numbers")
+        .slice(0, 100)
+        .map(Number)
+        .filter((n) => Number.isInteger(n) && n >= 1 && n <= 30)
+    )
+  );
   if (mode === "numbers" && numbers.length === 0) redirect(`${back}&quick=nonumbers`);
 
   const memberIds = group!.members.map((m) => m.id);
@@ -105,9 +116,8 @@ async function createQuickGroupHomework(formData: FormData) {
 
   const sorted = [...numbers].sort((a, b) => a - b);
   const title = mode === "weak" ? "Работа над ошибками" : `Практика: ${sorted.map((n) => `№${n}`).join(", ")}`;
-  const due = new Date();
-  due.setDate(due.getDate() + dueDays);
-  due.setHours(23, 59, 0, 0);
+  // До конца дня по Москве (сервер работает в UTC — setHours дал бы 02:59 МСК следующего дня).
+  const due = mskEndOfDay(addDaysKey(mskDayKey(new Date()), dueDays));
   const batchId = genId("hb");
 
   await db.transaction(async (tx) => {
@@ -131,7 +141,7 @@ async function createQuickGroupHomework(formData: FormData) {
         userId: studentId,
         type: "assignment_created",
         title: "Новое домашнее задание",
-        body: `${title} · ${problemIds.length} задач`,
+        body: `${title} · ${problemIds.length} ${pluralRu(problemIds.length, ["задача", "задачи", "задач"])}`,
         link: `/student/homework`,
       });
     }

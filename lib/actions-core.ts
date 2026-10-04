@@ -1,6 +1,6 @@
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import {
   getProblem,
   getSkill,
@@ -127,10 +127,22 @@ export async function performSubmitAttempt(
   source: "lesson" | "assignment" | "review",
   image?: string | null
 ) {
+  if (typeof problemId !== "string" || typeof answer !== "string") return { error: "Введите ответ" as const };
+  // Ответ — до 4000 символов: развёрнутое решение влезает, мегабайты — нет.
+  answer = answer.slice(0, 4000);
   const problem = await getProblem(problemId);
   if (!problem) return { error: "Задача не найдена" as const };
   // К развёрнутому решению можно приложить фото/черновик — тогда текст не обязателен.
   const img = problem.answerType === "DETAILED" ? cleanImageDataUrl(image) : null;
+  if (img) {
+    // Не больше 40 фото решений в сутки: каждое — до 0,7 МБ в базе.
+    const recent = await db.execute(sql`
+      select count(*)::int as n from attempt_images ai
+      join attempts a on a.id = ai.attempt_id
+      where a.student_id = ${user.id} and ai.created_at > now() - interval '24 hours'`);
+    if (Number((recent.rows[0] as { n: number }).n) >= 40)
+      return { error: "Слишком много фото за сутки — попробуй завтра или опиши решение текстом" as const };
+  }
   if (!answer.trim() && !img) return { error: "Введите ответ" as const };
   if (!answer.trim() && img) answer = "(решение на фото)";
   // Серверная проверка доступа: Free не должен решать Pro-навыки и DETAILED,

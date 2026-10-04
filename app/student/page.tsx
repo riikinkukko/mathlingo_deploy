@@ -25,7 +25,10 @@ import {
   getNotificationsForUser,
   getUnreadNotificationCount,
   FREE_MAX_ENERGY,
+  getUpcomingLessonsForStudent,
+  getUserById,
 } from "@/lib/queries";
+import NextLessonCard from "@/components/NextLessonCard";
 import { pluralRu } from "@/lib/pluralize";
 import StudentDashboardHeader, { DailyGoalBar } from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
@@ -70,6 +73,8 @@ export default async function StudentDashboard({
     mistakes,
     allHw,
     dueReviewCount,
+    upcomingLessons,
+    teacher,
   ] = await Promise.all([
     getCurriculum(),
     computeStudentProgress(user.id),
@@ -83,7 +88,11 @@ export default async function StudentDashboard({
     getMistakesForStudent(user.id),
     getHomeworksForStudent(user.id),
     getDueReviewCount(user.id),
+    // Занятия есть только у учеников репетитора.
+    user.teacherId ? getUpcomingLessonsForStudent(user.id) : Promise.resolve([]),
+    user.teacherId ? getUserById(user.teacherId) : Promise.resolve(undefined),
   ]);
+  const nextLessons = upcomingLessons.slice(0, 3);
 
   // Дашборд теперь может обслуживать несколько предметов (тем) — без этого
   // фильтра curriculum.flatMap ниже слил бы навыки Планиметрии и Теории
@@ -251,6 +260,7 @@ export default async function StudentDashboard({
         {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
           <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} streak={streak} />
+          <NextLessonCard lessons={nextLessons} teacherName={teacher?.name} />
           {(() => {
             const plan = computeExamPlan(progress);
             return (
@@ -347,6 +357,7 @@ export default async function StudentDashboard({
               </div>
             )}
 
+            <NextLessonCard lessons={nextLessons} teacherName={teacher?.name} />
             {heroCard}
             <div className="flex gap-3">{tiles}</div>
 

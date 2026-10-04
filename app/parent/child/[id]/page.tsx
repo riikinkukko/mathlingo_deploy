@@ -18,6 +18,7 @@ import { balanceLabel } from "@/components/BalanceSummary";
 import { IconCalendar, IconClipboard } from "@/components/icons";
 import GoalCard from "@/components/GoalCard";
 import UpcomingLessons from "@/components/UpcomingLessons";
+import { lessonWhenLabel } from "@/lib/lesson-time";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import ParentShell from "@/components/ParentShell";
 import GradeBadge from "@/components/GradeBadge";
@@ -113,15 +114,25 @@ export default async function ChildDetailPage({
             icon={<IconCalendar className="h-5 w-5" />}
             title={
               upcomingLessons[0]
-                ? `Занятие ${new Date(upcomingLessons[0].startsAt).toLocaleString("ru-RU", {
-                    timeZone: "Europe/Moscow",
-                    weekday: "long",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}`
+                ? `Занятие: ${lessonWhenLabel(upcomingLessons[0].startsAt, upcomingLessons[0].durationMin).replace(/^\S/, (c) => c.toLowerCase())}`
                 : "Ближайших занятий нет"
             }
-            sub={upcomingLessons[0]?.topic ?? (teacher ? `Репетитор: ${teacher.name}` : undefined)}
+            sub={
+              upcomingLessons[0]
+                ? [
+                    upcomingLessons[0].groupLessonId
+                      ? upcomingLessons[0].groupName
+                        ? `группа «${upcomingLessons[0].groupName}»`
+                        : "групповое занятие"
+                      : null,
+                    upcomingLessons[0].topic,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || (teacher ? `Репетитор: ${teacher.name}` : undefined)
+                : teacher
+                  ? `Репетитор: ${teacher.name}`
+                  : undefined
+            }
           />
           <SummaryRow
             tone="bg-amber-light text-amber-dark"
@@ -135,7 +146,7 @@ export default async function ChildDetailPage({
               hwOverdue > 0
                 ? `Просрочено: ${hwOverdue}`
                 : nextDue
-                  ? `Ближайший срок — ${new Date(nextDue.dueDate).toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}`
+                  ? `Ближайший срок — ${new Date(nextDue.dueDate).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long" })}`
                   : undefined
             }
             alert={hwOverdue > 0}
@@ -228,7 +239,7 @@ export default async function ChildDetailPage({
                     </p>
                     <p className="text-sm font-semibold text-ink">{hw.title}</p>
                     <p className="text-xs text-ink-soft">
-                      Срок: {new Date(hw.dueDate).toLocaleDateString("ru-RU")}
+                      Срок: {new Date(hw.dueDate).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}
                       {st.overdue && <span className="ml-2 text-coral">просрочено</span>}
                       {st.complete && <span className="ml-2 text-pine">выполнено</span>}
                     </p>

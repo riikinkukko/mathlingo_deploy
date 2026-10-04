@@ -3,6 +3,7 @@
 //
 // Запускается из воркера бота (scripts/telegram-poller.ts) раз в несколько
 // минут. Относительные импорты — воркер работает через tsx вне Next.js.
+import { mskDayKey } from "./lesson-time";
 import { and, eq, gt, isNull, lte, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -65,7 +66,9 @@ export async function sendDueLessonReminders(now: Date = new Date()): Promise<nu
   for (const lesson of claimed) {
     try {
       const time = mskTime(lesson.startsAt);
-      const title = `Напоминание: занятие сегодня в ${time}`;
+      // Занятие сразу после полуночи напоминается накануне вечером — «завтра», а не «сегодня».
+      const sameDay = mskDayKey(lesson.startsAt) === mskDayKey(now);
+      const title = `Напоминание: занятие ${sameDay ? "сегодня" : "завтра"} в ${time}`;
       const body = lesson.topic ? `Тема: ${lesson.topic}` : "Подготовь тетрадь и вопросы — до встречи!";
       const parents = await getParentsOfStudent(lesson.studentId);
 

@@ -132,7 +132,8 @@ export default function DiagramScratchpad({
   itemsRef.current = items;
   const past = useRef<SketchItem[][]>([]);
   const future = useRef<SketchItem[][]>([]);
-  const [, bump] = useState(0);
+  // Счётчик версии геометрии чертежа: растёт, когда вершины/стороны извлечены из SVG.
+  const [geomVersion, bump] = useState(0);
   const commit = useCallback((next: SketchItem[]) => {
     past.current.push(itemsRef.current);
     if (past.current.length > 200) past.current.shift();
@@ -180,7 +181,7 @@ export default function DiagramScratchpad({
   const [hint, setHint] = useState(() => Number(readFlag("pm-sketch-hint") || 0) < 3);
   const baseGeom = useRef<Geometry>(emptyGeometry());
 
-  const geom = useMemo(() => withUserGeometry(baseGeom.current, items), [items, vp.w]); // eslint-disable-line react-hooks/exhaustive-deps
+  const geom = useMemo(() => withUserGeometry(baseGeom.current, items), [items, vp.w, geomVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Сохраняем рисунок (с небольшой задержкой, чтобы не писать на каждый штрих).
   useEffect(() => {
@@ -188,6 +189,12 @@ export default function DiagramScratchpad({
     onChange?.(items.length > 0);
     return () => clearTimeout(t);
   }, [items, H, problemId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Закрыли черновик сразу после штриха — сохраняем без задержки, иначе
+  // последний штрих потерялся бы (таймер выше отменяется при размонтировании).
+  const hRef = useRef(H);
+  hRef.current = H;
+  useEffect(() => () => saveSketch(problemId, itemsRef.current, hRef.current), [problemId]);
 
   // Лист растёт вниз, когда пишут у нижнего края.
   useEffect(() => {

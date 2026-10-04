@@ -12,7 +12,10 @@ export async function POST(req: Request) {
 
   let body: { problemId?: string; answer?: string; source?: "lesson" | "assignment" | "review" };
   try {
-    body = await req.json();
+    // Ответ на задачу — это строка, а не мегабайты: тело больше 64 КБ не читаем.
+    const raw = await req.text();
+    if (raw.length > 64_000) return NextResponse.json({ error: "Слишком большой запрос" }, { status: 413 });
+    body = JSON.parse(raw);
   } catch {
     return NextResponse.json({ error: "Некорректное тело запроса (ожидается JSON)" }, { status: 400 });
   }

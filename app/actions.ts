@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import {
@@ -61,6 +61,7 @@ function getClientIp(): string {
 import { AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
+import { mskEndOfDay } from "@/lib/lesson-time";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -74,7 +75,7 @@ async function isOwnStudent(teacherId: string, studentId: string): Promise<boole
 // ---------- AUTH ----------
 
 export async function loginAction(_prevState: unknown, formData: FormData) {
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
 
   const clientIp = getClientIp();
@@ -174,6 +175,9 @@ export async function reviewAttemptAction(
 ) {
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
+  if (typeof attemptId !== "string" || (decision !== "approved" && decision !== "needs_revision")) return { error: "Некорректный запрос" };
+  feedback = typeof feedback === "string" ? feedback.trim().slice(0, 2000) : "";
+  if (markup != null && typeof markup !== "string") return { error: "Некорректный запрос" };
 
   const attemptRows = await db.select().from(schema.attempts).where(eq(schema.attempts.id, attemptId)).limit(1);
   const attempt = attemptRows[0];
@@ -186,6 +190,9 @@ export async function reviewAttemptAction(
   const problem = await getProblem(attempt.problemId);
   const skill = problem?.skillId ? await getSkill(problem.skillId) : undefined;
 
+  // Пометки сохраняем только к уже приложенному фото (своё фото репетитор не подставит).
+  const marked = cleanImageDataUrl(markup);
+  if (markup && !marked) return { error: "Пометки не сохранились: слишком большое фото. Попробуйте ещё раз." };
   await db
     .update(schema.attempts)
     .set({
@@ -195,8 +202,6 @@ export async function reviewAttemptAction(
     })
     .where(eq(schema.attempts.id, attemptId));
 
-  // Пометки сохраняем только к уже приложенному фото (своё фото репетитор не подставит).
-  const marked = cleanImageDataUrl(markup);
   if (marked) {
     await db
       .update(schema.attemptImages)
@@ -269,9 +274,9 @@ export async function createLessonLogAction(formData: FormData) {
     redirect(`/teacher/student/${studentId}?error=1`);
   }
 
-  const date = String(formData.get("date") || "");
-  const topic = String(formData.get("topic") || "").trim();
-  const report = String(formData.get("report") || "").trim();
+  const date = String(formData.get("date") || "").slice(0, 10);
+  const topic = String(formData.get("topic") || "").trim().slice(0, 200);
+  const report = String(formData.get("report") || "").trim().slice(0, 5000);
 
   if (!studentId || !date || !topic || !report) {
     redirect(`/teacher/student/${studentId}?error=1`);
@@ -347,8 +352,8 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
     }
   }
 
-  const name = String(formData.get("name") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim().slice(0, 80);
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "").trim() || generatePassword();
   const consent = formData.get("consent");
 
@@ -402,9 +407,9 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
 
   const studentId = String(formData.get("studentId") || "");
-  const name = String(formData.get("name") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
-  const password = String(formData.get("password") || "").trim() || generatePassword();
+  const name = String(formData.get("name") || "").trim().slice(0, 80);
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
+  const password = String(formData.get("password") || "").trim().slice(0, 100) || generatePassword();
   const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
@@ -420,8 +425,25 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   }
 
   let parent = await getUserByEmail(email);
-  if (parent && parent.role !== "PARENT") {
-    return { error: "Этот email уже занят пользователем другой роли" };
+  let existingParent = false;
+  if (parent) {
+    // Существующий кабинет родителя можно привязать, только если этот родитель
+    // уже привязан к другому ВАШЕМУ ученику (брат/сестра у того же репетитора).
+    // Иначе любой репетитор мог бы «присвоить» чужого родителя и слать ему
+    // сообщения от имени сервиса.
+    const sibling =
+      parent.role === "PARENT"
+        ? await db
+            .select({ id: schema.users.id })
+            .from(schema.parentLinks)
+            .innerJoin(schema.users, eq(schema.users.id, schema.parentLinks.studentId))
+            .where(and(eq(schema.parentLinks.parentId, parent.id), eq(schema.users.teacherId, teacher.id)))
+            .limit(1)
+        : [];
+    if (sibling.length === 0) {
+      return { error: "Этот email уже используется в сервисе. Укажите другой email родителя." };
+    }
+    existingParent = true;
   }
   if (!parent) {
     const id = genId("u");
@@ -445,7 +467,8 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
     await db.insert(schema.parentLinks).values({ parentId: parent.id, studentId });
   }
   revalidatePath(`/teacher/student/${studentId}`);
-  return { success: true, password };
+  // У уже существующего родителя пароль прежний — новый не показываем.
+  return { success: true, password: existingParent ? undefined : password };
 }
 
 export async function createHomeworkAction(formData: FormData) {
@@ -466,9 +489,21 @@ export async function createHomeworkAction(formData: FormData) {
   const targetIds = group ? group.members.map((m) => m.id) : [studentId];
   const batchId = group ? genId("hb") : null;
 
-  const title = String(formData.get("title") || "").trim();
+  const title = String(formData.get("title") || "").trim().slice(0, 120);
   const dueDate = String(formData.get("dueDate") || "");
-  const bankProblemIds = formData.getAll("problemIds").map(String);
+  // Только существующие задачи банка (с навыком): иначе можно было бы
+  // подсунуть id чужой авторской задачи и открыть её своему ученику.
+  const requestedIds = Array.from(new Set(formData.getAll("problemIds").map(String))).slice(0, 60);
+  const bankProblemIds = requestedIds.length
+    ? (
+        await db
+          .select({ id: schema.problems.id })
+          .from(schema.problems)
+          .where(and(inArray(schema.problems.id, requestedIds), isNotNull(schema.problems.skillId)))
+      )
+        .map((r) => r.id)
+        .sort((a, b) => requestedIds.indexOf(a) - requestedIds.indexOf(b))
+    : [];
   const kind = (String(formData.get("kind") || "homework") as AssignmentKind);
   const allowHints = formData.get("allowHints") === "on";
   const timeLimitRaw = String(formData.get("timeLimitMinutes") || "").trim();
@@ -487,9 +522,18 @@ export async function createHomeworkAction(formData: FormData) {
   const customRaw = String(formData.get("customProblems") || "[]");
   let drafts: DraftProblem[] = [];
   try {
-    drafts = (JSON.parse(customRaw) as DraftProblem[]).filter(
-      (d) => d.text?.trim() && d.correctAnswer?.trim()
-    );
+    const parsed: unknown = customRaw.length <= 200_000 ? JSON.parse(customRaw) : [];
+    drafts = (Array.isArray(parsed) ? parsed : [])
+      .filter((d): d is DraftProblem => !!d && typeof d === "object" && typeof d.text === "string" && typeof d.correctAnswer === "string")
+      .filter((d) => d.text.trim() && d.correctAnswer.trim())
+      .slice(0, 30)
+      .map((d) => ({
+        text: d.text.slice(0, 3000),
+        answerType: d.answerType === "DETAILED" ? "DETAILED" : "NUMBER",
+        correctAnswer: d.correctAnswer.slice(0, 2000),
+        hint: typeof d.hint === "string" ? d.hint.slice(0, 1000) : "",
+        explanation: typeof d.explanation === "string" ? d.explanation.slice(0, 3000) : "",
+      }));
   } catch {
     // некорректный JSON от клиента — просто игнорируем свои задачи, банк не трогаем
   }
@@ -497,7 +541,10 @@ export async function createHomeworkAction(formData: FormData) {
   const problemIds = [...bankProblemIds, ...drafts.map(() => genId("p"))];
   const customProblemIds = problemIds.slice(bankProblemIds.length);
 
-  if (targetIds.length === 0 || !title || !dueDate || problemIds.length === 0) {
+  // Дата из <input type="date"> — срок до конца этого дня по Москве.
+  // new Date("YYYY-MM-DD") — это полночь UTC (03:00 МСК), задание «просрочилось» бы утром.
+  const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? mskEndOfDay(dueDate) : null;
+  if (targetIds.length === 0 || !title || !dueAt || isNaN(dueAt.getTime()) || problemIds.length === 0) {
     redirect(errBack);
   }
 
@@ -533,7 +580,7 @@ export async function createHomeworkAction(formData: FormData) {
         timeLimitMinutes: timeLimitMinutes ?? null,
         audience: "assigned",
         problemIds,
-        dueDate: new Date(dueDate),
+        dueDate: dueAt!,
         groupId: group?.id ?? null,
         batchId,
       });
@@ -597,8 +644,8 @@ async function checkRegistrationEmail(email: string): Promise<string | null> {
 }
 
 export async function registerAction(_prevState: unknown, formData: FormData) {
-  const name = String(formData.get("name") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim().slice(0, 80);
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
   const clientIp = getClientIp();
@@ -659,8 +706,8 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
 }
 
 export async function registerTeacherAction(_prevState: unknown, formData: FormData) {
-  const name = String(formData.get("name") || "").trim();
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const name = String(formData.get("name") || "").trim().slice(0, 80);
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
   const clientIp = getClientIp();
@@ -812,6 +859,7 @@ export async function cancelTeacherAutoRenewalAction() {
 export async function saveOnboardingAction(formData: FormData) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
+  if (user.role !== "STUDENT") redirect("/");
 
   const targetScoreRaw = formData.get("targetScore");
   const targetScore = targetScoreRaw ? Number(targetScoreRaw) : null;
@@ -820,7 +868,10 @@ export async function saveOnboardingAction(formData: FormData) {
   await db
     .update(schema.users)
     .set({
-      targetScore: targetScore && targetScore >= 0 && targetScore <= 100 ? targetScore : null,
+      // Цель ученика репетитора задаёт репетитор — онбординг её не перезаписывает.
+      ...(user.teacherId
+        ? {}
+        : { targetScore: targetScore && targetScore >= 0 && targetScore <= 100 ? targetScore : null }),
       ...(dream ? { dreamUniversity: dream } : {}),
     })
     .where(eq(schema.users.id, user.id));
@@ -858,7 +909,7 @@ export async function resendVerificationEmailAction() {
  * действительно найден.
  */
 export async function requestPasswordResetAction(_prevState: unknown, formData: FormData) {
-  const email = String(formData.get("email") || "").trim().toLowerCase();
+  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   if (!email) return { error: "Введите email" };
 
   const user = await getUserByEmail(email);

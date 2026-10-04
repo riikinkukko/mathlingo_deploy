@@ -4,7 +4,9 @@ import {
   computeOverallStats,
   getHomeworksForStudent,
   homeworkStatus,
+  getUpcomingLessonsForStudent,
 } from "@/lib/queries";
+import { lessonWhenLabel } from "@/lib/lesson-time";
 import { redirect } from "next/navigation";
 import ParentShell from "@/components/ParentShell";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
@@ -19,14 +21,15 @@ export default async function ParentDashboard({ searchParams }: { searchParams: 
 
   const cards = await Promise.all(
     children.map(async (child) => {
-      const [stats, homeworks] = await Promise.all([
+      const [stats, homeworks, lessons] = await Promise.all([
         computeOverallStats(child.id),
         getHomeworksForStudent(child.id),
+        getUpcomingLessonsForStudent(child.id),
       ]);
       const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, child.id)));
       const pendingCount = statuses.filter((s) => !s.complete).length;
       const overdue = statuses.some((s) => !s.complete && s.overdue);
-      return { child, stats, pendingCount, overdue };
+      return { child, stats, pendingCount, overdue, nextLesson: lessons[0] };
     })
   );
 
@@ -41,7 +44,7 @@ export default async function ParentDashboard({ searchParams }: { searchParams: 
         </div>
 
         <div className="space-y-3">
-          {cards.map(({ child, stats, pendingCount, overdue }) => (
+          {cards.map(({ child, stats, pendingCount, overdue, nextLesson }) => (
             <a
               key={child.id}
               href={`/parent/child/${child.id}`}
@@ -49,7 +52,9 @@ export default async function ParentDashboard({ searchParams }: { searchParams: 
             >
               <div>
                 <p className="font-display text-lg font-black text-ink">{child.name}</p>
-                <p className="mt-0.5 text-xs text-ink-soft">{child.email}</p>
+                <p className="mt-0.5 text-xs text-ink-soft">
+                  {nextLesson ? `Занятие: ${lessonWhenLabel(nextLesson.startsAt, nextLesson.durationMin).replace(/^\S/, (c) => c.toLowerCase())}` : child.email}
+                </p>
               </div>
               <div className="flex items-center gap-6 text-center">
                 <div>

@@ -1,5 +1,5 @@
+import { requireContentEditor } from "@/lib/content-guard";
 import { notFound } from "next/navigation";
-import { getSessionUser } from "@/lib/auth";
 import { getChapter } from "@/lib/queries";
 import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
@@ -10,7 +10,7 @@ export default async function NewSkillPage({
 }: {
   searchParams: { subtopicId?: string };
 }) {
-  const teacher = (await getSessionUser())!;
+  const teacher = await requireContentEditor();
   const subtopicId = searchParams.subtopicId;
   const chapter = subtopicId ? await getChapter(subtopicId) : undefined;
   if (!subtopicId || !chapter) notFound();

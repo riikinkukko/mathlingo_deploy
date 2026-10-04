@@ -9,6 +9,7 @@ import {
   isStandaloneStudent,
   getEffectiveEnergy,
   FREE_MAX_ENERGY,
+  gateCurriculumForUser,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, plan: user.plan ?? null },
-    curriculum,
+    // Как /api/curriculum: Free-ученику — без платной теории.
+    curriculum: gateCurriculumForUser(user, curriculum),
     progress,
     pathStates,
     xp,

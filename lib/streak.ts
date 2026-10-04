@@ -11,6 +11,7 @@
 //
 // Относительные импорты — модуль используется и воркером бота (tsx).
 // lib/queries импортирует этот модуль, поэтому обратно его не импортируем.
+import { pluralRu } from "./pluralize";
 import { and, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -175,7 +176,7 @@ export async function settleStreak(studentId: string, now: Date = new Date()): P
       await notify(
         studentId,
         "❄️ Новая заморозка серии",
-        `${streak} дней подряд — держи заморозку. Если пропустишь день, она сохранит серию. Сейчас: ${freezes} из ${MAX_FREEZES}.`
+        `${streak} ${pluralRu(streak, ["день", "дня", "дней"])} подряд — держи заморозку. Если пропустишь день, она сохранит серию. Сейчас: ${freezes} из ${MAX_FREEZES}.`
       ).catch(() => {});
     }
   }

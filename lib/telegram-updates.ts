@@ -17,7 +17,12 @@ import { handleCallbackQuery, replyToday } from "./teacher-telegram";
 export async function handleTelegramUpdate(update: any): Promise<void> {
   // Кнопки «Было / Не было» под вопросом о прошедшем занятии.
   if (update?.callback_query) {
-    await handleCallbackQuery(update.callback_query);
+    const cq = update.callback_query;
+    // Кнопки работают только в личном чате с ботом и только у его владельца:
+    // если бота добавили в групповой чат, другие участники не должны
+    // отмечать занятия за репетитора.
+    if (cq?.message?.chat?.type !== "private" || String(cq?.from?.id) !== String(cq?.message?.chat?.id)) return;
+    await handleCallbackQuery(cq);
     return;
   }
 
@@ -27,6 +32,8 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
   console.log("[telegram] Входящее сообщение:", { chatId, text });
 
   if (!text || !chatId) return;
+  // Привязка и /today — только в личном чате с ботом.
+  if (message?.chat?.type !== "private") return;
   if (/^\/today(@\w+)?$/.test(text.trim())) {
     await replyToday(chatId);
     return;

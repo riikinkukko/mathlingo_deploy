@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
@@ -115,11 +115,8 @@ export async function deleteStudentPaymentAction(formData: FormData) {
   const from = String(formData.get("from") || "payments");
 
   const payment = await getStudentPaymentById(paymentId);
-  const back =
-    from === "student" && payment ? `/teacher/student/${payment.studentId}` : "/teacher/payments";
-
-  if (!teacher || teacher.role !== "TEACHER") redirect(`${back}?error=1`);
-  if (!payment || payment.teacherId !== teacher.id) redirect(`${back}?error=1`);
+  if (!teacher || teacher.role !== "TEACHER" || !payment || payment.teacherId !== teacher.id) redirect("/teacher/payments?error=1");
+  const back = from === "student" ? `/teacher/student/${payment.studentId}` : "/teacher/payments";
 
   await db.delete(schema.studentPayments).where(eq(schema.studentPayments.id, paymentId));
 
@@ -176,6 +173,15 @@ export async function sendPaymentReminderNowAction(
   const studentId = String(formData.get("studentId") || "");
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
   if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
+  // Не чаще раза в 12 часов по одному ученику: напоминания уходят родителям
+  // в Telegram, их нельзя превращать в поток сообщений.
+  const recent = await db.execute(sql`
+    select 1 from notifications
+    where type = 'payment_reminder'
+      and created_at > now() - interval '12 hours'
+      and (link = ${`/parent/child/${studentId}`} or (user_id = ${studentId} and link = '/student'))
+    limit 1`);
+  if (recent.rows.length > 0) return { error: "Напоминание уже отправлено недавно — следующее можно через 12 часов" };
   const sent = await sendPaymentReminder(teacher.id, studentId, "manual");
   if (sent === 0) return { error: "Не удалось отправить напоминание" };
   return { ok: true, at: Date.now(), sent };
