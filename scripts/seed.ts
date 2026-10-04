@@ -5,6 +5,8 @@ import { DB, Skill } from "../lib/types";
 import { sql } from "drizzle-orm";
 import { config } from "dotenv";
 import path from "path";
+import { addDeriv17 } from "./content/deriv17";
+import { addParams18 } from "./content/params18";
 
 // Явно грузим .env.local — не как CLI-обёртку (dotenv-cli конфликтовал с
 // одноимённой командой из Python на некоторых машинах), а прямым вызовом
@@ -8531,6 +8533,10 @@ async function main() {
       tier: "bank",
     }
   );
+
+  // ---------------- Дополнительный контент (отдельные файлы, явные id) ----------------
+  addDeriv17(db, derivTopicId);
+  addParams18(db);
 
   // ---------------- Демо-данные ниже — только при первом запуске ----------------
   if (isFreshInstall) {
