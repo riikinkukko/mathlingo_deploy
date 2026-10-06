@@ -63,6 +63,8 @@ import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
+import { TOPIC_COOKIE } from "@/lib/topic-cookie";
+import { getCurriculum } from "@/lib/queries";
 import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from "@/lib/promo";
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
@@ -915,6 +917,13 @@ export async function saveOnboardingAction(formData: FormData) {
     })
     .where(eq(schema.users.id, user.id));
 
+  // Тема, с которой ученик хочет начать: запоминаем её для «Пути»
+  // (раньше все начинали с «Треугольников», даже кто целится в 80+).
+  const topicId = String(formData.get("topicId") || "");
+  if (topicId && (await getCurriculum()).some((t) => t.topic.id === topicId)) {
+    cookies().set(TOPIC_COOKIE, topicId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    redirect(`/student?topic=${encodeURIComponent(topicId)}`);
+  }
   redirect("/student");
 }
 

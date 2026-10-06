@@ -146,7 +146,7 @@ export default function AudienceSwitcher({
         { src: "/landing/student-review.webp", alt: "Ученик видит пометки репетитора на своём решении" },
       ],
       hand: "цель дня и серия",
-      note: `Глава «Треугольники» и 80 энергии в день — бесплатно. Pro — ${studentPrice.toLocaleString("ru-RU")} ₽ в месяц: все главы и без ограничений.`,
+      note: `Бесплатно — первая глава каждой темы и до 15 новых задач за раз (энергия восстанавливается). Pro — ${studentPrice.toLocaleString("ru-RU")} ₽ в месяц: все главы, вторая часть и без ограничений.`,
       cta: (
         <a
           href="/register"

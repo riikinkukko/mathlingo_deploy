@@ -158,13 +158,17 @@ export function toPublicProblem(p: Problem): PublicProblem {
 
 // ---------- Программа: Topic -> Subtopic(глава) -> Skill(урок-навык) ----------
 
-export async function getCurriculum() {
+/**
+ * Программа: темы → главы → навыки. Темы без единого навыка (только что
+ * созданные в редакторе) скрыты — кроме самого редактора (includeEmpty).
+ */
+export async function getCurriculum(opts: { includeEmpty?: boolean } = {}) {
   const topics = await db.select().from(schema.topics).orderBy(asc(schema.topics.order));
   const subtopics = await db.select().from(schema.subtopics).orderBy(asc(schema.subtopics.order));
   const skillRows = await db.select().from(schema.skills).orderBy(asc(schema.skills.order));
   const skills = skillRows.map(mapSkill);
 
-  return topics.map((topic) => ({
+  const all = topics.map((topic) => ({
     topic,
     chapters: subtopics
       .filter((s) => s.topicId === topic.id)
@@ -173,6 +177,7 @@ export async function getCurriculum() {
         skills: skills.filter((sk) => sk.subtopicId === chapter.id),
       })),
   }));
+  return opts.includeEmpty ? all : all.filter((t) => t.chapters.some((c) => c.skills.length > 0));
 }
 
 export async function getAllSkillsFlat(): Promise<Skill[]> {
@@ -1367,7 +1372,9 @@ export async function getOrCreateAssignmentSession(
 
 // ---------- Планы (Free/Pro) и энергия для самостоятельных учеников ----------
 
-export const FREE_MAX_ENERGY = 5;
+// 15 новых задач — это 3–4 урока: раньше 5 единиц кончались посреди второго
+// урока в первый же день, и новичок упирался в стену.
+export const FREE_MAX_ENERGY = 15;
 export const ENERGY_RECHARGE_MINUTES = 30;
 
 /** true, если у пользователя РЕАЛЬНО активен Pro прямо сейчас — plan='pro'
@@ -1562,7 +1569,7 @@ export function isStandaloneStudent(user: User): boolean {
 
 /** Анти-абуз: у самостоятельного Free-ученика энергия не восстанавливается,
  * пока он не подтвердил email. Иначе новый аккаунт на любой выдуманный адрес
- * давал бы бесконечную энергию. Стартовые 5 единиц даются и без подтверждения,
+ * давал бы бесконечную энергию. Стартовый запас даётся и без подтверждения,
  * чтобы не ломать первое знакомство с приложением. Ученики репетитора и Pro
  * не затрагиваются (у них энергия безлимитна). */
 export function isEnergyRechargeBlocked(user: User): boolean {
@@ -2175,16 +2182,35 @@ export async function getTopicId(): Promise<string | undefined> {
   return rows[0]?.id;
 }
 
-export async function createChapter(title: string, order: number): Promise<string> {
-  const topicId = await getTopicId();
-  if (!topicId) throw new Error("Нет ни одного модуля (Topic) — так не должно быть, проверьте seed.");
-  const id = genId("ch");
-  await db.insert(schema.subtopics).values({ id, topicId, title, order });
+export async function topicExists(id: string): Promise<boolean> {
+  const rows = await db.select({ id: schema.topics.id }).from(schema.topics).where(eq(schema.topics.id, id)).limit(1);
+  return rows.length > 0;
+}
+
+/** Новая тема (предмет) — появится у учеников, когда в ней будет хотя бы один навык. */
+export async function createTopic(title: string, order: number): Promise<string> {
+  const id = genId("t");
+  await db.insert(schema.topics).values({ id, title, order });
   return id;
 }
 
-export async function updateChapter(id: string, data: { title: string; order: number }) {
-  await db.update(schema.subtopics).set(data).where(eq(schema.subtopics.id, id));
+export async function updateTopic(id: string, data: { title: string; order: number }) {
+  await db.update(schema.topics).set(data).where(eq(schema.topics.id, id));
+}
+
+/** Глава в выбранной теме (раньше всегда попадала в первую тему — «Планиметрию»). */
+export async function createChapter(title: string, order: number, topicId?: string): Promise<string> {
+  const target = topicId && (await topicExists(topicId)) ? topicId : await getTopicId();
+  if (!target) throw new Error("Нет ни одного модуля (Topic) — так не должно быть, проверьте seed.");
+  const id = genId("ch");
+  await db.insert(schema.subtopics).values({ id, topicId: target, title, order });
+  return id;
+}
+
+export async function updateChapter(id: string, data: { title: string; order: number; topicId?: string }) {
+  const set: { title: string; order: number; topicId?: string } = { title: data.title, order: data.order };
+  if (data.topicId && (await topicExists(data.topicId))) set.topicId = data.topicId;
+  await db.update(schema.subtopics).set(set).where(eq(schema.subtopics.id, id));
 }
 
 export async function createSkill(

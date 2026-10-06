@@ -103,13 +103,11 @@ export default function StudentSidebar({
                 <span className="text-[13px] text-white/75">без ограничений</span>
               </p>
             )}
-            <div className="mt-2 flex gap-1">
-              {Array.from({ length: energyMax }).map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 flex-1 rounded-pill ${i < energy ? "bg-teal" : "bg-white/15"}`}
-                />
-              ))}
+            <div className="mt-2 h-1.5 overflow-hidden rounded-pill bg-white/15">
+              <div
+                className="h-full rounded-pill bg-teal transition-all"
+                style={{ width: `${Number.isFinite(energy) ? Math.round((Math.min(energy, energyMax) / energyMax) * 100) : 100}%` }}
+              />
             </div>
           </div>
         )}
