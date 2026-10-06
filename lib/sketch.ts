@@ -435,3 +435,71 @@ export async function renderSketchJpeg(doc: SketchDoc, diagramSvg: SVGSVGElement
     return null;
   }
 }
+
+// ------------------------------------------------- выделение и перемещение
+
+export type BBox = { x0: number; y0: number; x1: number; y1: number };
+
+/** Габариты элемента в мировых координатах (с запасом на толщину). */
+export function itemBBox(it: SketchItem): BBox {
+  switch (it.t) {
+    case "stroke": {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (let i = 0; i + 1 < it.pts.length; i += 2) {
+        x0 = Math.min(x0, it.pts[i]); x1 = Math.max(x1, it.pts[i]);
+        y0 = Math.min(y0, it.pts[i + 1]); y1 = Math.max(y1, it.pts[i + 1]);
+      }
+      const h = it.w / 2;
+      return { x0: x0 - h, y0: y0 - h, x1: x1 + h, y1: y1 + h };
+    }
+    case "line":
+      return { x0: Math.min(it.a[0], it.b[0]), y0: Math.min(it.a[1], it.b[1]), x1: Math.max(it.a[0], it.b[0]), y1: Math.max(it.a[1], it.b[1]) };
+    case "circle":
+      return { x0: it.o[0] - it.r, y0: it.o[1] - it.r, x1: it.o[0] + it.r, y1: it.o[1] + it.r };
+    case "text":
+      return { x0: it.p[0], y0: it.p[1] - 12, x1: it.p[0] + it.s.length * 11, y1: it.p[1] + 12 };
+    default:
+      return { x0: it.p[0] - 14, y0: it.p[1] - 14, x1: it.p[0] + 14, y1: it.p[1] + 14 };
+  }
+}
+
+export function unionBBox(items: SketchItem[]): BBox | null {
+  if (!items.length) return null;
+  return items.map(itemBBox).reduce((a, b) => ({
+    x0: Math.min(a.x0, b.x0),
+    y0: Math.min(a.y0, b.y0),
+    x1: Math.max(a.x1, b.x1),
+    y1: Math.max(a.y1, b.y1),
+  }));
+}
+
+export function bboxIntersects(a: BBox, b: BBox): boolean {
+  return a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
+}
+
+/** Сдвиг элемента на (dx; dy) — новый объект, исходный не меняется. */
+export function translateItem(it: SketchItem, dx: number, dy: number): SketchItem {
+  const m = (p: Pt): Pt => [p[0] + dx, p[1] + dy];
+  switch (it.t) {
+    case "stroke":
+      return { ...it, pts: it.pts.map((v, i) => (i % 2 === 0 ? v + dx : v + dy)) };
+    case "line":
+      return { ...it, a: m(it.a), b: m(it.b) };
+    case "circle":
+      return { ...it, o: m(it.o) };
+    default:
+      return { ...it, p: m(it.p) };
+  }
+}
+
+/** Угол отрезка a→b с прилипанием к 0°/45°/90°… (в пределах tol градусов). */
+export function snapAngle(a: Pt, b: Pt, stepDeg: number, tolDeg: number): Pt {
+  const d = sub(b, a);
+  const l = len(d);
+  if (l < 1) return b;
+  const ang = (Math.atan2(d[1], d[0]) * 180) / Math.PI;
+  const near = Math.round(ang / stepDeg) * stepDeg;
+  if (Math.abs(ang - near) > tolDeg) return b;
+  const r = (near * Math.PI) / 180;
+  return [a[0] + Math.cos(r) * l, a[1] + Math.sin(r) * l];
+}

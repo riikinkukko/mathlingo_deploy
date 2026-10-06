@@ -233,21 +233,37 @@ export async function computeStudentProgress(studentId: string) {
   const problems = problemRows.map(mapProblem);
   const skillRows = await db.select().from(schema.skills);
 
+  // Развёрнутая задача засчитывается в прогресс навыка сразу после отправки,
+  // чем бы ни закончилась проверка: у ученика репетитора — пока решение ждёт
+  // проверки или отправлено на доработку, у самостоятельного — после
+  // самопроверки (и если потом эксперт попросил доработать). Иначе навык
+  // с задачей второй части не закрывался бы, пока репетитор не посмотрит,
+  // и следующий урок оставался заблокированным.
   const attemptRows = await db
-    .select()
+    .select({ problemId: schema.attempts.problemId })
     .from(schema.attempts)
     .where(
       and(
         eq(schema.attempts.studentId, studentId),
-        eq(schema.attempts.isCorrect, true),
-        eq(schema.attempts.source, "lesson")
+        eq(schema.attempts.source, "lesson"),
+        or(eq(schema.attempts.isCorrect, true), isNotNull(schema.attempts.reviewStatus))
       )
     );
+
+  // Самостоятельным на Free развёрнутые задачи в уроке не показываются
+  // (см. app/student/skill/[id]/page.tsx) — и в прогрессе их не ждём, иначе
+  // навык с задачей второй части не закрылся бы никогда.
+  const [userRow] = await db.select().from(schema.users).where(eq(schema.users.id, studentId)).limit(1);
+  const viewer = userRow ? mapUserRow(userRow) : null;
+  const hideDetailed = !!viewer && isStandaloneStudent(viewer) && !isEffectivelyPro(viewer);
 
   const result: Record<string, { solved: number; total: number; pct: number }> = {};
   for (const skill of skillRows) {
     const skillProblems = problems.filter(
-      (p) => p.skillId === skill.id && (p.tier ?? "core") === "core"
+      (p) =>
+        p.skillId === skill.id &&
+        (p.tier ?? "core") === "core" &&
+        !(hideDetailed && p.answerType === "DETAILED")
     );
     const skillProblemIds = new Set(skillProblems.map((p) => p.id));
     const solvedIds = new Set(

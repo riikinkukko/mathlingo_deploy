@@ -8,7 +8,6 @@ import { TOPIC_COOKIE } from "@/lib/topic-cookie";
 // Заглушки будущих разделов — без записи в БД, реального контента там пока
 // нет, это витрина того, что впереди по программе профильного ЕГЭ.
 const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] = [
-  { title: "Задачи с параметром", icon: "🔧", colorClass: "bg-pine-light text-pine-dark" },
   { title: "Задачи на теорию чисел", icon: "🔢", colorClass: "bg-teal-light text-teal-text" },
 ];
 
@@ -27,7 +26,7 @@ export default async function SubjectsPage() {
           <h1 className="font-display text-2xl font-black text-ink">Программа подготовки к ЕГЭ</h1>
           <p className="mt-1.5 text-sm text-ink-soft">
             Выбери раздел — он откроется на «Пути». Готовы все разделы
-            профильной математики, кроме двух последних — они скоро.
+            профильной математики, кроме последнего — он скоро.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">

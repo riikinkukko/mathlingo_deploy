@@ -28,6 +28,11 @@ import {
   contentBottom,
   loadSketch,
   saveSketch,
+  itemBBox,
+  unionBBox,
+  bboxIntersects,
+  translateItem,
+  snapAngle,
 } from "@/lib/sketch";
 
 /**
@@ -41,9 +46,14 @@ import {
  *  • Рисунок сохраняется у каждой задачи (на устройстве ученика) — закрыть
  *    черновик можно без потерь.
  *  • Поле ответа внизу — решил и ответил, не закрывая черновик.
+ *  • «Выбор»: тап по фигуре или рамка — выделить; тянуть — двигать;
+ *    «Копия» / «Удалить». На компьютере: Alt + перетаскивание — копия,
+ *    Ctrl+C / Ctrl+V / Ctrl+D, Delete; Shift с ручкой — ровная прямая.
+ *  • На компьютере Ctrl + колесо (и щипок на тачпаде) масштабируют лист,
+ *    а не страницу браузера — иначе два зума накладывались друг на друга.
  */
 
-type Tool = "pen" | "line" | "text" | "stamp" | "eraser";
+type Tool = "pen" | "line" | "text" | "stamp" | "eraser" | "select";
 type Stamp = "tick1" | "tick2" | "right" | "arc" | "circle" | "dot" | "height" | "median" | "bisector";
 
 const COLORS = [
@@ -82,7 +92,7 @@ export type AnswerBarProps = {
 
 type View = { x: number; y: number; z: number };
 type Live =
-  | { t: "stroke"; pts: number[] }
+  | { t: "stroke"; pts: number[]; straight?: boolean }
   | { t: "line"; a: Pt; b: Pt; snapA?: boolean; snapB?: boolean }
   | { t: "circle"; o: Pt; r: number }
   | null;
@@ -140,16 +150,22 @@ export default function DiagramScratchpad({
     future.current = [];
     setItems(next);
   }, []);
+  // Выделение (инструмент «Выбор») — индексы в items.
+  const [selected, setSelected] = useState<number[]>([]);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const undo = useCallback(() => {
     const prev = past.current.pop();
     if (!prev) return;
     future.current.push(itemsRef.current);
+    setSelected([]);
     setItems(prev);
   }, []);
   const redo = useCallback(() => {
     const next = future.current.pop();
     if (!next) return;
     past.current.push(itemsRef.current);
+    setSelected([]);
     setItems(next);
   }, []);
 
@@ -178,7 +194,26 @@ export default function DiagramScratchpad({
   const [textEdit, setTextEdit] = useState<{ p: Pt; value: string } | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const [answerState, setAnswerState] = useState<"idle" | "pending" | "wrong">("idle");
-  const [hint, setHint] = useState(() => Number(readFlag("pm-sketch-hint") || 0) < 3);
+  // Подсказка про жесты — пока ученик ни разу сам не приблизил лист (и не
+  // дольше трёх открытий). Как только приблизил — больше не показываем.
+  const [hint, setHint] = useState(() => {
+    const f = readFlag("pm-sketch-hint");
+    return f !== "done" && Number(f || 0) < 3;
+  });
+  const learnedZoom = useRef(readFlag("pm-sketch-hint") === "done");
+  function markZoomLearned() {
+    setHint(false);
+    if (learnedZoom.current) return;
+    learnedZoom.current = true;
+    writeFlag("pm-sketch-hint", "done");
+  }
+  // Мышь/тачпад — подсказки и клавиши для компьютера.
+  const [desktop] = useState(
+    () => typeof window !== "undefined" && !!window.matchMedia?.("(hover: hover) and (pointer: fine)").matches
+  );
+  const [marquee, setMarquee] = useState<{ a: Pt; b: Pt } | null>(null);
+  const dragRef = useRef<{ start: Pt; base: SketchItem[]; sel: number[]; moved: boolean } | null>(null);
+  const clipboard = useRef<SketchItem[]>([]);
   const baseGeom = useRef<Geometry>(emptyGeometry());
 
   const geom = useMemo(() => withUserGeometry(baseGeom.current, items), [items, vp.w, geomVersion]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -212,7 +247,7 @@ export default function DiagramScratchpad({
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    if (hint) writeFlag("pm-sketch-hint", String(Number(readFlag("pm-sketch-hint") || 0) + 1));
+    if (hint && !learnedZoom.current) writeFlag("pm-sketch-hint", String(Number(readFlag("pm-sketch-hint") || 0) + 1));
     return () => {
       document.body.style.overflow = prev;
     };
@@ -330,7 +365,7 @@ export default function DiagramScratchpad({
       mode.current = "draw";
       drawId.current = e.pointerId;
       drawStart.current = { t: Date.now(), x: e.clientX, y: e.clientY, moved: 0 };
-      startTool(toWorld(e.clientX, e.clientY));
+      startTool(toWorld(e.clientX, e.clientY), { shift: e.shiftKey, alt: e.altKey });
       return;
     }
 
@@ -362,7 +397,7 @@ export default function DiagramScratchpad({
         drawStart.current.moved,
         Math.hypot(e.clientX - drawStart.current.x, e.clientY - drawStart.current.y)
       );
-      moveTool(toWorld(e.clientX, e.clientY));
+      moveTool(toWorld(e.clientX, e.clientY), e.shiftKey);
     } else if (mode.current === "gesture" && gestureStart.current) {
       const ps = [...pointers.current.values()];
       if (ps.length < 2) return;
@@ -372,6 +407,7 @@ export default function DiagramScratchpad({
       const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       g.moved = Math.max(g.moved, Math.abs(d - g.d), Math.hypot(cx - g.cx, cy - g.cy));
       const z = Math.min(4, Math.max(1, g.view.z * (d / g.d)));
+      if (Math.abs(z - g.view.z) > 0.08) markZoomLearned();
       const r = viewportRef.current!.getBoundingClientRect();
       // Точка мира под центром пальцев остаётся под ним.
       const s0 = base * g.view.z, s1 = base * z;
@@ -408,18 +444,51 @@ export default function DiagramScratchpad({
     }
   }
 
-  function onWheel(e: React.WheelEvent<HTMLDivElement>) {
+  /** Масштаб листа вокруг точки экрана (cx; cy). */
+  function zoomAt(z: number, cx: number, cy: number) {
     const r = viewportRef.current!.getBoundingClientRect();
-    if (e.ctrlKey || e.metaKey) {
-      const v = viewRef.current;
-      const z = Math.min(4, Math.max(1, v.z * (e.deltaY < 0 ? 1.1 : 0.9)));
-      const s0 = base * v.z, s1 = base * z;
-      const wx = (e.clientX - r.left - v.x) / s0, wy = (e.clientY - r.top - v.y) / s0;
-      setView(clampView({ z, x: e.clientX - r.left - wx * s1, y: e.clientY - r.top - wy * s1 }));
-    } else {
-      setView((v) => clampView({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
-    }
+    const v = viewRef.current;
+    const nz = Math.min(4, Math.max(1, z));
+    const s0 = base * v.z, s1 = base * nz;
+    const wx = (cx - r.left - v.x) / s0, wy = (cy - r.top - v.y) / s0;
+    setView(clampView({ z: nz, x: cx - r.left - wx * s1, y: cy - r.top - wy * s1 }));
+    markZoomLearned();
   }
+
+  // Колесо — нативный обработчик с passive: false: только так можно
+  // отменить масштаб страницы браузера (Ctrl + колесо, щипок на тачпаде).
+  const wheelRef = useRef<(e: WheelEvent) => void>(() => {});
+  wheelRef.current = (e: WheelEvent) => {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      // Тачпад шлёт маленькие шаги, колесо мыши — крупные: ограничиваем шаг.
+      const step = Math.max(-50, Math.min(50, e.deltaY));
+      zoomAt(viewRef.current.z * Math.exp(-step * 0.005), e.clientX, e.clientY);
+    } else {
+      setView((v) => clampView({ ...v, x: v.x - (e.shiftKey ? e.deltaY : e.deltaX), y: v.y - (e.shiftKey ? 0 : e.deltaY) }));
+    }
+  };
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => wheelRef.current(e);
+    el.addEventListener("wheel", onWheel, { passive: false });
+    // Ctrl + колесо над шапкой и панелями тоже не должно масштабировать страницу.
+    const blockPageZoom = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) e.preventDefault();
+    };
+    window.addEventListener("wheel", blockPageZoom, { passive: false });
+    // Safari: щипок на тачпаде приходит жестом, а не колесом.
+    const blockGesture = (e: Event) => e.preventDefault();
+    document.addEventListener("gesturestart", blockGesture);
+    document.addEventListener("gesturechange", blockGesture);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      window.removeEventListener("wheel", blockPageZoom);
+      document.removeEventListener("gesturestart", blockGesture);
+      document.removeEventListener("gesturechange", blockGesture);
+    };
+  }, []);
 
   // ----------------------------------------------------------- инструменты
 
@@ -428,7 +497,39 @@ export default function DiagramScratchpad({
     setLive(l);
   }
 
-  function startTool(p: Pt) {
+  /** Элемент под точкой — сверху вниз (последний нарисованный — первым). */
+  function itemAt(p: Pt): number {
+    const r = 12 / scale;
+    const cur = itemsRef.current;
+    for (let i = cur.length - 1; i >= 0; i--) if (hitItem(cur[i], p, r)) return i;
+    return -1;
+  }
+
+  function startTool(p: Pt, mods: { shift: boolean; alt: boolean } = { shift: false, alt: false }) {
+    if (tool === "select") {
+      const hit = itemAt(p);
+      const cur = selectedRef.current;
+      if (hit >= 0) {
+        let sel = cur.includes(hit) ? cur : mods.shift ? [...cur, hit] : [hit];
+        let base = itemsRef.current;
+        // Alt + перетаскивание — тянем копию, оригинал остаётся на месте.
+        if (mods.alt) {
+          const copies = sel.map((i) => base[i]);
+          commit([...base, ...copies]);
+          base = itemsRef.current = [...base, ...copies];
+          sel = copies.map((_, k) => base.length - copies.length + k);
+          dragRef.current = { start: p, base, sel, moved: true };
+        } else {
+          dragRef.current = { start: p, base, sel, moved: false };
+        }
+        setSelected(sel);
+      } else {
+        dragRef.current = null;
+        if (!mods.shift) setSelected([]);
+        setMarquee({ a: p, b: p });
+      }
+      return;
+    }
     if (tool === "pen") setLiveBoth({ t: "stroke", pts: [p[0], p[1]] });
     else if (tool === "line") {
       const s = snapPoint(p, geom, snapR);
@@ -442,21 +543,50 @@ export default function DiagramScratchpad({
     }
   }
 
-  function moveTool(p: Pt) {
+  function moveTool(p: Pt, shift = false) {
     const l = liveRef.current;
+    if (tool === "select") {
+      const d = dragRef.current;
+      if (d) {
+        const dx = p[0] - d.start[0], dy = p[1] - d.start[1];
+        if (!d.moved && Math.hypot(dx, dy) < 3 / scale) return;
+        const set = new Set(d.sel);
+        const next = d.base.map((it, i) => (set.has(i) ? translateItem(it, dx, dy) : it));
+        // Всё перетаскивание — один шаг отмены.
+        if (!d.moved) {
+          d.moved = true;
+          commit(next);
+        } else setItems(next);
+      } else if (marquee) setMarquee({ a: marquee.a, b: p });
+      return;
+    }
+    if (tool === "pen" && l?.t === "stroke" && shift) {
+      // Shift — ровная прямая от начала штриха (с прилипанием к 0°/45°/90°).
+      const a: Pt = [l.pts[0], l.pts[1]];
+      const b = snapAngle(a, p, 45, 4);
+      setLiveBoth({ t: "stroke", pts: [a[0], a[1], b[0], b[1]], straight: true });
+      return;
+    }
     if (tool === "pen" && l?.t === "stroke") {
       const n = l.pts.length;
       if (Math.hypot(p[0] - l.pts[n - 2], p[1] - l.pts[n - 1]) < 1.2 / scale) return;
       setLiveBoth({ t: "stroke", pts: [...l.pts, p[0], p[1]] });
     } else if (tool === "line" && l?.t === "line") {
       const s = snapPoint(p, geom, snapR);
-      setLiveBoth({ ...l, b: s.p, snapB: s.kind !== "free" });
+      // Shift у линейки — шаг 15°, если конец не прилип к чертежу.
+      const b = shift && s.kind === "free" ? snapAngle(l.a, s.p, 15, 7.5) : s.p;
+      setLiveBoth({ ...l, b, snapB: s.kind !== "free" });
     } else if (tool === "eraser") erase(p, false);
     else if (l?.t === "circle") setLiveBoth({ ...l, r: dist(l.o, p) });
   }
 
   function cancelTool() {
     setLiveBoth(null);
+    setMarquee(null);
+    // Второй палец сразу после первого: начатое перетаскивание откатываем.
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d?.moved) undo();
   }
 
   const lastErase = useRef<Pt | null>(null);
@@ -480,6 +610,31 @@ export default function DiagramScratchpad({
     const l = liveRef.current;
     setLiveBoth(null);
     const c = color;
+    if (tool === "select") {
+      dragRef.current = null;
+      if (marquee) {
+        const box = {
+          x0: Math.min(marquee.a[0], p[0]),
+          y0: Math.min(marquee.a[1], p[1]),
+          x1: Math.max(marquee.a[0], p[0]),
+          y1: Math.max(marquee.a[1], p[1]),
+        };
+        setMarquee(null);
+        if (box.x1 - box.x0 < 4 && box.y1 - box.y0 < 4) return;
+        const inside = itemsRef.current.map((it, i) => (bboxIntersects(itemBBox(it), box) ? i : -1)).filter((i) => i >= 0);
+        setSelected((prev) => [...new Set([...prev, ...inside])]);
+      }
+      return;
+    }
+    if (tool === "pen" && l?.t === "stroke" && l.straight) {
+      const a: Pt = [l.pts[0], l.pts[1]], b: Pt = [l.pts[2], l.pts[3]];
+      if (dist(a, b) < 4) return;
+      commit([
+        ...itemsRef.current,
+        highlight ? { t: "stroke", pts: l.pts, c: HIGHLIGHT, w: 16, hl: true } : { t: "line", a, b, c, w: width },
+      ]);
+      return;
+    }
     if (tool === "pen" && l?.t === "stroke") {
       const pts = l.pts.length >= 4 ? l.pts : [l.pts[0], l.pts[1], l.pts[0] + 0.01, l.pts[1]];
       commit([
@@ -592,25 +747,111 @@ export default function DiagramScratchpad({
 
   function chooseTool(t: Tool) {
     setCevianFrom(null);
+    if (t !== "select") setSelected([]);
     if (t === "stamp") setPopover(tool === "stamp" && popover === "stamps" ? null : "stamps");
     else setPopover(null);
     setTool(t);
   }
 
-  // Клавиши на компьютере: Esc — свернуть, Ctrl+Z / Ctrl+Shift+Z.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const typing = (e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA";
-      if (e.key === "Escape" && !typing) onClose();
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !typing) {
-        e.preventDefault();
-        if (e.shiftKey) redo();
-        else undo();
-      }
+  // ----------------------------------------------------------- выделение
+
+  const validSel = selected.filter((i) => i < items.length);
+
+  function deleteSelected() {
+    const set = new Set(selectedRef.current);
+    if (!set.size) return;
+    commit(itemsRef.current.filter((_, i) => !set.has(i)));
+    setSelected([]);
+  }
+
+  /** Вставить элементы со сдвигом и выделить вставленное. */
+  function pasteItems(src: SketchItem[], offset = 18) {
+    if (!src.length) return;
+    const copies = src.map((it) => translateItem(it, offset, offset));
+    const base = itemsRef.current;
+    commit([...base, ...copies]);
+    setSelected(copies.map((_, k) => base.length + k));
+    setTool("select");
+  }
+
+  function duplicateSelected() {
+    const cur = itemsRef.current;
+    pasteItems(selectedRef.current.filter((i) => i < cur.length).map((i) => cur[i]));
+  }
+
+  // Клавиши на компьютере. Раскладку не проверяем по e.key: в русской
+  // раскладке Ctrl+Z приходит как «я» — смотрим на физическую клавишу (e.code).
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null;
+    const typing = el?.tagName === "INPUT" || el?.tagName === "TEXTAREA";
+    const mod = e.ctrlKey || e.metaKey;
+    // Масштаб страницы браузера (Ctrl +/−/0) — масштабируем лист.
+    if (mod && ["Equal", "NumpadAdd", "Minus", "NumpadSubtract", "Digit0", "Numpad0"].includes(e.code)) {
+      e.preventDefault();
+      const r = viewportRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      if (e.code === "Digit0" || e.code === "Numpad0") setView(clampView({ x: 0, y: 0, z: 1 }));
+      else zoomAt(viewRef.current.z * (e.code === "Equal" || e.code === "NumpadAdd" ? 1.25 : 0.8), cx, cy);
+      return;
     }
+    if (typing) return;
+    if (e.key === "Escape") {
+      if (selectedRef.current.length) setSelected([]);
+      else onClose();
+      return;
+    }
+    if (mod && e.code === "KeyZ") {
+      e.preventDefault();
+      if (e.shiftKey) redo();
+      else undo();
+      return;
+    }
+    if (mod && e.code === "KeyY") {
+      e.preventDefault();
+      redo();
+      return;
+    }
+    if (mod && e.code === "KeyC" && selectedRef.current.length) {
+      e.preventDefault();
+      const cur = itemsRef.current;
+      clipboard.current = selectedRef.current.filter((i) => i < cur.length).map((i) => cur[i]);
+      setToast("Скопировано — Ctrl+V, чтобы вставить");
+      return;
+    }
+    if (mod && e.code === "KeyV" && clipboard.current.length) {
+      e.preventDefault();
+      pasteItems(clipboard.current);
+      clipboard.current = clipboard.current.map((it) => translateItem(it, 18, 18));
+      return;
+    }
+    if (mod && e.code === "KeyD" && selectedRef.current.length) {
+      e.preventDefault();
+      duplicateSelected();
+      return;
+    }
+    if (mod && e.code === "KeyA") {
+      e.preventDefault();
+      setTool("select");
+      setSelected(itemsRef.current.map((_, i) => i));
+      return;
+    }
+    if ((e.key === "Delete" || e.key === "Backspace") && selectedRef.current.length) {
+      e.preventDefault();
+      deleteSelected();
+      return;
+    }
+    if (mod || e.altKey) return;
+    // Быстрый выбор инструмента: V — выбор, P — ручка, L — линейка, T — текст, E — ластик.
+    const tools: Record<string, Tool> = { KeyV: "select", KeyP: "pen", KeyL: "line", KeyT: "text", KeyE: "eraser" };
+    if (tools[e.code]) chooseTool(tools[e.code]);
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, undo, redo]);
+  }, []);
 
   async function submitAnswer() {
     if (!answerBar || answerState === "pending") return;
@@ -639,15 +880,30 @@ export default function DiagramScratchpad({
     }
     return `<circle cx="${live.o[0]}" cy="${live.o[1]}" r="${live.r}" fill="none" stroke="${color}" stroke-width="2.5" stroke-dasharray="${8 / scale} ${6 / scale}"/><circle cx="${live.o[0]}" cy="${live.o[1]}" r="3" fill="${color}"/>`;
   })();
+  const selBox = tool === "select" ? unionBBox(validSel.map((i) => items[i])) : null;
+  const selectSvg =
+    (selBox
+      ? `<rect x="${selBox.x0 - 6}" y="${selBox.y0 - 6}" width="${selBox.x1 - selBox.x0 + 12}" height="${selBox.y1 - selBox.y0 + 12}" rx="${6 / scale}" fill="#16B3A6" fill-opacity="0.06" stroke="#16B3A6" stroke-width="${2 / scale}" stroke-dasharray="${6 / scale} ${4 / scale}"/>`
+      : "") +
+    (marquee
+      ? `<rect x="${Math.min(marquee.a[0], marquee.b[0])}" y="${Math.min(marquee.a[1], marquee.b[1])}" width="${Math.abs(marquee.b[0] - marquee.a[0])}" height="${Math.abs(marquee.b[1] - marquee.a[1])}" fill="#2F6FDB" fill-opacity="0.07" stroke="#2F6FDB" stroke-width="${1.5 / scale}" stroke-dasharray="${5 / scale} ${4 / scale}"/>`
+      : "");
   const cevianSvg = cevianFrom
     ? `<circle cx="${cevianFrom[0]}" cy="${cevianFrom[1]}" r="${12 / scale}" fill="#16B3A6" fill-opacity="0.2" stroke="#16B3A6" stroke-width="${2.5 / scale}"/>`
     : "";
 
-  const stampHint = tool === "stamp" ? STAMPS.find((s) => s.k === stamp)?.hint : null;
+  const stampHint =
+    tool === "stamp"
+      ? STAMPS.find((s) => s.k === stamp)?.hint
+      : tool === "select" && !validSel.length
+        ? desktop
+          ? "Кликни фигуру или обведи рамкой. Alt + перетаскивание — копия"
+          : "Тапни фигуру или обведи рамкой — потом тяни"
+        : null;
   const iconBtn =
     "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-ink-soft transition hover:bg-paper disabled:opacity-30";
   const toolBtn = (active: boolean) =>
-    `flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] transition ${
+    `flex h-12 w-[42px] min-[400px]:w-12 shrink-0 items-center justify-center rounded-[14px] transition ${
       active ? "bg-pine text-white" : "bg-[#F0F6F2] text-ink-soft hover:bg-pine-light"
     }`;
 
@@ -660,15 +916,22 @@ export default function DiagramScratchpad({
         </button>
         <div className="min-w-0 flex-1">
           <p className="font-display text-[16px] font-black leading-tight">Черновик</p>
-          <p className="flex items-center gap-1 text-[11px] font-bold text-pine-dark">
+          <p className="flex items-center gap-1 truncate text-[11px] font-bold text-pine-dark">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-            {items.length ? "сохранено" : "пометки сохраняются сами"}
+            <span className="truncate">{items.length ? "сохранено" : "сохраняется само"}</span>
           </p>
         </div>
-        <button type="button" onClick={undo} disabled={!past.current.length} aria-label="Отменить" className={iconBtn}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+        <button
+          type="button"
+          onClick={undo}
+          disabled={!past.current.length}
+          title={desktop ? "Отменить (Ctrl+Z)" : undefined}
+          className="flex h-10 shrink-0 items-center gap-1.5 rounded-pill border-2 border-line bg-white pl-2.5 pr-3.5 text-[13px] font-extrabold text-ink transition hover:border-pine disabled:opacity-35"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
+          Отменить
         </button>
-        <button type="button" onClick={redo} disabled={!future.current.length} aria-label="Вернуть" className={iconBtn}>
+        <button type="button" onClick={redo} disabled={!future.current.length} aria-label="Вернуть" title={desktop ? "Вернуть (Ctrl+Shift+Z)" : undefined} className={iconBtn}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 14 5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>
         </button>
       </header>
@@ -699,8 +962,7 @@ export default function DiagramScratchpad({
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onWheel={onWheel}
-        style={{ cursor: tool === "eraser" ? "cell" : "crosshair" }}
+        style={{ cursor: tool === "eraser" ? "cell" : tool === "select" ? (dragRef.current?.moved ? "grabbing" : "default") : "crosshair" }}
       >
         <div
           ref={worldRef}
@@ -728,7 +990,7 @@ export default function DiagramScratchpad({
             width={WORLD_W}
             height={H}
             viewBox={`0 0 ${WORLD_W} ${H}`}
-            dangerouslySetInnerHTML={{ __html: itemsSvg + liveSvg + cevianSvg }}
+            dangerouslySetInnerHTML={{ __html: itemsSvg + liveSvg + cevianSvg + selectSvg }}
           />
           {textEdit && (
             <input
@@ -761,6 +1023,26 @@ export default function DiagramScratchpad({
           {Math.round(view.z * 100)}%
         </button>
 
+        {tool === "select" && validSel.length > 0 && (
+          <div
+            role="toolbar"
+            aria-label="Выделенное"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute left-3 top-3 flex items-center gap-1 rounded-[16px] border border-line-soft bg-white p-1 shadow-[0_8px_24px_rgba(19,42,32,0.14)]"
+          >
+            <span className="px-2 text-[12px] font-extrabold text-ink-soft">Выделено: {validSel.length}</span>
+            <button type="button" onClick={duplicateSelected} title={desktop ? "Копия (Ctrl+D)" : undefined} className="h-9 rounded-[12px] px-3 text-[13px] font-extrabold text-pine-dark hover:bg-pine-light">
+              Копия
+            </button>
+            <button type="button" onClick={deleteSelected} title={desktop ? "Удалить (Delete)" : undefined} className="h-9 rounded-[12px] px-3 text-[13px] font-extrabold text-coral hover:bg-coral-light">
+              Удалить
+            </button>
+            <button type="button" onClick={() => setSelected([])} aria-label="Снять выделение" className="flex h-9 w-9 items-center justify-center rounded-[12px] text-ink-soft hover:bg-paper">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+        )}
+
         {(toast || stampHint || cevianFrom) && (
           <div role="status" className="pointer-events-none absolute bottom-3 left-1/2 max-w-[90%] -translate-x-1/2 rounded-[14px] bg-[#0E8C82] px-3.5 py-2 text-center text-[12px] font-extrabold text-white shadow-lg">
             {toast ?? (cevianFrom ? "Теперь тапни противоположную сторону" : stampHint)}
@@ -769,7 +1051,11 @@ export default function DiagramScratchpad({
 
         {hint && !(toast || stampHint || cevianFrom) && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-pill border border-line-soft bg-white/95 px-3.5 py-2 text-[12px] font-bold text-ink-soft">
-            {stylusOnly ? "Стилус — пишет, палец — двигает лист" : "Один палец — пишешь, два — двигаешь и приближаешь"}
+            {desktop
+              ? "Мышь — пишет · Ctrl + колесо — масштаб · Shift — ровная линия"
+              : stylusOnly
+                ? "Стилус — пишет, палец — двигает лист"
+                : "Один палец — пишешь, два — двигаешь и приближаешь"}
           </div>
         )}
 
@@ -930,15 +1216,18 @@ export default function DiagramScratchpad({
       )}
 
       {/* инструменты */}
-      <nav aria-label="Инструменты" className="flex shrink-0 items-center gap-1.5 px-3 pt-2.5" style={{ paddingBottom: "max(14px, var(--app-sab))" }}>
-        <button type="button" aria-label="Ручка" aria-pressed={tool === "pen"} onClick={() => chooseTool("pen")} className={toolBtn(tool === "pen")}>
+      <nav aria-label="Инструменты" className="flex shrink-0 items-center gap-1 px-3 min-[400px]:gap-1.5 pt-2.5" style={{ paddingBottom: "max(14px, var(--app-sab))" }}>
+        <button type="button" aria-label="Выбор: двигать и копировать" title={desktop ? "Выбор — двигать и копировать (V)" : undefined} aria-pressed={tool === "select"} onClick={() => chooseTool("select")} className={toolBtn(tool === "select")}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 3l14 7-6 2-2 6z" /></svg>
+        </button>
+        <button type="button" aria-label="Ручка" title={desktop ? "Ручка (P), с Shift — ровная линия" : undefined} aria-pressed={tool === "pen"} onClick={() => chooseTool("pen")} className={toolBtn(tool === "pen")}>
           {highlight ? (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" /></svg>
           ) : (
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
           )}
         </button>
-        <button type="button" aria-label="Линейка" aria-pressed={tool === "line"} onClick={() => chooseTool("line")} className={toolBtn(tool === "line")}>
+        <button type="button" aria-label="Линейка" title={desktop ? "Линейка (L), с Shift — шаг 15°" : undefined} aria-pressed={tool === "line"} onClick={() => chooseTool("line")} className={toolBtn(tool === "line")}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2.5" y="8" width="19" height="8" rx="1.5" transform="rotate(-35 12 12)" /><path d="m8 15.5-1-1.5M10.5 13.8l-1.6-2.3M13 12l-1-1.5M15.5 10.3l-1.6-2.3" /></svg>
         </button>
         <button type="button" aria-label="Текст" aria-pressed={tool === "text"} onClick={() => chooseTool("text")} className={`${toolBtn(tool === "text")} font-display text-[18px] font-black`}>
@@ -947,7 +1236,7 @@ export default function DiagramScratchpad({
         <button type="button" aria-label="Значки" aria-pressed={tool === "stamp"} aria-expanded={popover === "stamps"} onClick={() => chooseTool("stamp")} className={toolBtn(tool === "stamp")}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20V5" /><path d="M4 20h15" /><path d="M4 14h6v6" /></svg>
         </button>
-        <button type="button" aria-label="Ластик" aria-pressed={tool === "eraser"} onClick={() => chooseTool("eraser")} className={toolBtn(tool === "eraser")}>
+        <button type="button" aria-label="Ластик" title={desktop ? "Ластик (E)" : undefined} aria-pressed={tool === "eraser"} onClick={() => chooseTool("eraser")} className={toolBtn(tool === "eraser")}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21z" /><path d="M22 21H7" /><path d="m5 11 9 9" /></svg>
         </button>
         <div className="flex-1" />
@@ -956,7 +1245,7 @@ export default function DiagramScratchpad({
           aria-label="Цвет и толщина"
           aria-expanded={popover === "pen"}
           onClick={() => setPopover(popover === "pen" ? null : "pen")}
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-[14px] border-2 ${popover === "pen" ? "border-pine bg-pine-light/60" : "border-line bg-white"}`}
+          className={`flex h-12 w-11 shrink-0 items-center justify-center rounded-[14px] border-2 min-[400px]:w-12 ${popover === "pen" ? "border-pine bg-pine-light/60" : "border-line bg-white"}`}
         >
           <span className="h-6 w-6 rounded-full" style={{ background: highlight ? HIGHLIGHT : color }} />
         </button>

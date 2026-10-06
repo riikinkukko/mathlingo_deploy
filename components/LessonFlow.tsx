@@ -40,7 +40,7 @@ export default function LessonFlow({
   /** У ученика есть репетитор — показываем «Не понял — спросить репетитора». */
   canAskTeacher?: boolean;
 }) {
-  const allSolvedInitially = problems.every((p) => initialStates[p.id]?.status === "solved");
+  const allSolvedInitially = problems.every((p) => isDone(initialStates[p.id]?.status));
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
   // даже если forceTheoryFirst=true (пустой экран теории хуже, чем никакой).
   const [phase, setPhase] = useState<"theory" | "problems">(
@@ -60,17 +60,27 @@ export default function LessonFlow({
   const [startedAt] = useState(() => Date.now());
   const [mistakeIds, setMistakeIds] = useState<Set<string>>(new Set());
 
-  const solvedCount = Object.values(states).filter((s) => s.status === "solved").length;
+  const solvedCount = problems.filter((p) => isDone(states[p.id]?.status)).length;
 
-  function handleSolved(problemId: string, detailed = false) {
-    setStates((prev) => ({ ...prev, [problemId]: { status: "solved" } }));
-    setCombo((c) => c + 1);
-    const newSolvedCount = Object.values({ ...states, [problemId]: { status: "solved" as const } }).filter(
-      (s) => s.status === "solved"
+  /**
+   * Задача закрыта: верный ответ, самопроверка развёрнутого решения или
+   * развёрнутое решение ушло репетитору («pending»). Урок засчитывается сразу,
+   * не дожидаясь проверки, — и праздничный экран показывается всегда.
+   */
+  function handleSolved(problemId: string, kind: "answer" | "self_checked" | "submitted") {
+    const nextState: ProblemState =
+      kind === "submitted" ? { ...states[problemId], status: "pending" } : { status: "solved" };
+    const wasDone = isDone(states[problemId]?.status);
+    setStates((prev) => ({ ...prev, [problemId]: nextState }));
+    if (!wasDone) setCombo((c) => c + 1);
+    const newSolvedCount = problems.filter((p) =>
+      p.id === problemId ? true : isDone(states[p.id]?.status)
     ).length;
-    if (!wasAlreadyComplete && newSolvedCount === problems.length) {
-      if (detailed) setHoldCelebration(true);
-      else setTimeout(() => setShowCelebration(true), 500);
+    if (!wasAlreadyComplete && !wasDone && newSolvedCount === problems.length) {
+      // После самопроверки ученик сначала читает эталон (и может заказать
+      // проверку) — праздник по кнопке «Завершить урок». В остальных случаях сам.
+      if (kind === "self_checked") setHoldCelebration(true);
+      else setTimeout(() => setShowCelebration(true), kind === "submitted" ? 900 : 500);
     }
   }
 
@@ -106,7 +116,7 @@ export default function LessonFlow({
   }
 
   const isLast = index === problems.length - 1;
-  const canGoNext = currentState.status === "solved";
+  const canGoNext = isDone(currentState.status);
 
   return (
     <div className="mx-auto w-full max-w-2xl pb-28">
@@ -120,18 +130,14 @@ export default function LessonFlow({
               <button
                 key={p.id}
                 type="button"
-                onClick={() => {
-                  // Назад — всегда; вперёд мимо задачи на проверке — нельзя.
-                  if (i > index && currentState.status === "pending") return;
-                  setIndex(i);
-                }}
-                aria-label={`Задача ${i + 1}${st === "solved" ? ", решена" : ""}`}
+                onClick={() => setIndex(i)}
+                aria-label={`Задача ${i + 1}${st === "solved" ? ", решена" : st === "pending" ? ", на проверке" : st === "needs_revision" ? ", на доработке" : ""}`}
                 aria-current={i === index ? "step" : undefined}
                 className="flex h-11 flex-1 items-center"
               >
                 <span
                   className={`block h-3 w-full rounded-pill transition-all ${
-                    st === "solved" ? "bg-pine" : st === "pending" ? "bg-amber" : "bg-grid"
+                    st === "solved" ? "bg-pine" : st === "pending" ? "bg-amber" : st === "needs_revision" ? "bg-coral" : "bg-grid"
                   } ${i === index ? "ring-2 ring-pine-dark ring-offset-2 ring-offset-paper" : ""}`}
                 />
               </button>
@@ -156,7 +162,8 @@ export default function LessonFlow({
         previousAnswer={currentState.previousAnswer}
         review={currentState.review}
         source="lesson"
-        onSolved={() => handleSolved(current.id, current.answerType === "DETAILED")}
+        onSolved={() => handleSolved(current.id, current.answerType === "DETAILED" ? "self_checked" : "answer")}
+        onSubmitted={() => handleSolved(current.id, "submitted")}
         onWrong={() => handleWrong(current.id)}
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
         canAskTeacher={canAskTeacher}
@@ -181,7 +188,7 @@ export default function LessonFlow({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setIndex(problems.findIndex((p) => states[p.id]?.status !== "solved"))}
+                  onClick={() => setIndex(problems.findIndex((p) => !isDone(states[p.id]?.status)))}
                   className="btn-primary !h-14 w-full !text-base"
                 >
                   К нерешённой задаче
@@ -194,13 +201,6 @@ export default function LessonFlow({
             )}
           </div>
         </div>
-      )}
-
-      {currentState.status === "pending" && (
-        <p className="mt-2 text-center text-xs text-ink-soft">
-          Решение отправлено репетитору на проверку — переход к следующей задаче
-          откроется, как только он его посмотрит.
-        </p>
       )}
 
       {theoryOverlay && (
@@ -233,6 +233,12 @@ export default function LessonFlow({
       )}
     </div>
   );
+}
+
+/** Задача закрыта для урока: решена, самопроверена или отправлена на проверку
+ * (и даже возвращена на доработку — урок уже засчитан, доработка идёт отдельно). */
+function isDone(status: ProblemState["status"] | undefined): boolean {
+  return status === "solved" || status === "pending" || status === "needs_revision";
 }
 
 /** Закреплённая верхняя строка урока (с отступом под статус-бар). */

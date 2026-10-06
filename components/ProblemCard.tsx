@@ -45,6 +45,7 @@ export default function ProblemCard({
   source,
   locked = false,
   onSolved,
+  onSubmitted,
   onWrong,
   onOpenTheory,
   canAskTeacher = false,
@@ -60,6 +61,8 @@ export default function ProblemCard({
   source: "lesson" | "assignment" | "review";
   locked?: boolean;
   onSolved?: () => void;
+  /** Развёрнутое решение ушло репетитору на проверку (урок при этом засчитан). */
+  onSubmitted?: () => void;
   onWrong?: () => void;
   /** Кнопка "Теория" в панели инструментов — опциональна: есть только там,
    * где родитель (LessonFlow) реально владеет карточками теории навыка. */
@@ -154,6 +157,7 @@ export default function ProblemCard({
         setNeedsRevision(false);
         setSolutionImage(null);
         setRev(undefined);
+        onSubmitted?.();
         return "other";
       }
       if (res.kind === "correct") {
@@ -356,6 +360,11 @@ export default function ProblemCard({
           {rev?.image && !needsRevision && <ReviewPhoto review={rev} />}
           {!rev?.image && (!answer || answer === "(решение на фото)") && (
             <p className="text-ink-soft">📷 Решение на фото — репетитор его увидит.</p>
+          )}
+          {source === "lesson" && (
+            <p className="mt-2 text-[13px] font-bold text-ink">
+              Задача засчитана — можно идти дальше. Итог проверки придёт в уведомления.
+            </p>
           )}
         </div>
       )}

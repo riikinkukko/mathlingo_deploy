@@ -18,7 +18,7 @@ export function isPaidReviewEnabled(): boolean {
 }
 
 export function getPaidReviewPrice(): number {
-  return Number(process.env.PAID_REVIEW_PRICE_RUB || 290);
+  return Number(process.env.PAID_REVIEW_PRICE_RUB || 30);
 }
 
 /** Срок, который обещаем ученику (в днях). */
