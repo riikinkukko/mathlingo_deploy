@@ -95,7 +95,7 @@ export default async function AppHeader({
                   bg={energy === 0 ? "bg-coral-light" : "bg-teal-light"}
                 >
                   <IconBattery className="h-4 w-4" />
-                  {energy}/{FREE_MAX_ENERGY}
+                  {Number.isFinite(energy) ? `${energy}/${FREE_MAX_ENERGY}` : <span className="text-[17px] leading-none">∞</span>}
                 </Chip>
               </a>
             )}

@@ -63,11 +63,11 @@ export default async function StudentDashboardHeader({
           {energy !== null && (
             <a
               href="/student/upgrade"
-              aria-label={`Энергия: ${energy} из ${energyMax}`}
+              aria-label={Number.isFinite(energy) ? `Энергия: ${energy} из ${energyMax}` : "Энергия без ограничений"}
               className="flex h-9 items-center gap-1 rounded-pill bg-teal-light px-2.5 text-[14px] font-black text-teal-text"
             >
               <IconBattery className="h-4 w-4" />
-              {energy}
+              {Number.isFinite(energy) ? energy : <span className="text-[17px] leading-none">∞</span>}
             </a>
           )}
           <a

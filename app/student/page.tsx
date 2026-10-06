@@ -179,7 +179,7 @@ export default async function StudentDashboard({
       <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">{currentSkill.title}</h1>
       <p className="mt-1.5 text-[14px] font-semibold text-white/75">
         Осталось {remaining} {pluralRu(remaining, ["задача", "задачи", "задач"])} · ~{estMinutes} мин
-        {energy !== null && " · 1 энергия"}
+        {energy !== null && Number.isFinite(energy) && " · 1 энергия"}
       </p>
       <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
         {isNewbie ? "Начать →" : "Решать дальше →"}

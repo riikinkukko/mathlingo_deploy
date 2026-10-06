@@ -93,9 +93,16 @@ export default function StudentSidebar({
         {energy !== null && (
           <div className="rounded-2xl bg-white/10 p-3.5">
             <p className="text-[11px] font-black uppercase tracking-wide text-white/60">Энергия</p>
-            <p className="mt-1 font-display text-lg font-black text-white">
-              {energy} / {energyMax}
-            </p>
+            {Number.isFinite(energy) ? (
+              <p className="mt-1 font-display text-lg font-black text-white">
+                {energy} / {energyMax}
+              </p>
+            ) : (
+              <p className="mt-1 flex items-baseline gap-2 font-display font-black text-white">
+                <span className="text-[26px] leading-none" aria-hidden>∞</span>
+                <span className="text-[13px] text-white/75">без ограничений</span>
+              </p>
+            )}
             <div className="mt-2 flex gap-1">
               {Array.from({ length: energyMax }).map((_, i) => (
                 <span
