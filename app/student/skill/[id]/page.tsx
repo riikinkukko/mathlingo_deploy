@@ -69,7 +69,12 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
   // DETAILED (развёрнутые) задачи — для самостоятельных на Free их прячем:
   // без учителя и без Pro-самопроверки они были бы недоступны/бессмысленны.
   let problems = problemsRaw;
+  // Но одну такую задачу показываем витриной: условие и эталонное решение
+  // после урока — чтобы было видно, что откроет Pro.
+  let detailedPreview: { text: string; solution: string; egeTaskNumber: number | null } | null = null;
   if (isFreeStandalone) {
+    const sample = problems.find((p) => p.answerType === "DETAILED");
+    if (sample) detailedPreview = { text: sample.text, solution: sample.correctAnswer, egeTaskNumber: sample.egeTaskNumber ?? null };
     problems = problems.filter((p) => p.answerType !== "DETAILED");
   }
   const states = await computeProblemStates(user.id, problems);
@@ -97,6 +102,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
         forceTheoryFirst={forceTheoryFirst}
         backHref={`/student?topic=${topicEntry?.topic.id ?? ""}`}
         canAskTeacher={!!user.teacherId}
+        detailedPreview={detailedPreview}
       />
     </div>
   );

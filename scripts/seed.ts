@@ -8829,7 +8829,26 @@ function normalizePlanimetryNumbers(built: DB) {
   }
 }
 
+/**
+ * Номера в этом файле записаны по ЕГЭ-2026 (19 заданий). Переводим в
+ * нумерацию ЕГЭ-2027 (20 заданий): 6–11 → 7–12, 13–15 → 14–16, экономика
+ * №16 → №13, экстремум №12 убран из экзамена (номер снимаем). Планиметрия
+ * (1 и 18), задание 17 и параметры (19) уже в новой нумерации. То же для
+ * заполненной базы делает миграция 0037.
+ */
+const EGE_2026_TO_2027: Record<number, number | undefined> = {
+  6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12, 12: undefined, 13: 14, 14: 15, 15: 16, 16: 13,
+};
+function toEge2027Numbers(built: DB) {
+  for (const p of built.problems) {
+    if (p.id.startsWith("prm_") || p.id.startsWith("d17_")) continue;
+    const n = p.egeTaskNumber;
+    if (n != null && n in EGE_2026_TO_2027) p.egeTaskNumber = EGE_2026_TO_2027[n];
+  }
+}
+
 async function commitToDatabase(built: DB, isFreshInstall: boolean) {
+  toEge2027Numbers(built);
   normalizePlanimetryNumbers(built);
   await pgDb.transaction(async (tx) => {
     for (const t of built.topics) {

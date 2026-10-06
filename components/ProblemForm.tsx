@@ -84,13 +84,15 @@ export default function ProblemForm({
         </div>
         <div>
           <label className="label" htmlFor="egeTaskNumber">
-            Номер задания ЕГЭ (необязательно)
+            Номер задания ЕГЭ-2027 (необязательно)
           </label>
           <input
             className="input"
             id="egeTaskNumber"
             name="egeTaskNumber"
             type="number"
+            min={1}
+            max={20}
             defaultValue={problem?.egeTaskNumber ?? ""}
           />
         </div>

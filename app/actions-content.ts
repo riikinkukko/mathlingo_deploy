@@ -131,7 +131,8 @@ function buildProblemInput(formData: FormData, skillId: string | null): ProblemI
     hints: hints.length > 0 ? hints : ["Внимательно перечитайте условие ещё раз."],
     explanation: String(formData.get("explanation") || "").trim(),
     difficulty: (parseInt(String(formData.get("difficulty") || "2"), 10) || 2) as 1 | 2 | 3,
-    egeTaskNumber: egeRaw ? parseInt(egeRaw, 10) : null,
+    // Номера ЕГЭ-2027: 1–20, остальное не сохраняем.
+    egeTaskNumber: egeRaw && parseInt(egeRaw, 10) >= 1 && parseInt(egeRaw, 10) <= 20 ? parseInt(egeRaw, 10) : null,
     tier: tierRaw === "bank" ? "bank" : "core",
   };
 }

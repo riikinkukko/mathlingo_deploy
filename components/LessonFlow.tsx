@@ -20,6 +20,7 @@ export default function LessonFlow({
   forceTheoryFirst = false,
   backHref = "/student",
   canAskTeacher = false,
+  detailedPreview = null,
 }: {
   skillTitle: string;
   theoryCards: TheoryCard[];
@@ -39,6 +40,8 @@ export default function LessonFlow({
   backHref?: string;
   /** У ученика есть репетитор — показываем «Не понял — спросить репетитора». */
   canAskTeacher?: boolean;
+  /** Free: задача второй части этого навыка — витрина с эталоном и ссылкой на Pro. */
+  detailedPreview?: { text: string; solution: string; egeTaskNumber: number | null } | null;
 }) {
   const allSolvedInitially = problems.every((p) => isDone(initialStates[p.id]?.status));
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
@@ -79,7 +82,9 @@ export default function LessonFlow({
     if (!wasAlreadyComplete && !wasDone && newSolvedCount === problems.length) {
       // После самопроверки ученик сначала читает эталон (и может заказать
       // проверку) — праздник по кнопке «Завершить урок». В остальных случаях сам.
-      if (kind === "self_checked") setHoldCelebration(true);
+      // На Free под последней задачей появляется витрина задачи второй части —
+      // праздник тоже по кнопке, чтобы не закрыть её сразу.
+      if (kind === "self_checked" || detailedPreview) setHoldCelebration(true);
       else setTimeout(() => setShowCelebration(true), kind === "submitted" ? 900 : 500);
     }
   }
@@ -203,6 +208,8 @@ export default function LessonFlow({
         </div>
       )}
 
+      {detailedPreview && isLast && canGoNext && <DetailedPreview preview={detailedPreview} />}
+
       {theoryOverlay && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 px-4 backdrop-blur-sm">
           <TheoryCards
@@ -232,6 +239,42 @@ export default function LessonFlow({
         />
       )}
     </div>
+  );
+}
+
+/** Витрина задачи второй части на Free: условие, эталон по кнопке, ссылка на Pro. */
+function DetailedPreview({ preview }: { preview: { text: string; solution: string; egeTaskNumber: number | null } }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="mt-4 rounded-2xl border-2 border-dashed border-violet/40 bg-white p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {preview.egeTaskNumber && (
+          <span className="rounded-pill bg-amber-light px-2.5 py-1 text-[11px] font-extrabold text-amber-text">
+            ЕГЭ №{preview.egeTaskNumber}
+          </span>
+        )}
+        <span className="rounded-pill bg-violet-light px-2.5 py-1 text-[11px] font-extrabold text-violet-text">
+          Задача второй части · Pro
+        </span>
+      </div>
+      <p className="text-[15px] font-semibold leading-relaxed text-ink">{preview.text}</p>
+      {open ? (
+        <div className="mt-3 rounded-xl bg-paper p-3">
+          <p className="mb-1 text-[12px] font-extrabold text-ink-soft">Эталонное решение</p>
+          <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink">{preview.solution}</p>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="mt-3 text-[14px] font-extrabold text-violet-text underline-offset-2 hover:underline">
+          Посмотреть, как решается
+        </button>
+      )}
+      <p className="mt-3 text-[13px] text-ink-soft">
+        В Pro такие задачи решаешь сам: отправляешь решение текстом или фото и сверяешься с эталоном по шагам.
+      </p>
+      <a href="/student/upgrade" className="btn-primary mt-3 !h-11 w-full !text-[14px]">
+        Открыть задачи второй части
+      </a>
+    </section>
   );
 }
 

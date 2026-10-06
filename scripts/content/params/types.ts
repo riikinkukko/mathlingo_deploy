@@ -1,4 +1,4 @@
-// Общие типы и сборщик для темы «Параметры» (задание 18).
+// Общие типы и сборщик для темы «Параметры» (задание 19 ЕГЭ-2027).
 import type { DB, TheoryCard } from "../../../lib/types";
 
 /** Задача с коротким числовым ответом — проверяется автоматически. */
@@ -67,7 +67,7 @@ export function pushChapters(db: DB, topicId: string, chapters: ChapterDef[]) {
             hints: t.hints,
             explanation: t.explanation,
             difficulty: t.difficulty ?? 2,
-            egeTaskNumber: 18,
+            egeTaskNumber: 19,
             tier: t.tier ?? "core",
           });
         } else {
@@ -80,7 +80,7 @@ export function pushChapters(db: DB, topicId: string, chapters: ChapterDef[]) {
             hints: t.hints,
             explanation: `Ответ: ${t.answer}. ${t.idea}`,
             difficulty: t.difficulty ?? 3,
-            egeTaskNumber: 18,
+            egeTaskNumber: 19,
             tier: t.tier ?? "core",
           });
         }
