@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ymGoal } from "@/lib/ym";
 
 import { AUDIENCE_HASH, type Audience } from "./audience";
@@ -63,6 +63,18 @@ export default function AudienceSwitcher({
   studentPrice: number;
 }) {
   const [aud, setAud] = useState<Audience>(initial);
+  // Бегунок под активной вкладкой: ширина и сдвиг меряются по самим кнопкам.
+  const tabRefs = useRef<Partial<Record<Audience, HTMLButtonElement | null>>>({});
+  const [thumb, setThumb] = useState<{ x: number; w: number } | null>(null);
+  useEffect(() => {
+    function measure() {
+      const el = tabRefs.current[aud];
+      if (el) setThumb({ x: el.offsetLeft, w: el.offsetWidth });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [aud]);
 
   // Ссылки вида /#roditelyam (кнопки первого экрана, реклама) переключают вкладку.
   useEffect(() => {
@@ -100,7 +112,7 @@ export default function AudienceSwitcher({
           <a
             href="/register/teacher"
             onClick={() => ymGoal("landing_cta_tutor")}
-            className="inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark"
+            className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
           >
             Попробовать 14 дней бесплатно
           </a>
@@ -151,7 +163,7 @@ export default function AudienceSwitcher({
         <a
           href="/register"
           onClick={() => ymGoal("landing_cta_student")}
-          className="inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark"
+          className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
         >
           Начать бесплатно
         </a>
@@ -190,10 +202,20 @@ export default function AudienceSwitcher({
   return (
     <div>
       <div className="flex justify-center">
-        <div role="tablist" aria-label="Для кого" className="inline-flex rounded-2xl border border-line bg-white p-1">
+        <div role="tablist" aria-label="Для кого" className="relative inline-flex rounded-2xl border border-line bg-white p-1">
+          {thumb && (
+            <span
+              aria-hidden
+              className="lp-tab-thumb absolute left-0 top-1 h-11 rounded-xl bg-pine-darker"
+              style={{ width: thumb.w, transform: `translateX(${thumb.x}px)` }}
+            />
+          )}
           {TABS.map((t) => (
             <button
               key={t.key}
+              ref={(el) => {
+                tabRefs.current[t.key] = el;
+              }}
               id={`lp-tab-${t.key}`}
               role="tab"
               type="button"
@@ -203,8 +225,8 @@ export default function AudienceSwitcher({
                 setAud(t.key);
                 history.replaceState(null, "", `#${AUDIENCE_HASH[t.key]}`);
               }}
-              className={`h-11 rounded-xl px-3.5 text-[15px] transition sm:px-6 ${
-                aud === t.key ? "bg-pine-darker font-black text-white" : "font-bold text-ink-soft hover:text-ink"
+              className={`relative z-[1] h-11 rounded-xl px-3.5 text-[15px] font-black transition-colors duration-300 sm:px-6 ${
+                aud === t.key ? `text-white ${thumb ? "" : "bg-pine-darker"}` : "text-ink-soft hover:text-ink"
               }`}
             >
               {t.label}
@@ -214,32 +236,41 @@ export default function AudienceSwitcher({
       </div>
 
       <div id="lp-panel" role="tabpanel" aria-labelledby={`lp-tab-${aud}`} key={aud} className="mt-10 grid items-start gap-8 lg:grid-cols-[1.05fr_1fr] lg:grid-rows-[auto_1fr] lg:gap-x-14">
-        <div>
+        <div className="lp-panel-in">
           <h2 className="max-w-[18ch] text-[30px] font-black leading-[1.08] text-ink sm:text-[40px]">{p.title}</h2>
           <p className="mt-4 max-w-[52ch] text-[17px] leading-relaxed text-ink-soft">{p.lead}</p>
         </div>
         <div className="relative mx-auto w-full max-w-[460px] pt-[68px] lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:sticky lg:top-6">
-          <HandNote>{p.hand}</HandNote>
+          {/* z-20: обёртка с анимацией — свой слой, подпись должна быть поверх телефонов */}
+          <div className="lp-panel-in pointer-events-none absolute inset-0 z-20" style={{ "--i": 4 } as React.CSSProperties}>
+            <HandNote>{p.hand}</HandNote>
+          </div>
           <div className="relative aspect-[100/80]">
-            {p.shots[1] && <Phone shot={p.shots[1]} className="absolute left-0 top-[6%] w-[44%] -rotate-[5deg]" />}
-            {p.shots[2] && <Phone shot={p.shots[2]} className="absolute right-0 top-[6%] w-[44%] rotate-[5deg]" />}
-            <Phone shot={p.shots[0]} priority className={`absolute top-0 w-[48%] ${p.shots[2] ? "left-[26%]" : "left-[40%]"}`} />
+            {p.shots[1] && <Phone shot={p.shots[1]} className="lp-fan-l absolute left-0 top-[6%] w-[44%] -rotate-[5deg]" />}
+            {p.shots[2] && <Phone shot={p.shots[2]} className="lp-fan-r absolute right-0 top-[6%] w-[44%] rotate-[5deg]" />}
+            <div className={`lp-fan-c absolute top-0 w-[48%] ${p.shots[2] ? "left-[26%]" : "left-[40%]"}`}>
+              <div className="lp-bob">
+                <Phone shot={p.shots[0]} priority />
+              </div>
+            </div>
           </div>
         </div>
         <div className="lg:-mt-4">
           <ul className="mt-6 space-y-3">
-            {p.points.map((pt) => (
-              <li key={pt} className="flex gap-3 text-[16px] leading-snug text-ink">
-                <svg aria-hidden viewBox="0 0 20 20" className="mt-0.5 h-5 w-5 shrink-0 text-pine">
-                  <path d="M4 10.5 8.2 14.5 16 5.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            {p.points.map((pt, i) => (
+              <li key={pt} className="lp-panel-in flex gap-3 text-[16px] leading-snug text-ink" style={{ "--i": i + 1 } as React.CSSProperties}>
+                <svg aria-hidden viewBox="0 0 20 20" className="lp-check mt-0.5 h-5 w-5 shrink-0 text-pine" style={{ "--i": i } as React.CSSProperties}>
+                  <path d="M4 10.5 8.2 14.5 16 5.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" pathLength={1} />
                 </svg>
                 {pt}
               </li>
             ))}
           </ul>
-          <p className="mt-6 max-w-[56ch] rounded-2xl bg-pine-light/70 px-4 py-3 text-[14px] leading-relaxed text-pine-darker">{p.note}</p>
-          <div className="mt-5 flex flex-wrap items-center gap-2">{p.cta}</div>
-          {p.extra}
+          <div className="lp-panel-in" style={{ "--i": p.points.length + 1 } as React.CSSProperties}>
+            <p className="mt-6 max-w-[56ch] rounded-2xl bg-pine-light/70 px-4 py-3 text-[14px] leading-relaxed text-pine-darker">{p.note}</p>
+            <div className="mt-5 flex flex-wrap items-center gap-2">{p.cta}</div>
+            {p.extra}
+          </div>
         </div>
 
       </div>
@@ -270,7 +301,7 @@ function ShareTutorButton() {
     <button
       type="button"
       onClick={share}
-      className="inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark"
+      className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
     >
       {copied ? "Ссылка скопирована" : "Отправить ссылку репетитору"}
     </button>

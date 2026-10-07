@@ -115,3 +115,274 @@ body {
     opacity: 1;
   }
 }
+
+/* ── Лендинг: движение ─────────────────────────────────────────────────
+ * Всё прячется только под .lp-js (класс ставит встроенный скрипт до
+ * отрисовки): без JS страница видна целиком, без мигания. Тема движения —
+ * тетрадь: строки «проявляются», красная ручка подчёркивает и обводит,
+ * на полях плавают каракули из формул. */
+html:has(.lp-root) {
+  scroll-behavior: smooth;
+}
+
+/* Первый экран: слова заголовка поднимаются по очереди. */
+.lp-js .lp-word {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.45em);
+  animation: lp-rise 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: calc(80ms * var(--i, 0) + 120ms);
+}
+.lp-js .lp-hero-in {
+  opacity: 0;
+  animation: lp-rise 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+  animation-delay: var(--d, 0.5s);
+}
+@keyframes lp-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Лист с задачей ложится на стол чуть повёрнутым и выравнивается. */
+.lp-js .lp-sheet-in {
+  opacity: 0;
+  transform: translateY(28px) rotate(2.5deg);
+  animation: lp-settle 1s cubic-bezier(0.2, 0.9, 0.25, 1.08) 0.35s forwards;
+}
+@keyframes lp-settle {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Подчёркивание ручкой под ключевыми словами. */
+.lp-underline path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.lp-js .lp-underline path {
+  animation: lp-draw 0.9s cubic-bezier(0.6, 0, 0.3, 1) 1.05s forwards;
+}
+html:not(.lp-js) .lp-underline path {
+  stroke-dashoffset: 0;
+}
+
+/* Каракули на полях: формулы медленно плавают. */
+.lp-doodle {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  font-family: Caveat, cursive;
+  font-weight: 700;
+  line-height: 1;
+  animation: lp-float var(--t, 12s) ease-in-out var(--dl, 0s) infinite alternate;
+}
+.lp-js .lp-doodle {
+  opacity: 0;
+  animation:
+    lp-doodle-in 1.2s ease-out calc(var(--dl, 0s) + 0.8s) forwards,
+    lp-float var(--t, 12s) ease-in-out calc(var(--dl, 0s) + 0.8s) infinite alternate;
+}
+@keyframes lp-doodle-in {
+  to {
+    opacity: var(--o, 0.35);
+  }
+}
+@keyframes lp-float {
+  from {
+    transform: translate3d(0, 0, 0) rotate(var(--r, -6deg));
+  }
+  to {
+    transform: translate3d(var(--dx, 10px), var(--dy, -16px), 0) rotate(calc(var(--r, -6deg) * -1));
+  }
+}
+
+/* Появление при прокрутке. */
+.lp-js [data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: calc(90ms * var(--i, 0));
+}
+.lp-js [data-reveal].lp-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Переключатель аудиторий: бегунок под вкладкой и смена панели. */
+.lp-tab-thumb {
+  transition:
+    transform 0.45s cubic-bezier(0.3, 1.25, 0.4, 1),
+    width 0.45s cubic-bezier(0.3, 1.25, 0.4, 1);
+}
+.lp-panel-in {
+  animation: lp-panel 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(70ms * var(--i, 0));
+}
+@keyframes lp-panel {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Три телефона раскрываются веером из-за центрального. */
+.lp-fan-l {
+  animation: lp-fan-l 0.85s cubic-bezier(0.25, 1.1, 0.35, 1) 0.15s both;
+}
+.lp-fan-r {
+  animation: lp-fan-r 0.85s cubic-bezier(0.25, 1.1, 0.35, 1) 0.15s both;
+}
+.lp-fan-c {
+  animation: lp-fan-c 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.1) both;
+}
+@keyframes lp-fan-l {
+  from {
+    opacity: 0;
+    transform: translateX(40%) rotate(0deg) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-5deg);
+  }
+}
+@keyframes lp-fan-r {
+  from {
+    opacity: 0;
+    transform: translateX(-40%) rotate(0deg) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(5deg);
+  }
+}
+@keyframes lp-fan-c {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.lp-bob {
+  animation: lp-bob 6s ease-in-out 1s infinite;
+}
+@keyframes lp-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+/* Галочки списка дорисовываются ручкой. */
+.lp-check path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: lp-draw 0.45s ease-out forwards;
+  animation-delay: calc(110ms * var(--i, 0) + 0.35s);
+}
+
+/* Кнопки: приподнимаются под курсором, «нажимаются» под пальцем. */
+.lp-btn {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background-color 0.18s ease;
+}
+.lp-btn:hover {
+  transform: translateY(-2px);
+}
+.lp-btn:active {
+  transform: translateY(1px);
+}
+
+/* Ответ в «Частых вопросах» выезжает плавно. */
+.lp-faq[open] > p {
+  animation: lp-panel 0.35s ease-out both;
+}
+
+/* Маскот в финальном блоке машет, когда блок появился. */
+.lp-in .lp-wave {
+  animation: lp-wave 1.4s ease-in-out 0.4s 2;
+  transform-origin: 50% 90%;
+}
+@keyframes lp-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  25% {
+    transform: rotate(-9deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+  75% {
+    transform: rotate(-4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has(.lp-root) {
+    scroll-behavior: auto;
+  }
+  .lp-js .lp-word,
+  .lp-js .lp-hero-in,
+  .lp-js .lp-sheet-in,
+  .lp-js .lp-doodle,
+  .lp-doodle,
+  .lp-panel-in,
+  .lp-fan-l,
+  .lp-fan-r,
+  .lp-fan-c,
+  .lp-bob,
+  .lp-in .lp-wave,
+  .lp-faq[open] > p {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .lp-js .lp-doodle {
+    opacity: var(--o, 0.35);
+  }
+  .lp-fan-l {
+    transform: rotate(-5deg);
+  }
+  .lp-fan-r {
+    transform: rotate(5deg);
+  }
+  .lp-js .lp-underline path,
+  .lp-check path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .lp-js [data-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .lp-tab-thumb,
+  .lp-btn {
+    transition: none;
+  }
+  .lp-btn:hover,
+  .lp-btn:active {
+    transform: none;
+  }
+}
+
+/* Пока блок не доехал до экрана, его внутренние анимации ждут — иначе
+ * веер телефонов и галочки отыгрывали бы невидимыми. */
+.lp-js [data-reveal]:not(.lp-in) :is(.lp-panel-in, .lp-fan-l, .lp-fan-r, .lp-fan-c, .lp-check path) {
+  animation-play-state: paused;
+}

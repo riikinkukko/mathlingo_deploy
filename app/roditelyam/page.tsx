@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Landing from "@/components/landing/Landing";
 
+// Цифры на лендинге берутся из базы — обновляем раз в час.
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: "Прогресс ребёнка в подготовке к ЕГЭ — Планиметрика",
   description: "Сколько ребёнок занимался, сдана ли домашка, ближайшее занятие и отчёт репетитора — в кабинете родителя.",

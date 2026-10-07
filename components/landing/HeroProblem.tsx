@@ -11,7 +11,7 @@ type State = "idle" | "wrong" | "right";
  * как отвечает приложение. Верный ответ «проверяет» красная ручка
  * репетитора — единственная оркестрованная анимация на странице.
  */
-export default function HeroProblem() {
+export default function HeroProblem({ moreCount = 0 }: { moreCount?: number }) {
   const [value, setValue] = useState("");
   const [state, setState] = useState<State>("idle");
   const [tries, setTries] = useState(0);
@@ -149,11 +149,13 @@ export default function HeroProblem() {
         <div className="lp-pop mt-4 flex items-center gap-3 rounded-[20px] bg-pine-darker p-3 pr-4 text-white" style={{ animationDelay: "1.2s" }}>
           <Mascot mood="celebrating" size={64} float={false} />
           <div className="min-w-0 flex-1">
-            <p className="text-[15px] font-black leading-tight">Ещё 400 таких задач — от №1 до экономической</p>
+            <p className="text-[15px] font-black leading-tight">
+              {moreCount > 0 ? `Ещё ${moreCount.toLocaleString("ru-RU")}+ задач` : "Ещё сотни задач"} — от №1 до задач с параметром
+            </p>
             <a
               href="/register"
               onClick={() => ymGoal("landing_cta_student")}
-              className="mt-2 inline-flex h-10 items-center rounded-xl bg-white px-4 text-[14px] font-black text-pine-darker hover:bg-pine-light"
+              className="lp-btn mt-2 inline-flex h-10 items-center rounded-xl bg-white px-4 text-[14px] font-black text-pine-darker hover:bg-pine-light"
             >
               Решать дальше бесплатно
             </a>

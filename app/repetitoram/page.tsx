@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import Landing from "@/components/landing/Landing";
 
+// Цифры на лендинге берутся из базы — обновляем раз в час.
+export const revalidate = 3600;
+
 export const metadata: Metadata = {
   title: "Кабинет репетитора по математике — Планиметрика",
   description: "Расписание с группами, домашки всей группе, проверка решений с пометками на фото, оплаты и Telegram-бот. До 3 учеников бесплатно, 14 дней «Профи» после регистрации.",
