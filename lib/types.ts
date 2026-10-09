@@ -52,6 +52,8 @@ export interface User {
   tgDailyDigest?: boolean;
   tgWeeklyReport?: boolean;
   tgStudentReminders?: boolean;
+  /** Письма «возвращайся» самостоятельному ученику (lib/comeback-reminders.ts). */
+  emailReminders?: boolean;
   /** Когда репетитор последний раз нажал «Напомнить» (ISO). */
   nudgedAt?: string | null;
   createdAt: string;

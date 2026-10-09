@@ -16,6 +16,7 @@ export default function CompletionCelebration({
   stats,
   secondaryHref,
   secondaryLabel,
+  reminderHref,
 }: {
   subtopicTitle: string;
   xpEarned: number;
@@ -29,6 +30,8 @@ export default function CompletionCelebration({
   /** Вторая, тихая ссылка под главной кнопкой (например, «Разобрать ошибки»). */
   secondaryHref?: string;
   secondaryLabel?: string;
+  /** Telegram не подключён: предложить напоминание, чтобы вернуться завтра. */
+  reminderHref?: string;
 }) {
   const [displayedXp, setDisplayedXp] = useState(0);
   const totalXp = xpEarned + bonusXp;
@@ -103,6 +106,19 @@ export default function CompletionCelebration({
             <IconStar className="h-4 w-4 text-amber" />
             Без единой ошибки — бонус +{bonusXp} XP
           </p>
+        )}
+
+        {reminderHref && (
+          <a
+            href={reminderHref}
+            className="mt-4 flex w-full items-center gap-3 rounded-2xl bg-white/10 px-4 py-3 text-left transition hover:bg-white/15"
+          >
+            <span aria-hidden className="text-[22px]">🔔</span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[14px] font-black">Напомнить завтра?</span>
+              <span className="block text-[12px] text-white/70">Подключи Telegram — вечером напомним, если серия может прерваться.</span>
+            </span>
+          </a>
         )}
 
         <div className="min-h-8 flex-1" />

@@ -333,7 +333,7 @@ export default function ProblemCard({
         />
       )}
 
-      <p className="mb-4 text-[16px] font-semibold leading-relaxed text-ink" style={{ textWrap: "pretty" as any }}>
+      <p className="mb-4 whitespace-pre-line text-[16px] font-semibold leading-relaxed text-ink" style={{ textWrap: "pretty" as any }}>
         {problem.text}
       </p>
 
@@ -572,7 +572,24 @@ export default function ProblemCard({
                 </span>
               )}
             </p>
-            <p className="relative text-ink-soft">{correctResult.explanation}</p>
+            {isDetailed && correctResult.correctAnswer ? (
+              <>
+                {/* Эталон по шагам — раньше после самопроверки показывалась только
+                    краткая идея, и сверяться было не с чем. */}
+                <div className="relative mt-2 rounded-xl bg-white/80 p-3 text-ink">
+                  <p className="mb-1 text-[12px] font-extrabold text-ink-soft">Эталонное решение</p>
+                  <p className="whitespace-pre-wrap text-[14px] leading-relaxed">{correctResult.correctAnswer}</p>
+                </div>
+                {correctResult.explanation && (
+                  <p className="relative mt-2 text-ink-soft">
+                    <span className="font-extrabold text-pine-dark">Главное: </span>
+                    {correctResult.explanation}
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="relative text-ink-soft">{correctResult.explanation}</p>
+            )}
             {selfChecked && reviewOffer && <PaidReviewOffer attemptId={reviewOffer.attemptId} priceRub={reviewOffer.priceRub} />}
           </div>
         </div>

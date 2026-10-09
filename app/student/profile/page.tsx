@@ -20,6 +20,7 @@ import { computeExamPlan, perDayLabel, EXAM_DATE, EXAM_DATE_IS_ESTIMATE } from "
 import { computeStudentProgress } from "@/lib/queries";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
 import StudentRemindersToggle from "@/components/StudentRemindersToggle";
+import EmailRemindersToggle from "@/components/EmailRemindersToggle";
 import { MAX_FREEZES, FREEZE_EVERY_DAYS } from "@/lib/streak";
 import { logoutAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
@@ -241,7 +242,7 @@ export default async function ProfilePage({
           </a>
         )}
 
-        <div className="mt-6 card p-5">
+        <div id="telegram" className="mt-6 card scroll-mt-20 p-5">
           <h2 className="mb-1 font-display text-base font-black text-ink">Уведомления в Telegram</h2>
           {searchParams.telegram === "disconnected" && (
             <p className="mb-2 text-xs font-bold text-coral">Telegram отключён.</p>
@@ -268,7 +269,7 @@ export default async function ProfilePage({
             <>
               <p className="mb-3 text-sm text-ink-soft">
                 Получай уведомления о новых заданиях, пробниках и проверке решений
-                прямо в Telegram — не нужно заходить в приложение, чтобы не пропустить.
+                прямо в Telegram, а вечером — напоминание, если серия может прерваться.
               </p>
               {telegramLinkUrl ? (
                 <a href={telegramLinkUrl} className="btn-primary !text-xs" target="_blank" rel="noopener noreferrer">
@@ -279,6 +280,7 @@ export default async function ProfilePage({
               )}
             </>
           )}
+          {standalone && <EmailRemindersToggle enabled={user.emailReminders !== false} />}
         </div>
         <DeleteAccountSection requestedAt={user.deletionRequestedAt} />
       </div>

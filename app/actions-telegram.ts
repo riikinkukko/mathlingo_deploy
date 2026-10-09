@@ -61,6 +61,17 @@ export async function setParentWeeklyReportAction(_prev: TgPrefsState, formData:
 }
 
 /** Ученик: вечерние напоминания в Telegram (серия, срок домашки). */
+/** Письма-напоминания на почту, если ученик давно не заходил. */
+export async function setEmailRemindersAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
+  const user = await getSessionUser();
+  if (!user || user.role !== "STUDENT") return { error: "Нет доступа" };
+  await db
+    .update(schema.users)
+    .set({ emailReminders: formData.get("reminders") === "on" })
+    .where(eq(schema.users.id, user.id));
+  return { ok: true, at: Date.now() };
+}
+
 export async function setStudentRemindersAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") return { error: "Нет доступа" };

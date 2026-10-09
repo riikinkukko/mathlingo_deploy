@@ -21,6 +21,7 @@ export default function LessonFlow({
   backHref = "/student",
   canAskTeacher = false,
   detailedPreview = null,
+  reminderHref,
 }: {
   skillTitle: string;
   theoryCards: TheoryCard[];
@@ -42,6 +43,8 @@ export default function LessonFlow({
   canAskTeacher?: boolean;
   /** Free: задача второй части этого навыка — витрина с эталоном и ссылкой на Pro. */
   detailedPreview?: { text: string; solution: string; egeTaskNumber: number | null } | null;
+  /** Куда вести за напоминанием (Telegram не подключён) — показывается на экране «Урок пройден». */
+  reminderHref?: string;
 }) {
   const allSolvedInitially = problems.every((p) => isDone(initialStates[p.id]?.status));
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
@@ -236,6 +239,7 @@ export default function LessonFlow({
           }}
           secondaryHref={mistakeIds.size > 0 ? "/student/mistakes" : undefined}
           secondaryLabel={mistakeIds.size > 0 ? "Разобрать ошибки" : undefined}
+          reminderHref={reminderHref}
         />
       )}
     </div>

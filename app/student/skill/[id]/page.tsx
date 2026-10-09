@@ -103,6 +103,7 @@ export default async function SkillPage({ params }: { params: { id: string } }) 
         backHref={`/student?topic=${topicEntry?.topic.id ?? ""}`}
         canAskTeacher={!!user.teacherId}
         detailedPreview={detailedPreview}
+        reminderHref={user.telegramChatId ? undefined : "/student/profile#telegram"}
       />
     </div>
   );

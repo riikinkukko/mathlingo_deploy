@@ -182,6 +182,12 @@ export const users = pgTable("users", {
   // ДЗ»). eveningRemindedOn — дата последнего напоминания (YYYY-MM-DD, МСК).
   tgStudentReminders: boolean("tg_student_reminders").notNull().default(true),
   eveningRemindedOn: text("evening_reminded_on"),
+  // Письма «возвращайся» самостоятельному ученику: ступень (0 — не слали,
+  // 1 — через день, 2 — через 3 дня, 3 — через неделю) и когда ушло последнее.
+  // emailReminders — ученик может отключить такие письма в профиле.
+  emailReminders: boolean("email_reminders").notNull().default(true),
+  comebackStage: integer("comeback_stage").notNull().default(0),
+  comebackSentAt: timestamp("comeback_sent_at", { withTimezone: true }),
   // Заморозки серии (как в Duolingo): копятся до 2, по одной за каждые 7 дней
   // подряд (одна стартовая); пропущенный день тратит заморозку вместо обнуления серии.
   // freezeAwardedOn — день (МСК), когда выдали последнюю, чтобы не выдать дважды.

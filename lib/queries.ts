@@ -74,6 +74,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     tgDailyDigest: row.tgDailyDigest,
     tgWeeklyReport: row.tgWeeklyReport,
     tgStudentReminders: row.tgStudentReminders,
+    emailReminders: row.emailReminders,
     nudgedAt: row.nudgedAt ? row.nudgedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };
@@ -223,7 +224,10 @@ export async function getSkillsForChapter(subtopicId: string): Promise<Skill[]> 
  * задач (конструктор ДЗ/контрольной у учителя) передайте includeBank=true. */
 export async function getProblemsForSkill(skillId: string, includeBank = false): Promise<Problem[]> {
   const rows = await db.select().from(schema.problems).where(eq(schema.problems.skillId, skillId));
-  const problems = rows.map(mapProblem);
+  // Порядок задач в уроке — по id (p_2 раньше p_10). Без сортировки Postgres
+  // отдаёт строки как лежат на диске, а после каждого seed (UPDATE) порядок
+  // плыл: подсказка-задача могла оказаться после той, к которой подводит.
+  const problems = rows.map(mapProblem).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }));
   return includeBank ? problems : problems.filter((p) => (p.tier ?? "core") === "core");
 }
 
