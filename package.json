@@ -12,6 +12,7 @@
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
     "seed:reset": "tsx scripts/seed.ts --reset",
+    "jury:demo": "tsx scripts/jury-demo.ts",
     "telegram:poll": "tsx scripts/telegram-poller.ts",
     "test:db": "tsx scripts/test-db.ts",
     "test": "node --import tsx --import ./tests/setup.ts --test --test-concurrency=1 tests/unit/*.test.ts",
