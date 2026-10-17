@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "@/lib/auth";
 import {
+  createTopic,
+  updateTopic,
   createChapter,
   updateChapter,
   createSkill,
@@ -31,17 +33,43 @@ async function requireTeacher() {
   return user!;
 }
 
+// ---------- Темы ----------
+
+export async function createTopicAction(formData: FormData) {
+  await requireTeacher();
+  const title = String(formData.get("title") || "").trim().slice(0, 120);
+  const order = parseInt(String(formData.get("order") || "1"), 10) || 1;
+  if (!title) redirect(`/teacher/content?error=1`);
+
+  const id = await createTopic(title, order);
+  revalidatePath("/teacher/content");
+  redirect(`/teacher/content#${id}`);
+}
+
+export async function updateTopicAction(formData: FormData) {
+  await requireTeacher();
+  const id = String(formData.get("id") || "");
+  const title = String(formData.get("title") || "").trim().slice(0, 120);
+  const order = parseInt(String(formData.get("order") || "1"), 10) || 1;
+  if (!id || !title) redirect(`/teacher/content?error=1`);
+
+  await updateTopic(id, { title, order });
+  revalidatePath("/teacher/content");
+  redirect(`/teacher/content#${id}`);
+}
+
 // ---------- Главы ----------
 
 export async function createChapterAction(formData: FormData) {
   await requireTeacher();
   const title = String(formData.get("title") || "").trim();
   const order = parseInt(String(formData.get("order") || "1"), 10) || 1;
-  if (!title) redirect(`/teacher/content?error=1`);
+  const topicId = String(formData.get("topicId") || "");
+  if (!title || !topicId) redirect(`/teacher/content?error=1`);
 
-  await createChapter(title, order);
+  await createChapter(title, order, topicId);
   revalidatePath("/teacher/content");
-  redirect("/teacher/content");
+  redirect(`/teacher/content#${topicId}`);
 }
 
 export async function updateChapterAction(formData: FormData) {
@@ -49,9 +77,10 @@ export async function updateChapterAction(formData: FormData) {
   const id = String(formData.get("id") || "");
   const title = String(formData.get("title") || "").trim();
   const order = parseInt(String(formData.get("order") || "1"), 10) || 1;
+  const topicId = String(formData.get("topicId") || "") || undefined;
   if (!id || !title) redirect(`/teacher/content?error=1`);
 
-  await updateChapter(id, { title, order });
+  await updateChapter(id, { title, order, topicId });
   revalidatePath("/teacher/content");
   redirect("/teacher/content");
 }

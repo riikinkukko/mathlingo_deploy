@@ -66,13 +66,28 @@ export default function ProblemForm({
         <label className="label" htmlFor="correctAnswer">
           {answerType === "DETAILED" ? "Эталонное решение" : "Правильный ответ"}
         </label>
-        <input
-          className="input"
-          id="correctAnswer"
-          name="correctAnswer"
-          required
-          defaultValue={problem?.correctAnswer}
-        />
+        {answerType === "DETAILED" ? (
+          <>
+            <textarea
+              className="input min-h-[180px] resize-y"
+              id="correctAnswer"
+              name="correctAnswer"
+              required
+              defaultValue={problem?.correctAnswer}
+              placeholder={"Шаги решения — каждый с новой строки.\nОтвет: …"}
+            />
+            <p className="mt-1 text-[12px] text-ink-soft">Каждый шаг с новой строки — ученик увидит эталон так же, по строкам.</p>
+          </>
+        ) : (
+          <input
+            className="input"
+            id="correctAnswer"
+            name="correctAnswer"
+            required
+            defaultValue={problem?.correctAnswer}
+            placeholder="Например: 12 или -0,5 или 3/4"
+          />
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
