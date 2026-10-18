@@ -7,10 +7,13 @@ export default function BottomTabBar({
   reviewCount = 0,
   mistakesCount = 0,
   homeworkLabel = "Домашка",
+  standalone = false,
 }: {
   reviewCount?: number;
   mistakesCount?: number;
   homeworkLabel?: string;
+  /** самостоятельный ученик: вместо домашки — пробники ЕГЭ */
+  standalone?: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -29,7 +32,9 @@ export default function BottomTabBar({
   const tabs = [
     { href: "/student", label: "Путь", icon: IconMap, match: (p: string) => p === "/student" || p.startsWith("/student/skill") },
     { href: reviewHref, label: "Повтор", icon: IconRepeat, match: (p: string) => p.startsWith("/student/review"), badge: reviewCount },
-    { href: "/student/homework", label: homeworkLabel, icon: IconClipboard, match: (p: string) => p.startsWith("/student/homework") },
+    standalone
+      ? { href: "/student/mock", label: "Пробники", icon: IconClipboard, match: (p: string) => p.startsWith("/student/mock") }
+      : { href: "/student/homework", label: homeworkLabel, icon: IconClipboard, match: (p: string) => p.startsWith("/student/homework") },
     { href: "/student/mistakes", label: "Ошибки", icon: IconBook, match: (p: string) => p.startsWith("/student/mistakes"), badge: mistakesCount },
     { href: "/student/profile", label: "Профиль", icon: IconUser, match: (p: string) => p.startsWith("/student/profile") || p.startsWith("/student/achievements") },
   ];

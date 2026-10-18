@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
   getHomeworksForStudent,
@@ -18,6 +19,8 @@ const KIND_META: Record<string, { label: string; bg: string }> = {
 
 export default async function HomeworkListPage() {
   const user = (await getSessionUser())!;
+  // У самостоятельного ученика своей домашки нет: вкладка — это пробники ЕГЭ.
+  if (isStandaloneStudent(user)) redirect("/student/mock");
   const homeworks = await getHomeworksForStudent(user.id);
   const statusPairs = await Promise.all(homeworks.map(async (hw) => [hw.id, await homeworkStatus(hw, user.id)] as const));
   const statusById = new Map(statusPairs);
@@ -30,6 +33,19 @@ export default async function HomeworkListPage() {
     <StudentShell active="homework" title={tabLabel}>
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
+        <a
+          href="/student/mock"
+          className="mb-4 flex items-center gap-3 rounded-2xl border border-line-soft bg-white p-4 transition hover:border-pine"
+        >
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-pine-light text-lg" aria-hidden>
+            ⏱
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display text-[15px] font-black text-ink">Пробники ЕГЭ</span>
+            <span className="block text-[13px] text-ink-soft">20 заданий в формате экзамена, баллы по шкале ЕГЭ</span>
+          </span>
+          <span className="text-sm font-black text-pine">Открыть</span>
+        </a>
         {standalone && !isPro ? (
           // Free-самостоятельный: своей домашки нет и авторские пробники
           // не открыты — вместо пустого списка честный апсейл на Pro.

@@ -1,5 +1,7 @@
 "use server";
 
+import { onAttemptReviewed } from "@/lib/mock-queries";
+
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
@@ -244,6 +246,8 @@ export async function reviewAttemptAction(
   }
 
   if (paidOrder) await markReviewOrderDone(paidOrder.id);
+  // Решение из пробника: пересчитать баллы варианта, ссылка — на его разбор.
+  const mockId = attempt.source === "mock" ? await onAttemptReviewed(attemptId) : null;
 
   await db.transaction(async (tx) => {
     await pushNotification(tx, {
@@ -257,7 +261,7 @@ export async function reviewAttemptAction(
           ? `Решение одобрено ✓`
           : `Решение нужно доработать`,
       body: `Навык «${skill?.title ?? ""}»${scoreText ? ` · ${scoreText}` : ""}${feedback ? `: ${feedback}` : ""}${marked ? " · есть пометки на фото" : ""}`,
-      link: paidOrder ? "/student/checks" : `/student`,
+      link: paidOrder ? "/student/checks" : mockId ? `/student/mock/${mockId}` : `/student`,
     });
 
     // Если одобрение делает навык полностью пройденным (и это была "урочная"

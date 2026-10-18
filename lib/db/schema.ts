@@ -19,7 +19,7 @@ export const roleEnum = pgEnum("role", ["STUDENT", "TEACHER", "PARENT"]);
 export const planEnum = pgEnum("plan", ["free", "pro"]);
 export const answerTypeEnum = pgEnum("answer_type", ["NUMBER", "CHOICE", "DETAILED"]);
 export const tierEnum = pgEnum("tier", ["core", "bank"]);
-export const attemptSourceEnum = pgEnum("attempt_source", ["lesson", "assignment", "review"]);
+export const attemptSourceEnum = pgEnum("attempt_source", ["lesson", "assignment", "review", "mock"]);
 export const reviewStatusEnum = pgEnum("review_status", [
   "pending",
   "approved",
@@ -744,3 +744,54 @@ export const attemptImages = pgTable("attempt_images", {
   annotated: text("annotated"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------- Пробник ЕГЭ (вариант из 20 заданий) ----------------
+// Одна строка — одна попытка ученика решить вариант. Ответы, флажки «вернусь»
+// и время на каждое задание сохраняются по ходу (автосохранение), поэтому
+// пробник можно продолжить после перезагрузки или с другого устройства.
+// Логика формата и баллов — lib/mock-exam.ts.
+export const mockAttempts = pgTable("mock_attempts", {
+  id: text("id").primaryKey(),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  variant: integer("variant").notNull(),
+  mode: text("mode").notNull(), // full | part1 | free
+  // Задачи варианта по порядку: [{ n: номер ЕГЭ, problemId }]. Фиксируются при
+  // старте, чтобы правки банка задач не меняли уже начатый вариант.
+  items: jsonb("items").$type<{ n: number; problemId: string }[]>().notNull(),
+  answers: jsonb("answers").$type<Record<string, string>>().notNull().default({}),
+  flags: jsonb("flags").$type<string[]>().notNull().default([]),
+  timeSpent: jsonb("time_spent").$type<Record<string, number>>().notNull().default({}),
+  // После сдачи: верно ли решены задания первой части.
+  part1Correct: jsonb("part1_correct").$type<Record<string, boolean>>(),
+  // Вторая часть: problemId → attempts.id (решение ушло репетитору или в самопроверку).
+  part2Attempts: jsonb("part2_attempts").$type<Record<string, string>>().notNull().default({}),
+  // Самопроверка по критериям (ученик без репетитора): problemId → баллы.
+  selfScores: jsonb("self_scores").$type<Record<string, number>>().notNull().default({}),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  deadlineAt: timestamp("deadline_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  primaryScore: integer("primary_score"),
+  testScore: integer("test_score"),
+  // Сколько решений второй части ещё ждут проверки репетитора.
+  part2Pending: integer("part2_pending").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byStudent: index("mock_attempts_student_idx").on(t.studentId, t.startedAt),
+}));
+
+// Фото решений второй части, пока пробник не сдан. При сдаче переезжают в
+// attempt_images вместе с попытками (репетитору в очередь проверки).
+export const mockImages = pgTable(
+  "mock_images",
+  {
+    mockAttemptId: text("mock_attempt_id")
+      .notNull()
+      .references(() => mockAttempts.id, { onDelete: "cascade" }),
+    problemId: text("problem_id").notNull(),
+    data: text("data").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.mockAttemptId, t.problemId] }) })
+);

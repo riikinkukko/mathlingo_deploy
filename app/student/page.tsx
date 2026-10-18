@@ -36,6 +36,7 @@ import StudentDashboardHeader, { DailyGoalBar } from "@/components/StudentDashbo
 import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
 import BottomTabBar from "@/components/BottomTabBar";
+import { MOCK_VARIANT_COUNT } from "@/lib/mock-exam";
 import { targetScoreRecommendation } from "@/lib/curriculum-recommendations";
 import Mascot from "@/components/Mascot";
 import VerticalSkillPath from "@/components/VerticalSkillPath";
@@ -227,17 +228,23 @@ export default async function StudentDashboard(
         </p>
         <p className="text-[12px] font-semibold text-ink-soft">без энергии</p>
       </a>
-      <a href="/student/homework" className="flex-1 rounded-2xl bg-amber-light px-3.5 py-3 transition hover:brightness-95">
-        <p className="text-[11px] font-black uppercase tracking-wide text-amber-text">
-          {standalone ? "Пробники" : "Домашка"}
-        </p>
-        <p className="mt-1 font-display text-[17px] font-black text-ink">
-          {pendingHw.length} {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
-        </p>
-        <p className="text-[12px] font-semibold text-ink-soft">
-          {pendingHw.length > 0 ? pluralRu(pendingHw.length, ["ждёт выполнения", "ждут выполнения", "ждут выполнения"]) : allHw.length > 0 ? "всё выполнено" : standalone && !isEffectivelyPro(user) ? "в Pro" : "пока нет"}
-        </p>
-      </a>
+      {standalone ? (
+        <a href="/student/mock" className="flex-1 rounded-2xl bg-amber-light px-3.5 py-3 transition hover:brightness-95">
+          <p className="text-[11px] font-black uppercase tracking-wide text-amber-text">Пробники</p>
+          <p className="mt-1 font-display text-[17px] font-black text-ink">{MOCK_VARIANT_COUNT} вариантов</p>
+          <p className="text-[12px] font-semibold text-ink-soft">в формате ЕГЭ</p>
+        </a>
+      ) : (
+        <a href="/student/homework" className="flex-1 rounded-2xl bg-amber-light px-3.5 py-3 transition hover:brightness-95">
+          <p className="text-[11px] font-black uppercase tracking-wide text-amber-text">Домашка</p>
+          <p className="mt-1 font-display text-[17px] font-black text-ink">
+            {pendingHw.length} {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
+          </p>
+          <p className="text-[12px] font-semibold text-ink-soft">
+            {pendingHw.length > 0 ? pluralRu(pendingHw.length, ["ждёт выполнения", "ждут выполнения", "ждут выполнения"]) : allHw.length > 0 ? "всё выполнено" : "пока нет"}
+          </p>
+        </a>
+      )}
     </>
   );
 
@@ -318,7 +325,7 @@ export default async function StudentDashboard(
           )}
           {programTeaser}
         </main>
-        <BottomTabBar reviewCount={dueReviewCount} mistakesCount={unresolvedMistakesCount} homeworkLabel={standalone ? "Пробники" : "Домашка"} />
+        <BottomTabBar reviewCount={dueReviewCount} mistakesCount={unresolvedMistakesCount} homeworkLabel={standalone ? "Пробники" : "Домашка"} standalone={standalone} />
       </div>
 
       {/* ---------- ДЕСКТОПНАЯ РАСКЛАДКА (≥ 1024px) ---------- */}
@@ -334,6 +341,7 @@ export default async function StudentDashboard(
           isPro={!standalone || isEffectivelyPro(user)}
           notifications={notifications}
           unreadCount={unreadCount}
+          standalone={standalone}
         />
         <div className="ml-[236px] flex gap-6 px-8 py-6">
           <main className="min-w-0 flex-1 space-y-5">

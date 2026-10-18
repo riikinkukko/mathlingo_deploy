@@ -11,8 +11,9 @@ import {
 } from "../../lib/ege-points";
 
 test("максимум баллов по номерам ЕГЭ-2027 (критерии ФИПИ)", () => {
-  assert.deepEqual(EGE_2027_MAX_POINTS, { 13: 2, 14: 3, 15: 3, 16: 2, 17: 2, 18: 3, 19: 4, 20: 4 });
-  assert.equal(maxPointsForTask(13), 2);
+  assert.deepEqual(EGE_2027_MAX_POINTS, { 14: 2, 15: 3, 16: 2, 17: 2, 18: 3, 19: 4, 20: 4 });
+  assert.equal(maxPointsForTask(14), 2);
+  assert.equal(maxPointsForTask(15), 3);
   assert.equal(maxPointsForTask(18), 3);
   assert.equal(maxPointsForTask(19), 4);
   // своя задача без номера и неизвестный номер — 2 балла

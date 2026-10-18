@@ -30,7 +30,7 @@ export default async function StudentShell({
   back,
   children,
 }: {
-  active: "subjects" | "path" | "review" | "homework" | "mistakes" | "profile";
+  active: "subjects" | "path" | "review" | "homework" | "mock" | "mistakes" | "profile";
   title: string;
   /** Для страниц второго уровня (программа, проверки, тариф…): стрелка «назад»
    * в мобильной шапке вместо маскота и ссылка «← Назад» над контентом на
@@ -90,6 +90,7 @@ export default async function StudentShell({
         isPro={isPro}
         notifications={notifications}
         unreadCount={unreadCount}
+        standalone={standalone}
       />
 
       <div className="pb-24 lg:ml-[236px] lg:pb-8">
@@ -110,6 +111,7 @@ export default async function StudentShell({
         reviewCount={dueReviewCount}
         mistakesCount={unresolvedMistakesCount}
         homeworkLabel={homeworkLabel}
+        standalone={standalone}
       />
     </div>
   );
