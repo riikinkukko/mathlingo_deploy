@@ -97,7 +97,7 @@ test("пригласи коллегу: +30 дней обоим после пер
   const ref = await ensureReferralCode(inviter.id);
   assert.equal(await ensureReferralCode(inviter.id), ref); // код не меняется
   assert.equal((await findTeacherByReferral(ref.toLowerCase()))?.id, inviter.id);
-  const invitee = await makeUser({ role: "TEACHER", referredBy: inviter.id });
+  const invitee = await makeUser({ role: "TEACHER", referredBy: inviter.id, emailVerifiedAt: new Date() });
 
   const yk1 = `yk_${RUN}_ref1`;
   await createPendingPayment({ userId: invitee.id, yookassaPaymentId: yk1, amountRub: 690, periodDays: 30, paymentType: "teacher_pro", tier: "standard", billingPeriod: "month" });
@@ -118,4 +118,34 @@ test("пригласи коллегу: +30 дней обоим после пер
   await markPaymentSucceeded(yk2);
   const host2 = (await getUserById(inviter.id))!;
   assert.equal(host2.teacherTrialUntil, host.teacherTrialUntil);
+});
+
+test("пригласи коллегу: без подтверждённого email, своей картой и сверх лимита — без бонуса", async () => {
+  const pay = async (userId: string, tag: string, card?: { last4: string; type: string }) => {
+    const yk = `yk_${RUN}_${tag}`;
+    await createPendingPayment({ userId, yookassaPaymentId: yk, amountRub: 690, periodDays: 30, paymentType: "teacher_pro", tier: "standard", billingPeriod: "month" });
+    await markPaymentSucceeded(yk, undefined, card);
+  };
+  const rewarded = async (id: string) => !!(await db.select().from(schema.users).where(eq(schema.users.id, id)))[0].referralRewardedAt;
+
+  // email не подтверждён — бонуса нет, но после подтверждения следующая оплата его даст
+  const inviter = await makeUser({ role: "TEACHER", yookassaCardLast4: "4242", yookassaCardType: "Visa" });
+  const unverified = await makeUser({ role: "TEACHER", referredBy: inviter.id });
+  await pay(unverified.id, "unv1");
+  assert.equal(await rewarded(unverified.id), false);
+  await db.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, unverified.id));
+  await pay(unverified.id, "unv2", { last4: "1111", type: "Visa" });
+  assert.equal(await rewarded(unverified.id), true);
+
+  // оплата той же картой, что у пригласившего
+  const twin = await makeUser({ role: "TEACHER", referredBy: inviter.id, emailVerifiedAt: new Date() });
+  await pay(twin.id, "twin", { last4: "4242", type: "Visa" });
+  assert.equal(await rewarded(twin.id), false);
+
+  // лимит: у пригласившего уже 6 бонусов за год — седьмой не начисляется
+  const busy = await makeUser({ role: "TEACHER" });
+  for (let i = 0; i < 6; i++) await makeUser({ role: "TEACHER", referredBy: busy.id, referralRewardedAt: new Date(Date.now() - i * 30 * DAY) });
+  const seventh = await makeUser({ role: "TEACHER", referredBy: busy.id, emailVerifiedAt: new Date() });
+  await pay(seventh.id, "cap");
+  assert.equal(await rewarded(seventh.id), false);
 });

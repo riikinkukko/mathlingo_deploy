@@ -27,10 +27,15 @@ import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
 export default async function StudentShell({
   active,
   title,
+  back,
   children,
 }: {
   active: "subjects" | "path" | "review" | "homework" | "mistakes" | "profile";
   title: string;
+  /** Для страниц второго уровня (программа, проверки, тариф…): стрелка «назад»
+   * в мобильной шапке вместо маскота и ссылка «← Назад» над контентом на
+   * компьютере. Без неё с таких страниц можно было уйти только через таб-бар. */
+  back?: { href: string; label?: string; wide?: boolean };
   children: React.ReactNode;
 }) {
   const user = (await getSessionUser())!;
@@ -55,7 +60,22 @@ export default async function StudentShell({
   return (
     <div className="min-h-screen bg-paper">
       <MobileAppBar
-        left={<AppBarTitle href="/student" title={title} mascot={<Mascot mood="idle" size={34} float={false} />} />}
+        left={
+          back ? (
+            <>
+              <a
+                href={back.href}
+                aria-label={back.label ?? "Назад"}
+                className="-ml-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl font-black text-ink-soft transition hover:text-pine"
+              >
+                ←
+              </a>
+              <span className="truncate font-display text-[17px] font-black text-ink">{title}</span>
+            </>
+          ) : (
+            <AppBarTitle href="/student" title={title} mascot={<Mascot mood="idle" size={34} float={false} />} />
+          )
+        }
         right={<NotificationBell initialNotifications={notifications} initialUnread={unreadCount} />}
       />
 
@@ -72,7 +92,19 @@ export default async function StudentShell({
         unreadCount={unreadCount}
       />
 
-      <div className="pb-24 lg:ml-[236px] lg:pb-8">{children}</div>
+      <div className="pb-24 lg:ml-[236px] lg:pb-8">
+        {back && (
+          // Ширина как у колонки контента страницы (max-w-2xl, у «Программы» — 3xl).
+          <div className="hidden px-8 pt-5 lg:block">
+            <div className={`mx-auto ${back.wide ? "max-w-3xl" : "max-w-2xl"}`}>
+              <a href={back.href} className="text-sm font-bold text-ink-soft transition hover:text-pine">
+                ← {back.label ?? "Назад"}
+              </a>
+            </div>
+          </div>
+        )}
+        {children}
+      </div>
 
       <BottomTabBar
         reviewCount={dueReviewCount}

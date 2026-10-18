@@ -21,7 +21,7 @@ export default async function StudentChecksPage(props: { searchParams: Promise<{
   const checks = await getStudentChecks(user.id);
 
   return (
-    <StudentShell active="profile" title="Мои проверки">
+    <StudentShell active="profile" title="Мои проверки" back={{ href: "/student/profile", label: "В профиль" }}>
       <main className="mx-auto max-w-2xl px-4 py-6">
         <h1 className="font-display text-2xl font-black text-ink">Мои проверки</h1>
         {searchParams.paid === "1" && (

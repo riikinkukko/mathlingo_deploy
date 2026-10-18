@@ -58,7 +58,7 @@ async function getClientIp(): Promise<string> {
   const forwarded = h.get("x-forwarded-for");
   return forwarded ? forwarded.split(",").pop()!.trim() : "";
 }
-import { AssignmentKind, Role } from "@/lib/types";
+import { ASSIGNMENT_KINDS, AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
@@ -106,6 +106,19 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
 }
 
 export async function logoutAction() {
+  await clearSessionCookie();
+  redirect("/login");
+}
+
+/** «Выйти на всех устройствах»: все уже выданные сессии этого пользователя
+ * (на телефоне, чужом компьютере, украденная cookie) перестают работать —
+ * getSessionUser/api-auth отклоняют токены, выданные раньше sessionsRevokedAt.
+ * Текущее устройство тоже разлогиниваем. */
+export async function logoutEverywhereAction() {
+  const user = await getSessionUser();
+  if (user) {
+    await db.update(schema.users).set({ sessionsRevokedAt: new Date() }).where(eq(schema.users.id, user.id));
+  }
   await clearSessionCookie();
   redirect("/login");
 }
@@ -473,6 +486,7 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
+  if (!isValidEmailFormat(email)) return { error: "Проверьте email родителя — похоже, в нём опечатка" };
   if (consent !== "on") {
     return { error: "Нужно подтвердить, что согласие родителя получено" };
   }
@@ -579,7 +593,12 @@ export async function createHomeworkAction(formData: FormData) {
         .map((r) => r.id)
         .sort((a, b) => requestedIds.indexOf(a) - requestedIds.indexOf(b))
     : [];
-  const kind = (String(formData.get("kind") || "homework") as AssignmentKind);
+  // Только известные типы: значение приходит из формы, а серверный экшен можно
+  // вызвать напрямую с любой строкой (любое «не homework» раньше считалось
+  // контрольной и ломало подписи/логику подсказок).
+  const kindRaw = String(formData.get("kind") || "homework");
+  if (!ASSIGNMENT_KINDS.includes(kindRaw as AssignmentKind)) redirect(errBack());
+  const kind = kindRaw as AssignmentKind;
   const allowHints = formData.get("allowHints") === "on";
   const timeLimitRaw = String(formData.get("timeLimitMinutes") || "").trim();
   const tl = parseInt(timeLimitRaw, 10);

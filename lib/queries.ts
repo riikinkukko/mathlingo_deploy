@@ -23,6 +23,7 @@ import {
 import { EXAM_ACCESS_UNTIL } from "./exam-plan";
 import { maxPointsForTask } from "./ege-points";
 import { markReviewOrderPaid, notifyReviewers } from "./paid-review";
+import { LOGIN_WINDOW_MIN, loginBlockReason, loginFailureKeys } from "./login-limits";
 import { rewardReferralOnPayment, recordPromoPayment, REFERRAL_BONUS_DAYS, type ReferralReward } from "./promo";
 
 // ---------- Мапперы: строка Drizzle (null) -> тип приложения (undefined) ----------
@@ -53,6 +54,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
     emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : undefined,
     passwordChangedAt: row.passwordChangedAt ? row.passwordChangedAt.toISOString() : undefined,
+    sessionsRevokedAt: row.sessionsRevokedAt ? row.sessionsRevokedAt.toISOString() : undefined,
     teacherPlan: row.teacherPlan ?? undefined,
     teacherProUntil: row.teacherProUntil ? row.teacherProUntil.toISOString() : undefined,
     teacherTier: (row.teacherTier as "standard" | "pro" | null) ?? null,
@@ -1491,18 +1493,9 @@ const REGISTRATION_WINDOW_HOURS = 24;
  * пропустить редкий случай абуза, чем по ошибке заблокировать реальных
  * пользователей из-за проблемы с прокси на нашей стороне. */
 // ---------- Защита от перебора паролей ----------
-// Считаем только НЕУДАЧНЫЕ входы, раздельно по IP и по email: так нельзя ни
-// перебирать пароли к одному аккаунту с разных IP, ни перебирать много
-// аккаунтов с одного IP. Успешный вход сбрасывает счётчик по email.
-const LOGIN_WINDOW_MIN = 15;
-// Ошибки считаем по паре «email + IP»: раньше 8 неверных паролей с ЛЮБОГО
-// адреса блокировали вход владельцу аккаунта — так можно было намеренно не
-// пускать человека в его аккаунт. Общий потолок на email оставлен, но выше —
-// он против перебора пароля с многих адресов.
-const LOGIN_FAILS_PER_EMAIL_IP = 8;
-const LOGIN_FAILS_PER_EMAIL = 50;
-const LOGIN_FAILS_PER_IP = 30;
-
+// Пороги и выбор ключей (почему блокируем по паре «email + IP», а общий
+// потолок на email высокий) — в lib/login-limits.ts. Успешный вход
+// сбрасывает счётчики по email.
 export async function isLoginRateLimited(ip: string, email: string): Promise<boolean> {
   const since = new Date(Date.now() - LOGIN_WINDOW_MIN * 60 * 1000);
   const count = async (key: string) => {
@@ -1512,17 +1505,16 @@ export async function isLoginRateLimited(ip: string, email: string): Promise<boo
       .where(and(eq(schema.loginFailures.key, key), gte(schema.loginFailures.createdAt, since)));
     return Number(rows[0]?.c ?? 0);
   };
-  if (email && ip && (await count(`emailip:${email}|${ip}`)) >= LOGIN_FAILS_PER_EMAIL_IP) return true;
-  if (email && (await count(`email:${email}`)) >= LOGIN_FAILS_PER_EMAIL) return true;
-  if (ip && (await count(`ip:${ip}`)) >= LOGIN_FAILS_PER_IP) return true;
-  return false;
+  const [emailIp, emailCount, ipCount] = await Promise.all([
+    email && ip ? count(`emailip:${email}|${ip}`) : 0,
+    email ? count(`email:${email}`) : 0,
+    ip ? count(`ip:${ip}`) : 0,
+  ]);
+  return loginBlockReason({ emailIp, email: emailCount, ip: ipCount }) !== null;
 }
 
 export async function recordLoginFailure(ip: string, email: string): Promise<void> {
-  const rows = [];
-  if (email) rows.push({ id: genId("lf"), key: `email:${email}` });
-  if (email && ip) rows.push({ id: genId("lf"), key: `emailip:${email}|${ip}` });
-  if (ip) rows.push({ id: genId("lf"), key: `ip:${ip}` });
+  const rows = loginFailureKeys(ip, email).map((key) => ({ id: genId("lf"), key }));
   if (rows.length) await db.insert(schema.loginFailures).values(rows);
 }
 
@@ -2028,7 +2020,10 @@ export async function getPaymentAmountRub(yookassaPaymentId: string): Promise<nu
 
 export async function markPaymentSucceeded(
   yookassaPaymentId: string,
-  savedMethod?: { id: string; cardLast4?: string; cardType?: string }
+  savedMethod?: { id: string; cardLast4?: string; cardType?: string },
+  // Маска карты этого платежа (даже если способ оплаты не сохранён) — только
+  // для проверки «Пригласи коллегу»: свою же карту у «коллеги» не засчитываем.
+  paidCard?: { last4?: string; type?: string }
 ): Promise<boolean> {
   const rows = await db
     .select()
@@ -2096,7 +2091,7 @@ export async function markPaymentSucceeded(
         })
         .where(eq(schema.users.id, payment.userId));
       // «Пригласи коллегу»: первая оплата приглашённого — обоим +30 дней.
-      referral = await rewardReferralOnPayment(tx, payment.userId);
+      referral = await rewardReferralOnPayment(tx, payment.userId, new Date(), paidCard ?? (savedMethod ? { last4: savedMethod.cardLast4, type: savedMethod.cardType } : null));
     } else {
       const base =
         user && user.proUntil && new Date(user.proUntil).getTime() > Date.now()

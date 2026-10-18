@@ -92,6 +92,9 @@ export const users = pgTable("users", {
   // Сессии, выданные ДО этой даты, недействительны (сброс/смена пароля
   // выкидывает все открытые сессии, включая чужие, если пароль утёк).
   passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+  // «Выйти на всех устройствах»: сессии (JWT), выданные до этой даты,
+  // недействительны — так же, как после смены пароля (lib/auth.ts).
+  sessionsRevokedAt: timestamp("sessions_revoked_at", { withTimezone: true }),
   // Запрос на удаление аккаунта (требование Google Play User Data Policy
   // для приложений с созданием аккаунта — см. app/legal/delete-account).
   // Сознательно НЕ автоматическое каскадное удаление по нажатию кнопки —

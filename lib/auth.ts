@@ -63,13 +63,21 @@ export async function getSessionUser(): Promise<User | null> {
   return user;
 }
 
-/** Сессия выдана до последней смены/сброса пароля — недействительна. Так сброс
- * пароля выкидывает все ранее открытые сессии (в т.ч. у того, кто, возможно,
- * узнал старый пароль). Секундная точность у iat — с запасом в 1 с. */
-export function isSessionRevoked(user: User, issuedAtSec?: number): boolean {
-  if (!user.passwordChangedAt) return false;
+/** Сессия выдана до последней смены/сброса пароля или до «Выйти на всех
+ * устройствах» — недействительна. Так сброс пароля выкидывает все ранее
+ * открытые сессии (в т.ч. у того, кто, возможно, узнал старый пароль), а
+ * кнопка в профиле — все сессии на других устройствах. Секундная точность у
+ * iat — с запасом в 1 с. */
+export function isSessionRevoked(
+  user: Pick<User, "passwordChangedAt" | "sessionsRevokedAt">,
+  issuedAtSec?: number
+): boolean {
+  const marks = [user.passwordChangedAt, user.sessionsRevokedAt]
+    .filter((d): d is string => !!d)
+    .map((d) => new Date(d).getTime());
+  if (marks.length === 0) return false;
   if (!issuedAtSec) return true;
-  return (issuedAtSec + 1) * 1000 <= new Date(user.passwordChangedAt).getTime();
+  return (issuedAtSec + 1) * 1000 <= Math.max(...marks);
 }
 
 /** Единая точка проверки доступа к /admin/*. isAdmin не закодирован в JWT

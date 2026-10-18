@@ -24,7 +24,7 @@ import { disconnectTelegramAction } from "@/app/actions-telegram";
 import StudentRemindersToggle from "@/components/StudentRemindersToggle";
 import EmailRemindersToggle from "@/components/EmailRemindersToggle";
 import { MAX_FREEZES, FREEZE_EVERY_DAYS } from "@/lib/streak";
-import { logoutAction } from "@/app/actions";
+import { logoutAction, logoutEverywhereAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 import StudentShell from "@/components/StudentShell";
@@ -291,6 +291,14 @@ export default async function ProfilePage(
             className="btn-secondary min-h-[44px] w-full !text-xs hover:!border-coral hover:!text-coral"
           >
             Выйти из аккаунта
+          </button>
+        </form>
+        <form action={logoutEverywhereAction} className="mt-2 text-center">
+          <button
+            type="submit"
+            className="min-h-[44px] px-4 text-xs font-bold text-ink-soft underline hover:text-coral"
+          >
+            Выйти на всех устройствах
           </button>
         </form>
         <DeleteAccountSection requestedAt={user.deletionRequestedAt} />

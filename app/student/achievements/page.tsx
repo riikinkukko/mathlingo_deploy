@@ -13,7 +13,7 @@ export default async function AchievementsPage() {
   const earnedTiers = progress.reduce((sum, p) => sum + (p.tierIndex + 1), 0);
 
   return (
-    <StudentShell active="profile" title="Достижения">
+    <StudentShell active="profile" title="Достижения" back={{ href: "/student/profile", label: "В профиль" }}>
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-2xl">
         <h1 className="sr-only lg:not-sr-only mb-1 font-display text-2xl font-black text-ink">Достижения</h1>

@@ -155,9 +155,9 @@ export default function HeroProblem({ moreCount = 0 }: { moreCount?: number }) {
             <a
               href="/register"
               onClick={() => ymGoal("landing_cta_student")}
-              className="lp-btn mt-2 inline-flex h-10 items-center rounded-xl bg-white px-4 text-[14px] font-black text-pine-darker hover:bg-pine-light"
+              className="lp-btn mt-2.5 flex h-12 w-full items-center justify-center rounded-xl bg-white px-5 text-[16px] font-black text-pine-darker shadow-[0_3px_0_rgba(0,0,0,0.25)] hover:bg-pine-light active:translate-y-px active:shadow-none sm:inline-flex sm:w-auto"
             >
-              Решать дальше бесплатно
+              Продолжить бесплатно →
             </a>
           </div>
         </div>

@@ -8,11 +8,12 @@
 //
 // Приглашение: у репетитора есть личная ссылка /register/teacher?ref=КОД.
 // Когда приглашённый впервые оплачивает тариф, обоим +30 дней.
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { genId } from "./queries";
 import type { User } from "./types";
+import { referralRewardDecision, type CardMask } from "./referral-rules";
 
 export const REFERRAL_BONUS_DAYS = 30;
 /** Кука с кодом-скидкой: введённый при регистрации или на странице тарифа код ждёт оплаты. */
@@ -227,8 +228,63 @@ export interface ReferralReward {
 /**
  * Бонус за приглашение — при первой успешной оплате приглашённого. Вызывается
  * внутри транзакции markPaymentSucceeded ПОСЛЕ продления тарифа приглашённого.
+ * paidCard — маска карты, которой оплачен этот платёж (если ЮKassa её вернула).
+ *
+ * Защита от самоприглашения — lib/referral-rules.ts. Если бонус пока не
+ * положен (например, email ещё не подтверждён), отметку referralRewardedAt не
+ * ставим: при следующей оплате (продлении) проверка повторится.
  */
-export async function rewardReferralOnPayment(tx: Tx, inviteeId: string, now: Date = new Date()): Promise<ReferralReward | null> {
+export async function rewardReferralOnPayment(
+  tx: Tx,
+  inviteeId: string,
+  now: Date = new Date(),
+  paidCard?: CardMask | null
+): Promise<ReferralReward | null> {
+  const [invitee] = await tx
+    .select({
+      referredBy: schema.users.referredBy,
+      rewardedAt: schema.users.referralRewardedAt,
+      emailVerifiedAt: schema.users.emailVerifiedAt,
+      last4: schema.users.yookassaCardLast4,
+      type: schema.users.yookassaCardType,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, inviteeId))
+    .limit(1);
+  if (!invitee?.referredBy || invitee.rewardedAt) return null;
+
+  // Блокируем строку пригласившего: два приглашённых, оплативших одновременно,
+  // иначе оба прошли бы проверку лимита.
+  const [inviter] = await tx
+    .select({
+      id: schema.users.id,
+      role: schema.users.role,
+      last4: schema.users.yookassaCardLast4,
+      type: schema.users.yookassaCardType,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, invitee.referredBy))
+    .limit(1)
+    .for("update");
+  const inviterIsTeacher = !!inviter && inviter.role === "TEACHER";
+
+  let rewardsLastYear = 0;
+  if (inviterIsTeacher) {
+    const yearAgo = new Date(now.getTime() - 365 * 86_400_000);
+    const [r] = await tx
+      .select({ c: sql<number>`count(*)::int` })
+      .from(schema.users)
+      .where(and(eq(schema.users.referredBy, inviter.id), gte(schema.users.referralRewardedAt, yearAgo)));
+    rewardsLastYear = Number(r?.c ?? 0);
+  }
+  const decision = referralRewardDecision({
+    inviteeEmailVerified: !!invitee.emailVerifiedAt,
+    inviteeCard: paidCard?.last4 ? paidCard : { last4: invitee.last4, type: invitee.type },
+    inviterCard: inviterIsTeacher ? { last4: inviter.last4, type: inviter.type } : null,
+    inviterRewardsLastYear: rewardsLastYear,
+  });
+  if (!decision.ok) return null;
+
   const claimed = await tx
     .update(schema.users)
     .set({ referralRewardedAt: now })
@@ -243,8 +299,7 @@ export async function rewardReferralOnPayment(tx: Tx, inviteeId: string, now: Da
   const row = claimed[0];
   if (!row?.inviterId) return null;
   await extendTeacherDays(tx, inviteeId, REFERRAL_BONUS_DAYS, now);
-  const [inviter] = await tx.select({ id: schema.users.id, role: schema.users.role }).from(schema.users).where(eq(schema.users.id, row.inviterId)).limit(1);
-  if (!inviter || inviter.role !== "TEACHER") return null;
+  if (!inviterIsTeacher) return null;
   await extendTeacherDays(tx, inviter.id, REFERRAL_BONUS_DAYS, now);
   return { inviterId: inviter.id, inviteeName: row.name };
 }

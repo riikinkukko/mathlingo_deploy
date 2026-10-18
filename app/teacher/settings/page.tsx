@@ -1,5 +1,5 @@
 import { getSessionUser } from "@/lib/auth";
-import { logoutAction } from "@/app/actions";
+import { logoutAction, logoutEverywhereAction } from "@/app/actions";
 import TeacherShell from "@/components/TeacherShell";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
 import TeacherTelegramPrefs from "@/components/TeacherTelegramPrefs";
@@ -30,11 +30,23 @@ export default async function TeacherSettingsPage(props: { searchParams: Promise
           />
         </TelegramConnectCard>
 
-        <form action={logoutAction}>
-          <button type="submit" className="btn-secondary !border-coral/30 !text-coral hover:!border-coral">
-            Выйти из аккаунта
-          </button>
-        </form>
+        <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <form action={logoutAction}>
+            <button type="submit" className="btn-secondary !border-coral/30 !text-coral hover:!border-coral">
+              Выйти из аккаунта
+            </button>
+          </form>
+          <form action={logoutEverywhereAction}>
+            <button type="submit" className="btn-secondary hover:!border-coral hover:!text-coral">
+              Выйти на всех устройствах
+            </button>
+          </form>
+        </div>
+        <p className="text-xs font-semibold text-ink-soft">
+          «Выйти на всех устройствах» завершит все открытые сессии — на телефоне, в приложении и на других компьютерах.
+        </p>
+        </div>
       </main>
     </TeacherShell>
   );

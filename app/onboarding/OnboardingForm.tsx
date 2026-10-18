@@ -78,13 +78,18 @@ export default function OnboardingForm({ topics }: { topics: { id: string; title
         <p className="mt-1.5 text-xs text-ink-soft">Покажем, сколько дней до ЕГЭ и сколько заниматься в день.</p>
       </div>
 
-      <div className="flex items-center justify-between pt-2">
-        <a href="/student" className="text-sm font-bold text-ink-soft hover:text-pine hover:underline">
+      {/* Главное действие — крупная кнопка на всю ширину; «Пропустить» —
+          второстепенная ссылка под ней, чтобы не спорила с кнопкой. */}
+      <div className="space-y-2 pt-2">
+        <button type="submit" className="btn-primary min-h-[52px] w-full !text-base">
+          Начать заниматься →
+        </button>
+        <a
+          href="/student"
+          className="block py-2 text-center text-sm font-bold text-ink-soft hover:text-pine hover:underline"
+        >
           Пропустить
         </a>
-        <button type="submit" className="btn-primary !px-8">
-          Продолжить
-        </button>
       </div>
     </form>
   );

@@ -64,7 +64,7 @@ export default async function ProgramPage(
   const totalProblemsAll = chapterInfo.reduce((sum, c) => sum + c.totalProblems, 0);
 
   return (
-    <StudentShell active="path" title="Программа">
+    <StudentShell active="path" title="Программа" back={{ href: "/student", label: "К пути обучения", wide: true }}>
       <div className="px-4 py-6 lg:px-8">
         <div className="mx-auto max-w-3xl">
           <h1 className="font-display text-2xl font-black text-ink">

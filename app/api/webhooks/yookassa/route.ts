@@ -70,7 +70,8 @@ export async function POST(req: Request) {
           pm?.saved && pm.id
             ? { id: pm.id, cardLast4: pm.card?.last4, cardType: pm.card?.card_type }
             : undefined;
-        await markPaymentSucceeded(paymentId, savedMethod);
+        const paidCard = pm?.card?.last4 ? { last4: pm.card.last4, type: pm.card.card_type } : undefined;
+        await markPaymentSucceeded(paymentId, savedMethod, paidCard);
       }
     } else if (info.status === "canceled") {
       await markPaymentCanceled(paymentId);

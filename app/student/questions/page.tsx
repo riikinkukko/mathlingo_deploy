@@ -9,7 +9,7 @@ export default async function StudentQuestionsPage() {
   const questions = await getQuestionsForStudent(user.id);
 
   return (
-    <StudentShell active="profile" title="Мои вопросы">
+    <StudentShell active="profile" title="Мои вопросы" back={{ href: "/student/profile", label: "В профиль" }}>
       <main className="mx-auto max-w-2xl px-4 py-5">
         <h1 className="font-display text-2xl font-black text-ink">Вопросы репетитору</h1>
         <p className="mb-5 mt-1 text-sm text-ink-soft">

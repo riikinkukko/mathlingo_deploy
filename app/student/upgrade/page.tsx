@@ -68,7 +68,7 @@ export default async function UpgradePage(
     : null;
 
   return (
-    <StudentShell active="profile" title="Тариф">
+    <StudentShell active="profile" title="Тариф" back={{ href: "/student", label: "Назад" }}>
       {!isPro && <TrackGoal goal="paywall_view" />}
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-2xl">

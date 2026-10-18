@@ -30,6 +30,7 @@ export interface User {
   deletionRequestedAt?: string;
   emailVerifiedAt?: string;
   passwordChangedAt?: string;
+  sessionsRevokedAt?: string;
   teacherPlan?: "free" | "pro";
   teacherProUntil?: string;
   teacherTier?: "standard" | "pro" | null;
@@ -186,6 +187,7 @@ export interface Attempt {
 }
 
 export type AssignmentKind = "homework" | "test" | "exam";
+export const ASSIGNMENT_KINDS: readonly AssignmentKind[] = ["homework", "test", "exam"];
 
 export interface Homework {
   id: string;
