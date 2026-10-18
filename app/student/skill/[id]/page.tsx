@@ -16,7 +16,8 @@ import {
 } from "@/lib/queries";
 import LessonFlow from "@/components/LessonFlow";
 
-export default async function SkillPage({ params }: { params: { id: string } }) {
+export default async function SkillPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = (await getSessionUser())!;
   const skill = await getSkill(params.id);
   if (!skill) notFound();

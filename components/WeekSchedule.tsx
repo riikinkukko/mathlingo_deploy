@@ -8,6 +8,7 @@ import LessonDeleteControl from "./LessonDeleteControl";
 import AddLessonForm from "./AddLessonForm";
 import type { LessonMember } from "@/lib/lesson-collapse";
 import { pluralRu } from "@/lib/pluralize";
+import { mskDayKey, mskMinutes } from "@/lib/lesson-time";
 
 export interface WeekItem {
   id: string;
@@ -70,14 +71,33 @@ export default function WeekSchedule({
   const router = useRouter();
   const [open, setOpen] = useState<{ item: WeekItem; day: WeekDay } | null>(null);
   // Новое занятие: нажатие на пустое место дня → время с шагом 30 минут.
-  const [draft, setDraft] = useState<{ day: WeekDay; startsAt: string; label: string } | null>(null);
+  const [draft, setDraft] = useState<{ startsAt: string; label: string; past: boolean } | null>(null);
   function onEmptyTap(e: React.MouseEvent<HTMLDivElement>, d: WeekDay) {
     if (e.target !== e.currentTarget || students.length === 0) return;
     const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
     const min = Math.min(23 * 60 + 30, Math.max(0, Math.floor((hourFrom * 60 + (y / HOUR_PX) * 60) / 30) * 30));
     const hh = String(Math.floor(min / 60)).padStart(2, "0");
     const mm = String(min % 60).padStart(2, "0");
-    setDraft({ day: d, startsAt: `${d.key}T${hh}:${mm}`, label: `${d.fullLabel}, ${hh}:${mm}` });
+    // Прошедшее время: форму открываем, но с явным предупреждением и
+    // кнопкой «на сегодня» — раньше занятие молча создавалось задним числом.
+    const past = new Date(`${d.key}T${hh}:${mm}:00+03:00`).getTime() < Date.now();
+    setDraft({ startsAt: `${d.key}T${hh}:${mm}`, label: `${d.fullLabel}, ${hh}:${mm}`, past });
+  }
+  /** Ближайшее будущее время сегодня (по Москве) с шагом 30 минут. */
+  function draftForToday(prefMin: number) {
+    const todayKey = mskDayKey(new Date());
+    const nowM = mskMinutes(new Date());
+    let min = prefMin > nowM ? prefMin : Math.ceil((nowM + 1) / 30) * 30;
+    if (min > 23 * 60 + 30) min = 23 * 60 + 30;
+    const hh = String(Math.floor(min / 60)).padStart(2, "0");
+    const mm = String(min % 60).padStart(2, "0");
+    const label = new Date(`${todayKey}T12:00:00+03:00`).toLocaleDateString("ru-RU", {
+      timeZone: "Europe/Moscow",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+    });
+    setDraft({ startsAt: `${todayKey}T${hh}:${mm}`, label: `Сегодня, ${label}, ${hh}:${mm}`, past: false });
   }
   const touch = useRef<{ x: number; y: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -89,6 +109,19 @@ export default function WeekSchedule({
   useEffect(() => {
     setOpen(null);
   }, [days]);
+
+  // Сетка прокручивается внутри себя: сразу показываем рабочие часы —
+  // первое занятие недели, а если занятий нет — 15:00 (обычное начало
+  // занятий у репетитора). Раньше вечерние занятия были за краем экрана.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const starts = days.flatMap((d) => d.items.map((it) => it.startMin));
+    const targetMin = starts.length ? Math.min(...starts) - 30 : 15 * 60;
+    el.scrollTop = Math.max(0, ((targetMin - hourFrom * 60) / 60) * HOUR_PX);
+    // Только при открытии недели: после отметки/переноса сетку не дёргаем.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekLabel]);
 
   // Закрыть карточку занятия по Esc.
   useEffect(() => {
@@ -162,16 +195,17 @@ export default function WeekSchedule({
           ))}
         </div>
 
-        <div ref={scrollRef} className="relative flex" style={{ height: hours.length * HOUR_PX }}>
+        <div ref={scrollRef} className="max-h-[min(480px,50vh)] overflow-y-auto overscroll-contain">
+        <div className="relative flex" style={{ height: hours.length * HOUR_PX }}>
           {/* Шкала часов */}
           <div className="relative w-8 shrink-0">
             {hours.map((h, i) => (
               <span
                 key={h}
-                className="absolute right-1 -translate-y-1/2 text-[10px] font-bold text-ink-soft"
+                className={`absolute right-1 text-[10px] font-bold text-ink-soft ${i === 0 ? "translate-y-0.5" : "-translate-y-1/2"}`}
                 style={{ top: i * HOUR_PX }}
               >
-                {i === 0 ? "" : h}
+                {h}
               </span>
             ))}
           </div>
@@ -243,6 +277,7 @@ export default function WeekSchedule({
             </div>
           ))}
         </div>
+        </div>
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-bold text-ink-soft">
@@ -265,6 +300,22 @@ export default function WeekSchedule({
             <div className="mx-auto mb-2 h-1.5 w-10 rounded-full bg-line lg:hidden" />
             <p className="px-1 font-display text-[19px] font-black text-ink">Новое занятие</p>
             <p className="mb-2 px-1 text-[13px] text-ink-soft">{draft.label}</p>
+            {draft.past && (
+              <div role="alert" className="mb-3 rounded-2xl border-2 border-amber/50 bg-amber-light px-3.5 py-2.5 text-[13px] text-amber-dark">
+                <p className="font-bold">Это время уже прошло.</p>
+                <p className="mt-0.5">Занятие запишется задним числом. Если хотели запланировать новое — выберите сегодня.</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const [h, m] = draft.startsAt.slice(11).split(":").map(Number);
+                    draftForToday(h * 60 + m);
+                  }}
+                  className="mt-2 h-10 rounded-pill border-2 border-amber bg-white px-4 text-[13px] font-extrabold text-amber-dark"
+                >
+                  Запланировать на сегодня
+                </button>
+              </div>
+            )}
             <AddLessonForm
               key={draft.startsAt}
               students={students}

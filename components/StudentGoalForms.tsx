@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useRef, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import {
   setTargetScoreAction,
   addMockScoreAction,
@@ -41,10 +42,11 @@ function todayMsk(): string {
 }
 
 export function TargetScoreForm({ studentId, targetScore }: { studentId: string; targetScore?: number }) {
-  const [state, action] = useFormState<GoalFormState, FormData>(setTargetScoreAction, null);
+  const [state, action, actionPending] = useActionState<GoalFormState, FormData>(setTargetScoreAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useSavedFlash(state);
   return (
-    <form action={action} className="flex flex-wrap items-end gap-3">
+    <form action={action} onSubmit={keepAction} className="flex flex-wrap items-end gap-3">
       <input type="hidden" name="studentId" value={studentId} />
       <div>
         <label className="label" htmlFor="targetScore">Целевой балл</label>
@@ -72,7 +74,8 @@ export function TargetScoreForm({ studentId, targetScore }: { studentId: string;
 }
 
 export function AddMockScoreForm({ studentId }: { studentId: string }) {
-  const [state, action] = useFormState<GoalFormState, FormData>(addMockScoreAction, null);
+  const [state, action, actionPending] = useActionState<GoalFormState, FormData>(addMockScoreAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useSavedFlash(state);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
@@ -84,7 +87,7 @@ export function AddMockScoreForm({ studentId }: { studentId: string }) {
   }, [state]);
 
   return (
-    <form ref={formRef} action={action} className="card space-y-3 p-4">
+    <form ref={formRef} action={action} onSubmit={keepAction} className="card space-y-3 p-4">
       <input type="hidden" name="studentId" value={studentId} />
       <div className="grid gap-3 sm:grid-cols-[120px_170px_1fr]">
         <div>
@@ -156,10 +159,11 @@ export function StudentNotesForm({
   notes: string;
   updatedLabel: string | null;
 }) {
-  const [state, action] = useFormState<GoalFormState, FormData>(saveStudentNotesAction, null);
+  const [state, action, actionPending] = useActionState<GoalFormState, FormData>(saveStudentNotesAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useSavedFlash(state);
   return (
-    <form action={action} className="card space-y-3 p-4">
+    <form action={action} onSubmit={keepAction} className="card space-y-3 p-4">
       <input type="hidden" name="studentId" value={studentId} />
       <textarea
         className="input min-h-[140px] resize-y"

@@ -57,7 +57,9 @@ export default function GroupLessonActions({
           className={
             big
               ? "h-11 w-full rounded-xl bg-pine-dark text-[15px] font-black text-white"
-              : "h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+              : past
+                ? "h-10 w-full whitespace-nowrap rounded-pill border-2 border-line bg-white px-3 text-[13px] font-extrabold text-ink transition hover:border-pine hover:bg-pine-light hover:text-pine-dark lg:h-8 lg:w-auto lg:text-[12px]"
+                : "h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
           }
         >
           {past ? "Было…" : "Провести…"}
@@ -70,7 +72,9 @@ export default function GroupLessonActions({
             className={
               big
                 ? "h-11 w-full rounded-xl border-2 border-line bg-white text-[15px] font-extrabold text-ink-soft"
-                : "h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+                : past
+                  ? "h-10 w-full whitespace-nowrap rounded-pill border-2 border-line bg-white px-3 text-[13px] font-extrabold text-ink transition hover:border-ink-soft hover:bg-line-soft lg:h-8 lg:w-auto lg:text-[12px]"
+                  : "h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
             }
           >
             {past ? "Не было" : "Отменить"}
@@ -116,7 +120,7 @@ export default function GroupLessonActions({
             : `Отсутствующие (${members.length - present.size}) — «не пришёл». Оплачивается ли пропуск — настройка в «Оплатах».`}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="submit" className="h-11 rounded-xl bg-pine text-[15px] font-black text-white hover:bg-pine-dark">
+        <button type="submit" className="h-11 rounded-xl bg-pine-strong text-[15px] font-black text-white hover:bg-pine-dark">
           Сохранить
         </button>
         <button

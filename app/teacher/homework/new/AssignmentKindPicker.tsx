@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 
-export default function AssignmentKindPicker() {
-  const [kind, setKind] = useState<"homework" | "test" | "exam">("homework");
-  const [allowHints, setAllowHints] = useState(true);
+type Kind = "homework" | "test" | "exam";
+
+export default function AssignmentKindPicker({
+  defaultKind = "homework",
+  defaultAllowHints,
+}: {
+  /** восстановление после ошибки отправки формы */
+  defaultKind?: Kind;
+  defaultAllowHints?: boolean;
+}) {
+  const [kind, setKind] = useState<Kind>(defaultKind);
+  const [allowHints, setAllowHints] = useState(defaultAllowHints ?? defaultKind === "homework");
 
   function selectKind(next: "homework" | "test" | "exam") {
     setKind(next);

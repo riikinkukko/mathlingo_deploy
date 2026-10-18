@@ -42,7 +42,7 @@ body {
 }
 
 .btn-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-pill bg-pine px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-button transition hover:brightness-105 active:translate-y-px active:scale-[0.96] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
+  @apply inline-flex items-center justify-center gap-2 rounded-pill bg-pine-strong px-5 py-3 text-sm font-extrabold uppercase tracking-wide text-white shadow-button transition hover:brightness-105 active:translate-y-px active:scale-[0.96] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none;
 }
 
 .btn-secondary {

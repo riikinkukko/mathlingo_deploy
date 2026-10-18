@@ -69,15 +69,15 @@ const WIDTHS = [
   { w: 6, label: "Толстая" },
 ];
 const STAMPS: { k: Stamp; label: string; hint: string }[] = [
-  { k: "tick1", label: "Равные |", hint: "Тапни по стороне" },
-  { k: "tick2", label: "Равные ||", hint: "Тапни по стороне" },
-  { k: "right", label: "Прямой угол", hint: "Тапни внутри угла у вершины" },
-  { k: "arc", label: "Дуга угла", hint: "Тапни внутри угла у вершины" },
+  { k: "tick1", label: "Равные |", hint: "Нажми по стороне" },
+  { k: "tick2", label: "Равные ||", hint: "Нажми по стороне" },
+  { k: "right", label: "Прямой угол", hint: "Нажми внутри угла у вершины" },
+  { k: "arc", label: "Дуга угла", hint: "Нажми внутри угла у вершины" },
   { k: "circle", label: "Окружность", hint: "Поставь центр и тяни радиус" },
-  { k: "dot", label: "Точка", hint: "Тапни и подпиши букву" },
-  { k: "height", label: "Высота", hint: "Тапни вершину, потом сторону" },
-  { k: "median", label: "Медиана", hint: "Тапни вершину, потом сторону" },
-  { k: "bisector", label: "Биссектриса", hint: "Тапни вершину, потом сторону" },
+  { k: "dot", label: "Точка", hint: "Нажми и подпиши букву" },
+  { k: "height", label: "Высота", hint: "Нажми вершину, потом сторону" },
+  { k: "median", label: "Медиана", hint: "Нажми вершину, потом сторону" },
+  { k: "bisector", label: "Биссектриса", hint: "Нажми вершину, потом сторону" },
 ];
 
 export type AnswerBarProps = {
@@ -689,14 +689,14 @@ export default function DiagramScratchpad({
     const tapR = 26 / scale;
     if (stamp === "tick1" || stamp === "tick2") {
       const s = nearestSegment(p, geom, tapR);
-      if (!s) return setToast("Тапни ближе к стороне");
+      if (!s) return setToast("Нажми ближе к стороне");
       const d = sub(s.seg[1], s.seg[0]);
       commit([...all, { t: "tick", p: s.q, ang: Math.atan2(d[1], d[0]), n: stamp === "tick1" ? 1 : 2, c }]);
       return;
     }
     if (stamp === "right" || stamp === "arc") {
       const v = nearestVertex(p, geom, 48 / scale);
-      if (!v) return setToast("Тапни внутри угла рядом с вершиной");
+      if (!v) return setToast("Нажми внутри угла рядом с вершиной");
       const corner = cornerAt(v, p, geom);
       if (!corner) return setToast("У этой точки нет двух сторон");
       commit([...all, { t: stamp, p: v, u: corner.u, v: corner.w, c }]);
@@ -711,13 +711,13 @@ export default function DiagramScratchpad({
     // высота / медиана / биссектриса: вершина, потом сторона
     if (!cevianFrom) {
       const v = nearestVertex(p, geom, tapR);
-      if (!v) return setToast("Сначала тапни вершину");
+      if (!v) return setToast("Сначала нажми вершину");
       setCevianFrom(v);
-      setToast("Теперь тапни противоположную сторону");
+      setToast("Теперь нажми противоположную сторону");
       return;
     }
     const s = nearestSegment(p, geom, tapR);
-    if (!s) return setToast("Тапни по стороне");
+    if (!s) return setToast("Нажми по стороне");
     if (dist(s.seg[0], cevianFrom) < 3 || dist(s.seg[1], cevianFrom) < 3) return setToast("Нужна сторона напротив вершины");
     const k = stamp as "height" | "median" | "bisector";
     const foot = cevian(k, cevianFrom, s.seg[0], s.seg[1]);
@@ -898,7 +898,7 @@ export default function DiagramScratchpad({
       : tool === "select" && !validSel.length
         ? desktop
           ? "Кликни фигуру или обведи рамкой. Alt + перетаскивание — копия"
-          : "Тапни фигуру или обведи рамкой — потом тяни"
+          : "Нажми фигуру или обведи рамкой — потом тяни"
         : null;
   const iconBtn =
     "flex h-11 w-11 shrink-0 items-center justify-center rounded-[14px] text-ink-soft transition hover:bg-paper disabled:opacity-30";
@@ -1045,7 +1045,7 @@ export default function DiagramScratchpad({
 
         {(toast || stampHint || cevianFrom) && (
           <div role="status" className="pointer-events-none absolute bottom-3 left-1/2 max-w-[90%] -translate-x-1/2 rounded-[14px] bg-[#0E8C82] px-3.5 py-2 text-center text-[12px] font-extrabold text-white shadow-lg">
-            {toast ?? (cevianFrom ? "Теперь тапни противоположную сторону" : stampHint)}
+            {toast ?? (cevianFrom ? "Теперь нажми противоположную сторону" : stampHint)}
           </div>
         )}
 
@@ -1067,7 +1067,7 @@ export default function DiagramScratchpad({
             onPointerDown={(e) => e.stopPropagation()}
             className="absolute inset-x-3 bottom-3 rounded-[20px] border border-line-soft bg-white p-3 shadow-[0_12px_32px_rgba(19,42,32,0.16)]"
           >
-            <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-ink-soft">Значки — потом тапни по чертежу</p>
+            <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-ink-soft">Значки — потом нажми по чертежу</p>
             <div className="grid grid-cols-3 gap-2">
               {STAMPS.map((s) => (
                 <button
@@ -1206,7 +1206,7 @@ export default function DiagramScratchpad({
                 type="button"
                 onClick={submitAnswer}
                 disabled={!answerBar.value.trim() || answerState === "pending"}
-                className="h-12 shrink-0 rounded-[14px] bg-pine px-4 text-[15px] font-black text-white shadow-[0_3px_0_#13804F] disabled:opacity-50"
+                className="h-12 shrink-0 rounded-[14px] bg-pine-strong px-4 text-[15px] font-black text-white shadow-[0_3px_0_#13804F] disabled:opacity-50"
               >
                 {answerState === "pending" ? "…" : answerState === "wrong" ? "Ещё раз" : "Проверить"}
               </button>

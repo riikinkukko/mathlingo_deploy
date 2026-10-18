@@ -11,7 +11,7 @@ export default async function TeacherQuestionsPage() {
   const answered = questions.filter((q) => q.answeredAt).slice(0, 20);
 
   return (
-    <TeacherShell active="students" title="Вопросы учеников">
+    <TeacherShell active="questions" title="Вопросы учеников">
       <main className="mx-auto max-w-3xl px-4 py-5">
         <h1 className="font-display text-2xl font-black text-ink">Вопросы учеников</h1>
         <p className="mb-5 mt-1 text-sm text-ink-soft">

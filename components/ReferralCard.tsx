@@ -60,7 +60,7 @@ export default function ReferralCard({
         <button
           type="button"
           onClick={share}
-          className="h-11 rounded-xl bg-pine px-5 text-[14px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
+          className="h-11 rounded-xl bg-pine-strong px-5 text-[14px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
         >
           Отправить ссылку
         </button>

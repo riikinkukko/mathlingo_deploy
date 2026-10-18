@@ -48,8 +48,8 @@ import { generatePassword } from "@/lib/secure-random";
  * Пустая строка в локальной разработке без nginx перед сервером — это
  * ожидаемо, isRegistrationRateLimited() специально не блокирует в этом
  * случае вместо того, чтобы ошибочно резать реальных пользователей. */
-function getClientIp(): string {
-  const h = headers();
+async function getClientIp(): Promise<string> {
+  const h = await headers();
   // X-Real-IP выставляет nginx из реального соединения — подделать нельзя.
   // Первый адрес X-Forwarded-For присылает сам клиент, поэтому из XFF берём
   // последний (его добавил наш nginx) и только если X-Real-IP нет.
@@ -64,9 +64,11 @@ import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
-import { getCurriculum } from "@/lib/queries";
+import { getCurriculum, FREE_MAX_ENERGY } from "@/lib/queries";
 import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from "@/lib/promo";
-import { isTeacherPaidActive, teacherPlanState, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
+import { isTeacherPaidActive, teacherPlanState, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
+import { maxPointsForTask, parseReviewScore, resolveDecision, scoreLabel } from "@/lib/ege-points";
+import { createTeacherInvite, cancelTeacherInvite, respondToTeacherInvite, studentLimitError } from "@/lib/teacher-invites";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -83,7 +85,7 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
 
-  const clientIp = getClientIp();
+  const clientIp = await getClientIp();
   if (await isLoginRateLimited(clientIp, email)) {
     return { error: "Слишком много неудачных попыток входа. Подождите 15 минут или восстановите пароль." };
   }
@@ -104,7 +106,7 @@ export async function loginAction(_prevState: unknown, formData: FormData) {
 }
 
 export async function logoutAction() {
-  clearSessionCookie();
+  await clearSessionCookie();
   redirect("/login");
 }
 
@@ -176,7 +178,9 @@ export async function reviewAttemptAction(
   decision: "approved" | "needs_revision",
   feedback: string,
   /** фото решения с пометками репетитора (data URL JPEG) */
-  markup?: string | null
+  markup?: string | null,
+  /** баллы по критериям ФИПИ 0..макс (lib/ege-points.ts); null — без баллов */
+  score?: number | null
 ) {
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
@@ -198,6 +202,14 @@ export async function reviewAttemptAction(
   const problem = await getProblem(attempt.problemId);
   const skill = problem?.skillId ? await getSkill(problem.skillId) : undefined;
 
+  // Баллы: 0..макс. для номера ЕГЭ; полный балл всегда означает «одобрено».
+  const maxPoints = maxPointsForTask(problem?.egeTaskNumber);
+  const parsedScore = parseReviewScore(score, maxPoints);
+  if (!parsedScore.ok) return { error: `Баллы — целое число от 0 до ${maxPoints}` };
+  const reviewScore = parsedScore.score;
+  decision = resolveDecision(decision, reviewScore, maxPoints);
+  const scoreText = reviewScore !== null ? scoreLabel(reviewScore, maxPoints) : "";
+
   // Пометки сохраняем только к уже приложенному фото (своё фото репетитор не подставит).
   const marked = cleanImageDataUrl(markup);
   if (markup && !marked) return { error: "Пометки не сохранились: слишком большое фото. Попробуйте ещё раз." };
@@ -207,6 +219,7 @@ export async function reviewAttemptAction(
       reviewStatus: decision,
       isCorrect: decision === "approved",
       teacherFeedback: feedback || null,
+      reviewScore,
     })
     .where(eq(schema.attempts.id, attemptId));
 
@@ -230,7 +243,7 @@ export async function reviewAttemptAction(
         : decision === "approved"
           ? `Решение одобрено ✓`
           : `Решение нужно доработать`,
-      body: `Навык «${skill?.title ?? ""}»${feedback ? `: ${feedback}` : ""}${marked ? " · есть пометки на фото" : ""}`,
+      body: `Навык «${skill?.title ?? ""}»${scoreText ? ` · ${scoreText}` : ""}${feedback ? `: ${feedback}` : ""}${marked ? " · есть пометки на фото" : ""}`,
       link: paidOrder ? "/student/checks" : `/student`,
     });
 
@@ -272,8 +285,9 @@ export async function reviewAttemptAction(
   });
 
   revalidatePath("/teacher");
+  revalidatePath("/teacher/reviews");
   revalidatePath("/student");
-  return { success: true };
+  return { success: true, decision, score: reviewScore };
 }
 
 // ---------- TEACHER: журнал занятий ----------
@@ -282,12 +296,12 @@ export async function createLessonLogAction(formData: FormData) {
   const teacher = await getSessionUser();
   const studentId = String(formData.get("studentId") || "");
   if (!teacher || teacher.role !== "TEACHER") {
-    redirect(`/teacher/student/${studentId}?error=1`);
+    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
   }
   // Только своему ученику: иначе любой репетитор мог слать домашки и записи
   // журнала (с уведомлениями ученику и родителям) чужим ученикам.
   if (!(await isOwnStudent(teacher.id, studentId))) {
-    redirect(`/teacher/student/${studentId}?error=1`);
+    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
   }
 
   const date = String(formData.get("date") || "").slice(0, 10);
@@ -295,7 +309,7 @@ export async function createLessonLogAction(formData: FormData) {
   const report = String(formData.get("report") || "").trim().slice(0, 5000);
 
   if (!studentId || !date || !topic || !report) {
-    redirect(`/teacher/student/${studentId}?error=1`);
+    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
   }
 
   const parentLinks = await db
@@ -361,15 +375,9 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   // пробный период — без лимита. Уже добавленные ученики не отключаются.
   if (Number.isFinite(plan.limit)) {
     const currentStudents = await getStudentsOfTeacher(teacher.id);
-    if (currentStudents.length >= plan.limit) {
-      return {
-        limit: true as const,
-        current: currentStudents.length,
-        error:
-          plan.tier === "free"
-            ? `На бесплатном тарифе — до ${plan.limit} учеников. Чтобы добавить ещё, выберите тариф.`
-            : `На тарифе «${TEACHER_TIERS[plan.tier].name}» — до ${plan.limit} учеников. Для большего числа — «Профи».`,
-      };
+    const limitError = studentLimitError(teacher, currentStudents.length);
+    if (limitError) {
+      return { limit: true as const, current: currentStudents.length, error: limitError };
     }
   }
 
@@ -385,7 +393,14 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   }
 
   const existing = await getUserByEmail(email);
-  if (existing) return { error: "Пользователь с таким email уже существует" };
+  // Частый случай: ученик сначала зарегистрировался сам. Привязать чужой
+  // аккаунт молча нельзя — отправляем приглашение, ученик подтверждает сам.
+  if (existing) {
+    const res = await createTeacherInvite(teacher, existing);
+    if (!res.ok) return { error: res.message, inviteError: res.code };
+    revalidatePath("/teacher");
+    return { invited: true as const, name: existing.name, email: existing.email };
+  }
 
   const studentId = genId("u");
   await db.insert(schema.users).values({
@@ -399,6 +414,30 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   });
   revalidatePath("/teacher");
   return { success: true, password, email, name, studentId };
+}
+
+// ---------- Приглашения «репетитор → самостоятельный ученик» ----------
+
+/** Ученик принимает или отклоняет СВОЁ приглашение (проверка — в respondToTeacherInvite). */
+export async function respondTeacherInviteAction(inviteId: string, accept: boolean) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "STUDENT") return { error: "Доступ запрещён" };
+  if (typeof inviteId !== "string" || typeof accept !== "boolean") return { error: "Некорректный запрос" };
+  const res = await respondToTeacherInvite(user.id, inviteId, accept);
+  if (!res.ok) return { error: res.message };
+  revalidatePath("/student");
+  revalidatePath("/student/profile");
+  revalidatePath("/teacher");
+  return { success: true as const, accepted: accept };
+}
+
+/** Репетитор отзывает своё ожидающее приглашение. */
+export async function cancelTeacherInviteAction(formData: FormData) {
+  const teacher = await getSessionUser();
+  if (!teacher || teacher.role !== "TEACHER") return;
+  const inviteId = String(formData.get("inviteId") || "");
+  if (inviteId) await cancelTeacherInvite(teacher.id, inviteId);
+  revalidatePath("/teacher");
 }
 
 export async function deleteStudentAction(formData: FormData) {
@@ -498,14 +537,29 @@ export async function createHomeworkAction(formData: FormData) {
   const groupId = String(formData.get("groupId") || "");
   const group = groupId && teacher ? await getGroupForTeacher(groupId, teacher.id) : undefined;
   const studentId = group ? "" : String(formData.get("studentId") || "");
-  const errBack = group ? `/teacher/homework/new?groupId=${groupId}&error=1` : `/teacher/homework/new?studentId=${studentId}&error=1`;
+  // Ошибку отдаём кодом (?error=<code>), а название/срок/тип — обратно в URL,
+  // чтобы страница показала понятное сообщение и не сбрасывала введённое.
+  const errBack = (code = "1") => {
+    const q = new URLSearchParams(group ? { groupId } : { studentId });
+    q.set("error", code);
+    const keep = (k: string, max: number) => {
+      const v = String(formData.get(k) || "").trim().slice(0, max);
+      if (v) q.set(k, v);
+    };
+    keep("title", 120);
+    keep("dueDate", 10);
+    keep("kind", 10);
+    keep("timeLimitMinutes", 4);
+    if (formData.get("allowHints") !== "on") q.set("noHints", "1");
+    return `/teacher/homework/new?${q.toString()}`;
+  };
   if (!teacher || teacher.role !== "TEACHER") {
-    redirect(errBack);
+    redirect(errBack("access"));
   }
   // Только своему ученику: иначе любой репетитор мог слать домашки и записи
   // журнала (с уведомлениями ученику и родителям) чужим ученикам.
   if (groupId ? !group || group.members.length === 0 : !(await isOwnStudent(teacher.id, studentId))) {
-    redirect(errBack);
+    redirect(errBack("access"));
   }
   const targetIds = group ? group.members.map((m) => m.id) : [studentId];
   const batchId = group ? genId("hb") : null;
@@ -565,9 +619,10 @@ export async function createHomeworkAction(formData: FormData) {
   // Дата из <input type="date"> — срок до конца этого дня по Москве.
   // new Date("YYYY-MM-DD") — это полночь UTC (03:00 МСК), задание «просрочилось» бы утром.
   const dueAt = /^\d{4}-\d{2}-\d{2}$/.test(dueDate) ? mskEndOfDay(dueDate) : null;
-  if (targetIds.length === 0 || !title || !dueAt || isNaN(dueAt.getTime()) || problemIds.length === 0) {
-    redirect(errBack);
-  }
+  if (problemIds.length === 0) redirect(errBack("noproblems"));
+  if (!title) redirect(errBack("notitle"));
+  if (!dueAt || isNaN(dueAt.getTime())) redirect(errBack("nodue"));
+  if (targetIds.length === 0) redirect(errBack("access"));
 
   const KIND_LABEL: Record<string, string> = {
     homework: "Новое домашнее задание",
@@ -621,7 +676,7 @@ export async function createHomeworkAction(formData: FormData) {
     revalidatePath(`/teacher/groups/${group.id}`);
     redirect(`/teacher/groups/${group.id}?hw=${targetIds.length}`);
   }
-  redirect(`/teacher/student/${studentId}?tab=hw`);
+  redirect(`/teacher/student/${studentId}?tab=hw&assigned=${problemIds.length}`);
 }
 
 // ---------- Уведомления ----------
@@ -672,7 +727,7 @@ async function applyPromoAtRegistration(userId: string, promoRaw: FormDataEntryV
   if (!created) return;
   const check = await checkPromo(promoRaw, created);
   if (check.ok && check.promo.kind === "days") await redeemDaysPromo(check.promo.code, created);
-  else if (check.ok) cookies().set(PROMO_COOKIE, check.promo.code, { maxAge: 30 * 86400, httpOnly: true, sameSite: "lax", path: "/" });
+  else if (check.ok) (await cookies()).set(PROMO_COOKIE, check.promo.code, { maxAge: 30 * 86400, httpOnly: true, sameSite: "lax", path: "/" });
 }
 
 export async function registerAction(_prevState: unknown, formData: FormData) {
@@ -680,7 +735,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
-  const clientIp = getClientIp();
+  const clientIp = await getClientIp();
 
   // Анти-абуз: без этого лимит по энергии у самостоятельного Free-ученика
   // (5 задач в день) обходится тривиально — просто регистрируешь новый
@@ -720,7 +775,9 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
     consentGivenAt: new Date(),
     // teacherId сознательно не задаём — это самостоятельный пользователь.
     plan: "free",
-    energy: 5,
+    // Полный запас с первого дня: 15 хватает на 3–4 урока, а подзарядка
+    // включается только после подтверждения почты.
+    energy: FREE_MAX_ENERGY,
     energyUpdatedAt: new Date(),
   });
 
@@ -744,7 +801,7 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
   const password = String(formData.get("password") || "");
   const consent = formData.get("consent");
-  const clientIp = getClientIp();
+  const clientIp = await getClientIp();
 
   // Анти-абуз: без этого лимит "3 ученика бесплатно" тривиально обходится
   // регистрацией 10 разных аккаунтов репетитора (3×10=30 бесплатных мест).
@@ -921,7 +978,7 @@ export async function saveOnboardingAction(formData: FormData) {
   // (раньше все начинали с «Треугольников», даже кто целится в 80+).
   const topicId = String(formData.get("topicId") || "");
   if (topicId && (await getCurriculum()).some((t) => t.topic.id === topicId)) {
-    cookies().set(TOPIC_COOKIE, topicId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    (await cookies()).set(TOPIC_COOKIE, topicId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
     redirect(`/student?topic=${encodeURIComponent(topicId)}`);
   }
   redirect("/student");

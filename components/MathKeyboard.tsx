@@ -1,19 +1,23 @@
 "use client";
 
+// «−» и «/» — первыми: на цифровой клавиатуре телефона (inputMode="decimal")
+// их нет, а ответы бывают отрицательными и дробями. Вставляем обычный дефис —
+// его понимает проверка ответа. «°» убран: проверка всё равно отбрасывает
+// градусы в конце ответа («60°» = «60»), а седьмая кнопка не влезала в ряд.
 const KEYS = [
+  { symbol: "-", label: "−", aria: "Минус" },
+  { symbol: "/", label: "/", aria: "Дробь" },
   { symbol: "√", label: "√" },
   { symbol: "²", label: "²" },
   { symbol: "π", label: "π" },
-  { symbol: "°", label: "°" },
-  { symbol: "/", label: "/" },
   { symbol: "sin", label: "sin" },
-];
+] as { symbol: string; label: string; aria?: string }[];
 
 export default function MathKeyboard({
   inputRef,
   onInsert,
 }: {
-  inputRef: React.RefObject<HTMLInputElement>;
+  inputRef: React.RefObject<HTMLInputElement | null>;
   onInsert: (nextValue: string) => void;
 }) {
   function insert(symbol: string) {
@@ -39,6 +43,7 @@ export default function MathKeyboard({
           key={k.symbol}
           type="button"
           onClick={() => insert(k.symbol)}
+          aria-label={k.aria ?? k.label}
           className="flex h-[46px] min-w-[46px] items-center justify-center rounded-xl border border-line bg-white px-2 font-display text-lg font-black text-ink transition hover:border-pine hover:text-pine"
         >
           {k.label}

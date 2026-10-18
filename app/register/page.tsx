@@ -3,7 +3,8 @@ import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
 import { normalizePromoCode } from "@/lib/promo";
 
-export default function RegisterPage({ searchParams }: { searchParams: { promo?: string } }) {
+export default async function RegisterPage(props: { searchParams: Promise<{ promo?: string }> }) {
+  const searchParams = await props.searchParams;
   const promo = normalizePromoCode(searchParams.promo) ?? undefined;
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">

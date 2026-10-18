@@ -16,7 +16,7 @@ export default async function SubjectsPage() {
   const curriculum = await getCurriculum();
   const progress = await computeStudentProgress(user.id);
   // Текущий предмет — тот, что открыт на «Пути» (по умолчанию первый).
-  const savedTopicId = cookies().get(TOPIC_COOKIE)?.value;
+  const savedTopicId = (await cookies()).get(TOPIC_COOKIE)?.value;
   const currentId = (curriculum.find((t) => t.topic.id === savedTopicId) ?? curriculum[0])?.topic.id;
 
   return (

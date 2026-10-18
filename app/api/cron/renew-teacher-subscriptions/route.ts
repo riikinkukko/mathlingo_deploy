@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { getTeachersDueForRenewal, createPendingPayment } from "@/lib/queries";
 import { createRecurringYooKassaPayment, isYooKassaConfigured } from "@/lib/yookassa";
 
@@ -22,9 +23,12 @@ import { TEACHER_TIERS, periodDays, tierPrice } from "@/lib/teacher-plan";
  */
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const secret = searchParams.get("secret");
+  // Секрет — в заголовке Authorization: Bearer … (не попадает в логи nginx);
+  // ?secret= оставлен для совместимости со старой строкой crontab.
+  const auth = req.headers.get("authorization") ?? "";
+  const secret = auth.startsWith("Bearer ") ? auth.slice(7) : searchParams.get("secret");
 
-  if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
+  if (!secretMatches(secret, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   if (!isYooKassaConfigured()) {
@@ -83,4 +87,12 @@ export async function GET(req: Request) {
     succeeded,
     failed: failed.length,
   });
+}
+
+/** Сравнение секрета за постоянное время (не выдаёт длину совпавшего префикса). */
+function secretMatches(given: string | null, expected: string | undefined): boolean {
+  if (!expected || !given) return false;
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }

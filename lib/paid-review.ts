@@ -9,6 +9,7 @@
 import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
+import { maxPointsForTask } from "./ege-points";
 import { genId, getProblem, getSkill, mapUserRow, pushNotification, type PendingReview } from "./queries";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
@@ -150,6 +151,9 @@ export interface StudentCheck {
   status: "awaiting_payment" | "paid" | "done";
   decision: "approved" | "needs_revision" | null;
   feedback: string | null;
+  /** баллы эксперта по критериям ФИПИ; null — не ставил */
+  score: number | null;
+  maxScore: number;
   problemText: string;
   skillId: string | null;
   skillTitle: string;
@@ -186,6 +190,8 @@ export async function getStudentChecks(studentId: string): Promise<StudentCheck[
       status: o.status as StudentCheck["status"],
       decision: a.reviewStatus === "approved" || a.reviewStatus === "needs_revision" ? a.reviewStatus : null,
       feedback: a.teacherFeedback,
+      score: a.reviewScore ?? null,
+      maxScore: maxPointsForTask(problem?.egeTaskNumber),
       problemText: problem?.text ?? "",
       skillId: problem?.skillId ?? null,
       skillTitle: skill?.title ?? "",

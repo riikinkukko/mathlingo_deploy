@@ -107,7 +107,7 @@ export default function LessonFlow({
   // ниже — просто другая точка входа и другой текст на кнопке завершения.
   if (phase === "theory") {
     return (
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-2xl pb-28 lg:pb-0">
         <LessonTopBar backHref={backHref}>
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-[16px] font-black text-ink">{skillTitle}</p>
@@ -118,6 +118,7 @@ export default function LessonFlow({
           cards={theoryCards}
           completeLabel="Начать задачи →"
           onComplete={() => setPhase("problems")}
+          stickyNav
         />
       </div>
     );
@@ -175,6 +176,7 @@ export default function LessonFlow({
         onWrong={() => handleWrong(current.id)}
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
         canAskTeacher={canAskTeacher}
+        stickySubmit
       />
 
       {/* Одна большая кнопка внизу, под большим пальцем: появляется, когда

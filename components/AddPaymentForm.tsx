@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useRef, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { addStudentPaymentAction, AddPaymentState } from "@/app/actions-student-payments";
 
 function SubmitButton() {
@@ -39,7 +40,8 @@ export default function AddPaymentForm({
   /** цена занятия ученика (страница ученика) */
   priceRub?: number | null;
 }) {
-  const [state, formAction] = useFormState<AddPaymentState, FormData>(addStudentPaymentAction, null);
+  const [state, formAction, formActionPending] = useActionState<AddPaymentState, FormData>(addStudentPaymentAction, null);
+  const keepFormAction = useKeepFormValues(formActionPending);
   const formRef = useRef<HTMLFormElement>(null);
   const [showSaved, setShowSaved] = useState(false);
   const [selected, setSelected] = useState(studentId ?? "");
@@ -60,7 +62,7 @@ export default function AddPaymentForm({
   }, [state]);
 
   return (
-    <form ref={formRef} action={formAction} className="card space-y-3 p-4">
+    <form ref={formRef} action={formAction} onSubmit={keepFormAction} className="card space-y-3 p-4">
       {studentId && <input type="hidden" name="studentId" value={studentId} />}
 
       {!studentId && students && (

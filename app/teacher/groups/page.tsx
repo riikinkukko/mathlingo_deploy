@@ -12,14 +12,15 @@ const ERRORS: Record<string, string> = {
   "1": "Группа не найдена.",
 };
 
-export default async function GroupsPage({ searchParams }: { searchParams: { error?: string; deleted?: string } }) {
+export default async function GroupsPage(props: { searchParams: Promise<{ error?: string; deleted?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   const [students, groups] = await Promise.all([getStudentsOfTeacher(user.id), getGroupsOfTeacher(user.id)]);
   const sorted = [...students].sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
   return (
-    <TeacherShell active="students" title="Группы">
-      <main className="mx-auto max-w-3xl px-4 py-6">
+    <TeacherShell active="groups" title="Группы">
+      <main className="mx-auto max-w-3xl px-4 py-6 lg:max-w-[1200px]">
         <a href="/teacher#students" className="mb-3 inline-block text-sm font-bold text-ink-soft hover:text-ink">
           ← Ученики
         </a>
@@ -41,7 +42,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: { err
         )}
 
         {groups.length > 0 && (
-          <div className="mb-6 space-y-2">
+          <div className="mb-6 space-y-2 lg:grid lg:grid-cols-2 lg:gap-2 lg:space-y-0 xl:grid-cols-3">
             {groups.map((g) => (
               <a
                 key={g.id}
@@ -73,6 +74,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: { err
             </div>
           </div>
         ) : (
+          <div className="lg:max-w-2xl">
           <CollapsibleSection title="Новая группа" defaultOpen={groups.length === 0}>
             <form action={createGroupAction} className="card space-y-4 p-4">
               <div>
@@ -84,6 +86,7 @@ export default async function GroupsPage({ searchParams }: { searchParams: { err
               <button type="submit" className="btn-primary">Создать группу</button>
             </form>
           </CollapsibleSection>
+          </div>
         )}
       </main>
     </TeacherShell>

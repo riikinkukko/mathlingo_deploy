@@ -39,6 +39,10 @@ function dayLabel(iso: string): string {
 }
 
 
+/** Кнопки отметки прошедшего занятия — одинаковые нейтральные, пока не выбрано. */
+const PAST_CHOICE =
+  "h-10 w-full whitespace-nowrap rounded-pill border-2 border-line bg-white px-3 text-[13px] font-extrabold text-ink transition lg:h-8 lg:w-auto lg:text-[12px]";
+
 export default function UpcomingLessons({
   lessons,
   showStudent,
@@ -149,11 +153,17 @@ export default function UpcomingLessons({
                     <input type="hidden" name="lessonId" value={l.id} />
                     <input type="hidden" name="status" value="done" />
                     <input type="hidden" name="from" value={from} />
+                    {/* Прошедшее занятие: три равноправных варианта. Залитая зелёным
+                        «✓ Было» читалась как уже выбранная отметка. */}
                     <button
                       type="submit"
-                      className="h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+                      className={
+                        past
+                          ? PAST_CHOICE + " hover:border-pine hover:bg-pine-light hover:text-pine-dark"
+                          : "h-10 w-full rounded-pill bg-pine px-4 text-[13px] font-extrabold text-white transition hover:bg-pine-dark lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+                      }
                     >
-                      {past ? "✓ Было" : "Провести"}
+                      {past ? "Было" : "Провести"}
                     </button>
                   </form>
                   <form action={setLessonStatusAction} className="flex-1 lg:flex-none">
@@ -162,7 +172,11 @@ export default function UpcomingLessons({
                     <input type="hidden" name="from" value={from} />
                     <button
                       type="submit"
-                      className="h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+                      className={
+                        past
+                          ? PAST_CHOICE + " hover:border-ink-soft hover:bg-line-soft"
+                          : "h-10 w-full rounded-pill bg-line-soft px-4 text-[13px] font-extrabold text-ink-soft transition hover:bg-line lg:h-8 lg:w-auto lg:px-3 lg:text-[12px]"
+                      }
                     >
                       {past ? "Не было" : "Отменить"}
                     </button>
@@ -175,7 +189,7 @@ export default function UpcomingLessons({
                       <button
                         type="submit"
                         title="Ученик не пришёл без предупреждения"
-                        className="h-10 w-full rounded-pill border border-line px-3 text-[13px] font-bold text-ink-soft transition hover:bg-line-soft lg:h-8 lg:w-auto lg:text-[12px]"
+                        className={PAST_CHOICE + " hover:border-coral hover:bg-coral-light hover:text-coral-text"}
                       >
                         Не пришёл
                       </button>

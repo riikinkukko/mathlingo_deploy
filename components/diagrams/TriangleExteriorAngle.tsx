@@ -40,7 +40,7 @@ export default function TriangleExteriorAngle({
       {/* продолжение стороны за правую вершину */}
       <line x1={right.x} y1={right.y} x2={ext.x} y2={ext.y} stroke={D.ink} strokeWidth="2.5" strokeDasharray="5 4" />
       <Lbl x={left.x + 26} y={left.y - 10} value={inner1} />
-      {inner2 && <Lbl x={apex.x} y={apex.y + 26} value={inner2} />}
+      {inner2 && <Lbl x={apex.x + 4} y={apex.y + 38} value={inner2} />}
       <text
         x={right.x + 32}
         y={right.y - 10}

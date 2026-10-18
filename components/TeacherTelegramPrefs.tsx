@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useEffect, useRef, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
 import { saveTeacherTelegramPrefsAction, TgPrefsState } from "@/app/actions-telegram";
 
 const ITEMS = [
@@ -32,7 +32,8 @@ export default function TeacherTelegramPrefs({
   lessons: boolean;
   digest: boolean;
 }) {
-  const [state, action] = useFormState<TgPrefsState, FormData>(saveTeacherTelegramPrefsAction, null);
+  const [state, action, actionPending] = useActionState<TgPrefsState, FormData>(saveTeacherTelegramPrefsAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const form = useRef<HTMLFormElement>(null);
   const [saved, setSaved] = useState(false);
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function TeacherTelegramPrefs({
   const values = { homework, lessons, digest };
 
   return (
-    <form ref={form} action={action} className="space-y-3 rounded-2xl bg-pine-light/50 p-4">
+    <form ref={form} action={action} onSubmit={keepAction} className="space-y-3 rounded-2xl bg-pine-light/50 p-4">
       <p className="flex items-center justify-between text-xs font-black uppercase tracking-wide text-ink-soft">
         Что присылать
         {saved && <span className="normal-case tracking-normal text-pine-dark">✓ Сохранено</span>}

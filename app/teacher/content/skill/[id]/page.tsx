@@ -5,13 +5,14 @@ import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
 import { updateSkillAction, deleteProblemAction } from "@/app/actions-content";
 
-export default async function SkillEditPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { error?: string; deleteError?: string };
-}) {
+export default async function SkillEditPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ error?: string; deleteError?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const teacher = await requireContentEditor();
   const skill = await getSkill(params.id);
   if (!skill) notFound();

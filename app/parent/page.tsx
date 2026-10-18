@@ -11,7 +11,8 @@ import { redirect } from "next/navigation";
 import ParentShell from "@/components/ParentShell";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
 
-export default async function ParentDashboard({ searchParams }: { searchParams: { telegram?: string } }) {
+export default async function ParentDashboard(props: { searchParams: Promise<{ telegram?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   const children = await getChildrenOfParent(user.id);
   // Один ребёнок (почти всегда) — сразу открываем его неделю, без лишнего экрана.

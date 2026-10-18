@@ -107,7 +107,7 @@ export default function HeroProblem({ moreCount = 0 }: { moreCount?: number }) {
           {!right && (
             <button
               type="submit"
-              className="h-12 shrink-0 rounded-2xl bg-pine px-5 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark active:translate-y-px active:shadow-none"
+              className="h-12 shrink-0 rounded-2xl bg-pine-strong px-5 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark active:translate-y-px active:shadow-none"
             >
               Проверить
             </button>

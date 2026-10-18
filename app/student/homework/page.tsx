@@ -84,11 +84,11 @@ export default async function HomeworkListPage() {
                     <IconClipboard className="h-5 w-5" />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="mb-0.5 text-[10px] font-extrabold uppercase tracking-wide text-ink-soft">
+                    <p className="mb-0.5 text-[11px] font-extrabold uppercase tracking-wide text-ink-soft">
                       {meta.label}
                       {hw.audience === "pro_standalone" && " · авторский"}
                     </p>
-                    <p className="truncate font-display text-base font-black text-ink">{hw.title}</p>
+                    <p className="line-clamp-2 break-words font-display text-base font-black text-ink">{hw.title}</p>
                     <p
                       className={`mt-0.5 text-xs font-bold ${
                         st.overdue ? "text-coral" : st.complete ? "text-pine" : "text-ink-soft"

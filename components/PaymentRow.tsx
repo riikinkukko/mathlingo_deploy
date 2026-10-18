@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { StudentPayment } from "@/lib/types";
 import { formatRub, formatDateRu } from "@/lib/money";
 import { pluralRu } from "@/lib/pluralize";
@@ -30,7 +31,8 @@ export default function PaymentRow({
   from: "student" | "payments";
 }) {
   const [editing, setEditing] = useState(false);
-  const [state, action] = useFormState<AddPaymentState, FormData>(updateStudentPaymentAction, null);
+  const [state, action, actionPending] = useActionState<AddPaymentState, FormData>(updateStudentPaymentAction, null);
+  const keepAction = useKeepFormValues(actionPending);
 
   // Успешно сохранили — закрываем форму; строка уже с новыми данными (revalidatePath).
   useEffect(() => {
@@ -39,7 +41,7 @@ export default function PaymentRow({
 
   if (editing) {
     return (
-      <form action={action} className="card space-y-3 border-2 !border-pine/40 p-3.5">
+      <form action={action} onSubmit={keepAction} className="card space-y-3 border-2 !border-pine/40 p-3.5">
         <input type="hidden" name="paymentId" value={p.id} />
         {showStudent && p.studentName && (
           <p className="font-display text-sm font-black text-ink">{p.studentName}</p>

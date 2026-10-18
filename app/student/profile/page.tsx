@@ -1,3 +1,5 @@
+import TeacherInviteBanner from "@/components/TeacherInviteBanner";
+import { getPendingInvitesForStudent } from "@/lib/teacher-invites";
 import { getStudentChecks } from "@/lib/paid-review";
 import { getSessionUser } from "@/lib/auth";
 import {
@@ -29,11 +31,12 @@ import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
 
-export default async function ProfilePage({
-  searchParams,
-}: {
-  searchParams: { telegram?: string; error?: string };
-}) {
+export default async function ProfilePage(
+  props: {
+    searchParams: Promise<{ telegram?: string; error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   const hasChecks = (await getStudentChecks(user.id)).length > 0;
   const xp = await computeXp(user.id);
@@ -71,6 +74,7 @@ export default async function ProfilePage({
 
   const standalone = isStandaloneStudent(user);
   const pro = standalone && isEffectivelyPro(user);
+  const invites = standalone ? await getPendingInvitesForStudent(user.id) : [];
   // «С нами с сентября 2026» — месяц нужен в родительном падеже; его даёт
   // формат с днём («1 сентября»), день потом отрезаем.
   const created = new Date(user.createdAt);
@@ -83,10 +87,10 @@ export default async function ProfilePage({
       <div className="px-4 py-6 lg:px-8">
       <div className="mx-auto max-w-2xl">
         <div className="mb-6 flex items-start justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <Mascot mood="happy" size={84} float={false} />
-            <div>
-              <h1 className="font-display text-2xl font-black text-ink">{user.name}</h1>
+          <div className="flex min-w-0 items-center gap-4">
+            <Mascot mood="happy" size={84} float={false} className="shrink-0" />
+            <div className="min-w-0">
+              <h1 className="break-words font-display text-2xl font-black text-ink">{user.name}</h1>
               <p className="text-xs text-ink-soft">С нами с {memberSince}</p>
               {pro && (
                 <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-gradient-to-r from-amber to-coral px-2.5 py-1 text-[11px] font-extrabold text-white">
@@ -95,23 +99,20 @@ export default async function ProfilePage({
               )}
             </div>
           </div>
-          <form action={logoutAction}>
-            <button
-              type="submit"
-              className="shrink-0 rounded-full border-2 border-line px-3 py-1.5 text-xs font-extrabold uppercase text-ink-soft transition hover:border-coral hover:text-coral"
-            >
-              Выйти
-            </button>
-          </form>
+        </div>
+
+        <div className="mb-6 empty:hidden">
+          <TeacherInviteBanner invites={invites.map((i) => ({ id: i.id, teacherName: i.teacherName }))} />
         </div>
 
         {!user.emailVerifiedAt && (
           <div className="mb-4">
             <VerifyEmailReminder
               compact
+              informal
               reason={
                 isEnergyRechargeBlocked(user)
-                  ? "Подтвердите email — без этого энергия не восстанавливается"
+                  ? "Подтверди email — без этого энергия не восстанавливается"
                   : undefined
               }
             />
@@ -227,7 +228,7 @@ export default async function ProfilePage({
                 >
                   {p.def.icon}
                 </div>
-                <p className="mt-1.5 line-clamp-2 text-[10px] font-bold leading-tight text-ink">
+                <p className="mt-1.5 line-clamp-2 break-words text-[11px] font-bold leading-tight text-ink [hyphens:auto]">
                   {p.def.title}
                 </p>
               </div>
@@ -282,6 +283,16 @@ export default async function ProfilePage({
           )}
           {standalone && <EmailRemindersToggle enabled={user.emailReminders !== false} />}
         </div>
+        {/* «Выйти» раньше стоял в шапке рядом с именем: 32 px, легко задеть,
+            и на 320 px вылезал за экран. Теперь — внизу, в настройках аккаунта. */}
+        <form action={logoutAction} className="mt-6">
+          <button
+            type="submit"
+            className="btn-secondary min-h-[44px] w-full !text-xs hover:!border-coral hover:!text-coral"
+          >
+            Выйти из аккаунта
+          </button>
+        </form>
         <DeleteAccountSection requestedAt={user.deletionRequestedAt} />
       </div>
       </div>
@@ -293,7 +304,7 @@ function StatChip({ label, value }: { label: string; value: string }) {
   return (
     <div className="card px-3 py-3 text-center">
       <p className="font-mono text-lg font-semibold leading-none text-ink">{value}</p>
-      <p className="mt-1 text-[10px] text-ink-soft">{label}</p>
+      <p className="mt-1 text-[11px] text-ink-soft">{label}</p>
     </div>
   );
 }

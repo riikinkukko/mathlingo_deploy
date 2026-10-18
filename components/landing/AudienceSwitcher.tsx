@@ -112,7 +112,7 @@ export default function AudienceSwitcher({
           <a
             href="/register/teacher"
             onClick={() => ymGoal("landing_cta_tutor")}
-            className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
+            className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine-strong px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
           >
             Попробовать 14 дней бесплатно
           </a>
@@ -163,7 +163,7 @@ export default function AudienceSwitcher({
         <a
           href="/register"
           onClick={() => ymGoal("landing_cta_student")}
-          className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
+          className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine-strong px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
         >
           Начать бесплатно
         </a>
@@ -202,7 +202,7 @@ export default function AudienceSwitcher({
   return (
     <div>
       <div className="flex justify-center">
-        <div role="tablist" aria-label="Для кого" className="relative inline-flex rounded-2xl border border-line bg-white p-1">
+        <div role="tablist" aria-label="Для кого" className="relative flex w-full max-w-full rounded-2xl border border-line bg-white p-1 min-[400px]:inline-flex min-[400px]:w-auto">
           {thumb && (
             <span
               aria-hidden
@@ -225,7 +225,7 @@ export default function AudienceSwitcher({
                 setAud(t.key);
                 history.replaceState(null, "", `#${AUDIENCE_HASH[t.key]}`);
               }}
-              className={`relative z-[1] h-11 rounded-xl px-3.5 text-[15px] font-black transition-colors duration-300 sm:px-6 ${
+              className={`relative z-[1] h-11 min-w-0 flex-1 whitespace-nowrap rounded-xl px-1.5 text-[13.5px] font-black transition-colors duration-300 min-[400px]:flex-none min-[400px]:px-3.5 min-[400px]:text-[15px] sm:px-6 ${
                 aud === t.key ? `text-white ${thumb ? "" : "bg-pine-darker"}` : "text-ink-soft hover:text-ink"
               }`}
             >
@@ -301,7 +301,7 @@ function ShareTutorButton() {
     <button
       type="button"
       onClick={share}
-      className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
+      className="lp-btn inline-flex h-12 items-center justify-center rounded-2xl bg-pine-strong px-6 text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark"
     >
       {copied ? "Ссылка скопирована" : "Отправить ссылку репетитору"}
     </button>

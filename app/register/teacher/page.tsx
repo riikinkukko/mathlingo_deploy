@@ -7,7 +7,8 @@ export const metadata = { title: "Регистрация репетитора �
 
 export const dynamic = "force-dynamic";
 
-export default async function RegisterTeacherPage({ searchParams }: { searchParams: { ref?: string; promo?: string } }) {
+export default async function RegisterTeacherPage(props: { searchParams: Promise<{ ref?: string; promo?: string }> }) {
+  const searchParams = await props.searchParams;
   const inviter = await findTeacherByReferral(searchParams.ref);
   const promo = normalizePromoCode(searchParams.promo) ?? undefined;
   return (

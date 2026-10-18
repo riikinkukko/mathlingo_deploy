@@ -16,19 +16,16 @@ export default async function AdminPaymentsPage() {
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--app-sat))]">
-        <div className="mx-auto max-w-3xl">
-          <a href="/admin" className="text-xs font-bold text-ink-soft hover:underline">
-            ← Все пользователи
-          </a>
-          <h1 className="mt-1 font-display text-xl font-black text-ink">Все платежи</h1>
+      <header className="pt-5">
+        <div className="mx-auto px-4 max-w-4xl">
+          <h1 className="font-display text-xl font-black text-ink">Все платежи</h1>
           <p className="text-xs text-ink-soft">
             Оплачено успешно: {succeededTotal.toLocaleString("ru-RU")} ₽
           </p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 pt-6">
+      <main className="mx-auto max-w-4xl px-4 pt-6">
         {payments.length === 0 ? (
           <p className="text-sm text-ink-soft">Платежей через ЮKassa пока не было.</p>
         ) : (

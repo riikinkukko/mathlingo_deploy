@@ -83,11 +83,14 @@ export default function ImageMarkup({
   initialItems,
   onDone,
   onCancel,
+  aside,
 }: {
   src: string;
   initialItems?: Item[];
   onDone: (dataUrl: string, items: Item[]) => void;
   onCancel: () => void;
+  /** условие и эталон — боковая колонка на широком экране */
+  aside?: React.ReactNode;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const areaRef = useRef<HTMLDivElement>(null);
@@ -137,6 +140,114 @@ export default function ImageMarkup({
   useEffect(() => {
     if (ready) redraw();
   }, [ready, redraw]);
+
+  // ── Компьютер: масштаб, прокрутка, клавиши ─────────────────────────────
+  // Положение холста без трансформации (он отцентрован во flex-контейнере с p-3).
+  const PAD = 12;
+  const clampView = useCallback((v: { x: number; y: number; z: number }) => {
+    const area = areaRef.current;
+    const c = canvasRef.current;
+    if (!area || !c || !c.offsetWidth) return v;
+    const z = Math.min(5, Math.max(1, v.z));
+    if (z === 1) return { x: 0, y: 0, z: 1 };
+    const w = area.clientWidth, h = area.clientHeight;
+    const cw = c.offsetWidth * z, ch = c.offsetHeight * z;
+    const left0 = ((w - c.offsetWidth) / 2) * z;
+    const top0 = ((h - c.offsetHeight) / 2) * z;
+    const axis = (pos: number, size: number, box: number, base: number) =>
+      size <= box - PAD * 2
+        ? (box - size) / 2 - base
+        : Math.min(PAD - base, Math.max(box - PAD - size - base, pos));
+    return { x: axis(v.x, cw, w, left0), y: axis(v.y, ch, h, top0), z };
+  }, []);
+
+  /** Масштаб «по ширине»: фото во всю доступную ширину, сверху — начало решения. */
+  const fitWidth = useCallback(() => {
+    const area = areaRef.current;
+    const c = canvasRef.current;
+    if (!area || !c || !c.offsetWidth) return;
+    const z = Math.min(5, Math.max(1, Math.min(area.clientWidth - PAD * 2, 1100) / c.offsetWidth));
+    if (z < 1.08) return; // и так почти во всю ширину
+    const left0 = ((area.clientWidth - c.offsetWidth) / 2) * z;
+    const top0 = ((area.clientHeight - c.offsetHeight) / 2) * z;
+    setView(clampView({ x: PAD - left0, y: PAD - top0, z }));
+  }, [clampView]);
+
+  // На широком экране вертикальное фото по умолчанию — по ширине: иначе
+  // почерк ученика мелкий, а по бокам пустота.
+  useEffect(() => {
+    if (!ready) return;
+    if (!window.matchMedia("(min-width: 1024px) and (pointer: fine)").matches) return;
+    const id = requestAnimationFrame(fitWidth);
+    return () => cancelAnimationFrame(id);
+  }, [ready, fitWidth]);
+
+  // Колесо: прокрутка увеличенного фото, Ctrl/⌘ + колесо — масштаб под курсором.
+  useEffect(() => {
+    const area = areaRef.current;
+    if (!area) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const r = area.getBoundingClientRect();
+      setView((v) => {
+        if (e.ctrlKey || e.metaKey) {
+          const z = Math.min(5, Math.max(1, v.z * Math.exp(-e.deltaY * 0.0025)));
+          const cx = e.clientX - r.left, cy = e.clientY - r.top;
+          return clampView({ x: cx - ((cx - v.x) * z) / v.z, y: cy - ((cy - v.y) * z) / v.z, z });
+        }
+        if (v.z === 1) return v;
+        return clampView({ x: v.x - e.deltaX, y: v.y - e.deltaY, z: v.z });
+      });
+    };
+    area.addEventListener("wheel", onWheel, { passive: false });
+    return () => area.removeEventListener("wheel", onWheel);
+  }, [clampView]);
+
+  // Клавиши: Ctrl/⌘+Z — отменить пометку, Esc — закрыть (или закрыть поле текста).
+  // Физическую клавишу смотрим по e.code: в русской раскладке Z — это «я».
+  const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyRef.current = (e: KeyboardEvent) => {
+    const el = e.target as HTMLElement | null;
+    const typing = el?.tagName === "INPUT" || el?.tagName === "TEXTAREA";
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (textAt) {
+        setTextAt(null);
+        return;
+      }
+      const changed = items.length !== (initialItems?.length ?? 0) || items.some((it, i) => it !== initialItems?.[i]);
+      if (!changed || window.confirm("Закрыть без сохранения пометок?")) onCancel();
+      return;
+    }
+    if (typing) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && e.code === "KeyZ" && !e.shiftKey) {
+      e.preventDefault();
+      setItems((prev) => prev.slice(0, -1));
+      return;
+    }
+    if (mod && (e.code === "Equal" || e.code === "NumpadAdd" || e.code === "Minus" || e.code === "NumpadSubtract")) {
+      e.preventDefault();
+      const area = areaRef.current;
+      if (!area) return;
+      const cx = area.clientWidth / 2, cy = area.clientHeight / 2;
+      const f = e.code === "Equal" || e.code === "NumpadAdd" ? 1.25 : 0.8;
+      setView((v) => {
+        const z = Math.min(5, Math.max(1, v.z * f));
+        return clampView({ x: cx - ((cx - v.x) * z) / v.z, y: cy - ((cy - v.y) * z) / v.z, z });
+      });
+      return;
+    }
+    if (mod && (e.code === "Digit0" || e.code === "Numpad0")) {
+      e.preventDefault();
+      setView({ x: 0, y: 0, z: 1 });
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyRef.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Блокируем прокрутку страницы под полноэкранным редактором.
   useEffect(() => {
@@ -288,16 +399,31 @@ export default function ImageMarkup({
           type="button"
           onClick={onCancel}
           aria-label="Закрыть без сохранения"
+          title="Закрыть без сохранения (Esc)"
           className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
         </button>
-        <p className="flex-1 font-display text-[16px] font-black text-ink">Разметка</p>
+        <p className="flex-1 font-display text-[16px] font-black text-ink">
+          Разметка
+          <span className="ml-3 hidden text-[12px] font-bold text-ink-soft lg:inline">
+            Ctrl+Z — отменить · Esc — закрыть · Ctrl+колесо — масштаб · колесо — прокрутка
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={() => (view.z > 1 ? setView({ x: 0, y: 0, z: 1 }) : fitWidth())}
+          disabled={!ready}
+          className="hidden h-11 rounded-xl px-3 text-[13px] font-extrabold text-ink-soft hover:bg-paper disabled:opacity-40 lg:block"
+        >
+          {view.z > 1 ? "Целиком" : "По ширине"}
+        </button>
         <button
           type="button"
           onClick={() => setItems((prev) => prev.slice(0, -1))}
           disabled={items.length === 0}
           aria-label="Отменить последнюю пометку"
+          title="Отменить (Ctrl+Z)"
           className="flex h-11 w-11 items-center justify-center rounded-xl text-ink-soft disabled:opacity-30"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>
@@ -306,15 +432,16 @@ export default function ImageMarkup({
           type="button"
           onClick={finish}
           disabled={!ready || saving}
-          className="h-11 rounded-xl bg-pine px-4 text-[15px] font-black text-white disabled:opacity-50"
+          className="h-11 rounded-xl bg-pine-strong px-4 text-[15px] font-black text-white disabled:opacity-50"
         >
           {saving ? "…" : "Готово"}
         </button>
       </header>
 
+      <div className="flex min-h-0 flex-1">
       <div
         ref={areaRef}
-        className="relative flex-1 touch-none overflow-hidden"
+        className="relative min-w-0 flex-1 touch-none overflow-hidden"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -347,9 +474,15 @@ export default function ImageMarkup({
         )}
         {ready && items.length === 0 && view.z === 1 && (
           <p className="pointer-events-none absolute inset-x-0 bottom-3 text-center text-[12px] font-bold text-white/80">
-            Обведите ошибку или поставьте значок · двумя пальцами — увеличить
+            Обведите ошибку или поставьте значок<span className="lg:hidden"> · двумя пальцами — увеличить</span>
           </p>
         )}
+      </div>
+      {aside && (
+        <aside className="hidden w-[360px] shrink-0 overflow-y-auto border-l border-line-soft bg-white p-4 text-sm lg:block xl:w-[400px]">
+          {aside}
+        </aside>
+      )}
       </div>
 
       {textAt && (
@@ -364,7 +497,7 @@ export default function ImageMarkup({
             aria-label="Текст пометки"
             className="input flex-1"
           />
-          <button type="button" onClick={placeText} className="h-12 rounded-xl bg-pine px-4 font-black text-white">
+          <button type="button" onClick={placeText} className="h-12 rounded-xl bg-pine-strong px-4 font-black text-white">
             OK
           </button>
           <button type="button" onClick={() => setTextAt(null)} className="h-12 rounded-xl px-3 font-bold text-ink-soft">

@@ -21,8 +21,8 @@ export default async function PaidChecksPage() {
   const queue = await getPaidReviewQueue();
 
   return (
-    <TeacherShell active="students" title="Платные проверки">
-      <main className="mx-auto max-w-3xl px-4 py-6">
+    <TeacherShell active="checks" title="Платные проверки">
+      <main className="mx-auto max-w-3xl px-4 py-6 lg:max-w-4xl">
         <h1 className="font-display text-2xl font-black text-ink">Платные проверки</h1>
         <p className="mt-1 text-sm text-ink-soft">
           Ученики без репетитора оплатили проверку развёрнутого решения. Обещанный срок — {PAID_REVIEW_DAYS} дня с момента оплаты.

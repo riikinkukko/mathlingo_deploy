@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useRef, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import {
   setPaymentRemindersAction,
   sendPaymentReminderNowAction,
@@ -46,15 +47,16 @@ export function PaymentReminderControls({
   recipientsLabel: string;
   hasInstructions: boolean;
 }) {
-  const [toggleState, toggleAction] = useFormState<ReminderState, FormData>(setPaymentRemindersAction, null);
-  const [sendState, sendAction] = useFormState<ReminderState, FormData>(sendPaymentReminderNowAction, null);
+  const [toggleState, toggleAction, toggleActionPending] = useActionState<ReminderState, FormData>(setPaymentRemindersAction, null);
+  const keepToggleAction = useKeepFormValues(toggleActionPending);
+  const [sendState, sendAction] = useActionState<ReminderState, FormData>(sendPaymentReminderNowAction, null);
   const toggled = useFlash(toggleState);
   const sent = useFlash(sendState);
   const toggleForm = useRef<HTMLFormElement>(null);
 
   return (
     <div className="card mb-4 space-y-3 p-4">
-      <form ref={toggleForm} action={toggleAction}>
+      <form ref={toggleForm} action={toggleAction} onSubmit={keepToggleAction}>
         <input type="hidden" name="studentId" value={studentId} />
         <label className="flex cursor-pointer items-start gap-3">
           <input
@@ -115,10 +117,11 @@ function SaveButton() {
 
 /** «Как оплатить» на странице «Оплаты»: реквизиты, которые видят родители. */
 export function PaymentInstructionsForm({ value }: { value?: string }) {
-  const [state, action] = useFormState<ReminderState, FormData>(savePaymentInstructionsAction, null);
+  const [state, action, actionPending] = useActionState<ReminderState, FormData>(savePaymentInstructionsAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useFlash(state);
   return (
-    <form id="how-to-pay" action={action} className="card mb-6 scroll-mt-20 space-y-3 p-4">
+    <form id="how-to-pay" action={action} onSubmit={keepAction} className="card mb-6 scroll-mt-20 space-y-3 p-4">
       <div>
         <label className="label" htmlFor="paymentInstructions">Как оплатить (видят родители)</label>
         <input
@@ -156,10 +159,11 @@ export function LessonPriceForm({
   /** ученик в какой-нибудь группе — показываем поле цены группового занятия */
   inGroup: boolean;
 }) {
-  const [state, action] = useFormState<ReminderState, FormData>(saveLessonPriceAction, null);
+  const [state, action, actionPending] = useActionState<ReminderState, FormData>(saveLessonPriceAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useFlash(state);
   return (
-    <form action={action} className="card mb-4 space-y-3 p-4">
+    <form action={action} onSubmit={keepAction} className="card mb-4 space-y-3 p-4">
       <input type="hidden" name="studentId" value={studentId} />
       <div className={`grid gap-3 ${inGroup ? "grid-cols-2" : ""}`}>
         <div>
@@ -208,11 +212,12 @@ export function LessonPriceForm({
 
 /** Правило для пропусков: оплачивается ли «не пришёл» (без предупреждения). */
 export function ChargeMissedForm({ value }: { value: boolean }) {
-  const [state, action] = useFormState<ReminderState, FormData>(saveChargeMissedAction, null);
+  const [state, action, actionPending] = useActionState<ReminderState, FormData>(saveChargeMissedAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const saved = useFlash(state);
   const formRef = useRef<HTMLFormElement>(null);
   return (
-    <form ref={formRef} action={action} className="card mb-6 p-4">
+    <form ref={formRef} action={action} onSubmit={keepAction} className="card mb-6 p-4">
       <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"

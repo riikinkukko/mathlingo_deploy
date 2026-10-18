@@ -11,11 +11,16 @@ export default function TheoryCards({
   onComplete,
   completeLabel,
   onClose,
+  stickyNav = false,
 }: {
   cards: TheoryCard[];
   onComplete: () => void;
   completeLabel: string;
   onClose?: () => void;
+  /** Полноэкранная теория в уроке: на телефоне «Назад / Дальше» — в той же
+   * закреплённой нижней панели, что «Проверить» и «Дальше» у задач.
+   * Раньше кнопка прыгала вверх-вниз вслед за высотой карточки. */
+  stickyNav?: boolean;
 }) {
   const [i, setI] = useState(0);
   const card = cards[i];
@@ -71,18 +76,26 @@ export default function TheoryCards({
         ))}
       </div>
 
-      <div className="mt-4 flex gap-2">
-        {i > 0 && (
-          <button onClick={() => setI(i - 1)} className="btn-secondary flex-1">
-            Назад
+      <div
+        className={
+          stickyNav
+            ? "fixed inset-x-0 bottom-0 z-30 border-t border-line-soft bg-white px-4 pb-[max(16px,var(--app-sab))] pt-3 lg:static lg:mt-4 lg:border-0 lg:bg-transparent lg:p-0"
+            : "mt-4"
+        }
+      >
+        <div className={`flex gap-2 ${stickyNav ? "mx-auto max-w-2xl" : ""}`}>
+          {i > 0 && (
+            <button onClick={() => setI(i - 1)} className={`btn-secondary flex-1 ${stickyNav ? "!h-14 lg:!h-auto" : ""}`}>
+              Назад
+            </button>
+          )}
+          <button
+            onClick={() => (isLast ? onComplete() : setI(i + 1))}
+            className={`btn-primary flex-[2] ${stickyNav ? "!h-14 !text-base lg:!h-auto lg:!text-sm" : ""}`}
+          >
+            {isLast ? completeLabel : "Дальше →"}
           </button>
-        )}
-        <button
-          onClick={() => (isLast ? onComplete() : setI(i + 1))}
-          className="btn-primary flex-[2]"
-        >
-          {isLast ? completeLabel : "Далее →"}
-        </button>
+        </div>
       </div>
     </div>
   );

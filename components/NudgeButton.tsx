@@ -1,6 +1,8 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { nudgeStudentAction, NudgeState } from "@/app/actions-nudge";
 
 function Submit() {
@@ -18,7 +20,8 @@ function Submit() {
 
 /** Кнопка «Напомнить» для ученика, который давно не занимался. */
 export default function NudgeButton({ studentId, already }: { studentId: string; already?: boolean }) {
-  const [state, action] = useFormState<NudgeState, FormData>(nudgeStudentAction, null);
+  const [state, action, actionPending] = useActionState<NudgeState, FormData>(nudgeStudentAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   if (already || (state && "ok" in state)) {
     return (
       <span className="shrink-0 rounded-pill bg-pine-light px-3 py-1.5 text-[12px] font-extrabold text-pine-dark">
@@ -27,7 +30,7 @@ export default function NudgeButton({ studentId, already }: { studentId: string;
     );
   }
   return (
-    <form action={action} className="flex shrink-0 items-center gap-2">
+    <form action={action} onSubmit={keepAction} className="flex shrink-0 items-center gap-2">
       <input type="hidden" name="studentId" value={studentId} />
       {state && "error" in state && <span className="text-[11px] font-bold text-coral-text">{state.error}</span>}
       <Submit />

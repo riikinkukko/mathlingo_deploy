@@ -102,3 +102,28 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
       ${BRAND_FOOTER}`,
   });
 }
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** Репетитор пригласил самостоятельного ученика заниматься вместе. */
+export async function sendTeacherInviteEmail(email: string, teacherName: string): Promise<void> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const link = `${appUrl}/student`;
+  const name = escapeHtmlText(teacherName);
+  await sendEmail({
+    to: email,
+    subject: `Репетитор ${teacherName} приглашает заниматься вместе — Планиметрика`,
+    html: `${BRAND_HEADER}
+      <p style="font-size:15px;color:#132A20">Репетитор <b>${name}</b> приглашает тебя заниматься вместе в Планиметрике.</p>
+      <p style="font-size:15px;color:#132A20">Если примешь приглашение, репетитор будет видеть твой прогресс, сможет задавать домашку и проверять решения. Всё, что ты уже решил, сохранится.</p>
+      <p style="margin:24px 0">
+        <a href="${link}" style="background:#12804F;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;font-weight:800">
+          Открыть приглашение
+        </a>
+      </p>
+      <p style="font-size:13px;color:#8A8F8C">Принять или отклонить приглашение можно на главной странице после входа.</p>
+      ${BRAND_FOOTER}`,
+  });
+}

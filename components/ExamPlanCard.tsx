@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { saveDreamAction, DreamState } from "@/app/actions-student-goals";
 import { pluralRu } from "@/lib/pluralize";
 
@@ -40,7 +41,8 @@ export default function ExamPlanCard({
   estimateNote: string;
 }) {
   const [editing, setEditing] = useState(!dream);
-  const [state, action] = useFormState<DreamState, FormData>(saveDreamAction, null);
+  const [state, action, actionPending] = useActionState<DreamState, FormData>(saveDreamAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   useEffect(() => {
     if (state?.ok) setEditing(false);
   }, [state]);
@@ -88,7 +90,7 @@ export default function ExamPlanCard({
       <p className="mt-1 text-[11px] text-pine-mint">{estimateNote}</p>
 
       {editing && (
-        <form action={action} className="mt-4 space-y-3 rounded-2xl bg-white p-3 text-ink">
+        <form action={action} onSubmit={keepAction} className="mt-4 space-y-3 rounded-2xl bg-white p-3 text-ink">
           <div>
             <label htmlFor="dreamUniversity" className="label">Вуз и направление мечты</label>
             <input

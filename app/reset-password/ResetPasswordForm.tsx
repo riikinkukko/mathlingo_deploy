@@ -1,6 +1,8 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { resetPasswordAction } from "@/app/actions";
 
 function SubmitButton() {
@@ -13,10 +15,11 @@ function SubmitButton() {
 }
 
 export default function ResetPasswordForm({ token }: { token: string }) {
-  const [state, formAction] = useFormState<{ error?: string }, FormData>(resetPasswordAction, {});
+  const [state, formAction, formActionPending] = useActionState<{ error?: string }, FormData>(resetPasswordAction, {});
+  const keepFormAction = useKeepFormValues(formActionPending);
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} onSubmit={keepFormAction} className="space-y-4">
       <input type="hidden" name="token" value={token} />
       <div>
         <label className="label" htmlFor="password">Новый пароль</label>

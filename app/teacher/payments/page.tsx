@@ -36,7 +36,7 @@ export default async function PaymentsPage() {
 
   return (
     <TeacherShell active="payments" title="Оплаты">
-      <main className="mx-auto max-w-3xl px-4 py-6">
+      <main className="mx-auto max-w-3xl px-4 py-6 lg:max-w-[1200px]">
         <div className="mb-6">
           <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Оплаты</h1>
           <p className="mt-1 text-sm text-ink-soft">
@@ -47,13 +47,13 @@ export default async function PaymentsPage() {
 
         <div className="mb-6 grid grid-cols-3 gap-3">
           <div className="card px-3 py-3 text-center">
-            <p className="font-mono text-lg font-semibold leading-none text-pine-dark">
+            <p className="whitespace-nowrap font-mono text-base font-semibold leading-none sm:text-lg text-pine-dark">
               {formatRub(incomeThis)}
             </p>
             <p className="mt-1 text-[11px] text-ink-soft">получено за {monthNameRu(0)}</p>
           </div>
           <div className="card px-3 py-3 text-center">
-            <p className="font-mono text-lg font-semibold leading-none text-ink">
+            <p className="whitespace-nowrap font-mono text-base font-semibold leading-none sm:text-lg text-ink">
               {formatRub(incomePrev)}
             </p>
             <p className="mt-1 text-[11px] text-ink-soft">за {monthNameRu(-1)}</p>
@@ -62,7 +62,7 @@ export default async function PaymentsPage() {
             className={`card px-3 py-3 text-center ${debtors.length > 0 ? "border-2 !border-coral bg-coral-light/40" : ""}`}
           >
             <p
-              className={`font-mono text-lg font-semibold leading-none ${debtors.length > 0 ? "text-coral" : "text-ink"}`}
+              className={`whitespace-nowrap font-mono text-base font-semibold leading-none sm:text-lg ${debtors.length > 0 ? "text-coral" : "text-ink"}`}
             >
               {debtRub > 0 ? formatRub(debtRub) : debtLessons}
             </p>
@@ -86,41 +86,57 @@ export default async function PaymentsPage() {
             </div>
           </div>
         ) : (
-          <>
-            <PaymentInstructionsForm value={user.paymentInstructions} />
-            <ChargeMissedForm value={!!user.chargeMissed} />
-
-            <CollapsibleSection title="Записать оплату" defaultOpen={recent.length === 0}>
-              <AddPaymentForm students={balances.map((b) => ({ id: b.studentId, name: b.studentName, priceRub: b.priceRub }))} />
-            </CollapsibleSection>
-
-            <h2 className="mb-3 mt-6 font-display text-lg font-black text-ink">Балансы учеников</h2>
-            <div className="mb-8 space-y-2">
-              {sorted.map((b) => (
-                <a
-                  key={b.studentId}
-                  href={`/teacher/student/${b.studentId}`}
-                  className={`card flex flex-wrap items-center justify-between gap-3 p-3.5 transition hover:border-pine ${
-                    hasDebt(b) ? "border-l-4 !border-l-coral" : ""
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className="font-display text-sm font-black text-ink">{b.studentName}</p>
-                    <p className="text-[11px] text-ink-soft">
-                      {b.priceRub !== null
-                        ? `оплачено ${formatRub(b.paidRub)} · засчитано ${b.chargedLessons} · цена ${formatRub(b.priceRub)}`
-                        : `оплачено ${b.paidLessons} · засчитано ${b.chargedLessons} · цена не указана`}
-                      {b.lastPaidAt && ` · последняя оплата ${formatDateRu(b.lastPaidAt)}`}
-                    </p>
-                  </div>
-                  <span className={`text-sm font-bold ${balanceTone(b)}`}>{balanceText(b)}</span>
-                </a>
-              ))}
+          <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:gap-x-8">
+            {/* Телефон — прежний порядок (order-*); lg: балансы и история слева,
+                форма оплаты и настройки справа. */}
+            <div className="contents lg:block">
+              <div className="order-2 lg:order-none">
+                <h2 className="mb-3 font-display text-lg font-black text-ink">Балансы учеников</h2>
+                <div className="mb-8 space-y-2 xl:grid xl:grid-cols-2 xl:gap-2 xl:space-y-0">
+                  {sorted.map((b) => (
+                    <a
+                      key={b.studentId}
+                      href={`/teacher/student/${b.studentId}${b.priceRub === null ? "?tab=payments" : ""}`}
+                      className={`card flex flex-wrap items-center justify-between gap-3 p-3.5 transition hover:border-pine ${
+                        hasDebt(b) ? "border-l-4 !border-l-coral" : ""
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-display text-sm font-black text-ink">{b.studentName}</p>
+                        <p className="text-[11px] text-ink-soft">
+                          {b.priceRub !== null
+                            ? `оплачено ${formatRub(b.paidRub)} · засчитано ${b.chargedLessons} · цена ${formatRub(b.priceRub)}`
+                            : `оплачено ${b.paidLessons} · засчитано ${b.chargedLessons} · цена не указана — задать в карточке ученика`}
+                          {b.lastPaidAt && ` · последняя оплата ${formatDateRu(b.lastPaidAt)}`}
+                        </p>
+                      </div>
+                      <span className={`text-sm font-bold ${balanceTone(b)}`}>{balanceText(b)}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+              <div className="order-3 lg:order-none">
+                <h2 className="mb-3 font-display text-lg font-black text-ink">Последние оплаты</h2>
+                <PaymentHistory payments={recent} showStudent from="payments" />
+              </div>
             </div>
-
-            <h2 className="mb-3 font-display text-lg font-black text-ink">Последние оплаты</h2>
-            <PaymentHistory payments={recent} showStudent from="payments" />
-          </>
+            <div className="contents lg:block">
+              <div className="order-1 lg:order-none">
+                <CollapsibleSection title="Записать оплату" defaultOpen={recent.length === 0}>
+                  <AddPaymentForm students={balances.map((b) => ({ id: b.studentId, name: b.studentName, priceRub: b.priceRub }))} />
+                </CollapsibleSection>
+              </div>
+              <div className="order-4 lg:order-none">
+                {/* Настройки задаются один раз — внизу, а не над балансами. */}
+                <section className="mt-10 border-t border-line-soft pt-6 lg:mt-2">
+                  <h2 className="mb-1 font-display text-lg font-black text-ink">Настройки оплат</h2>
+                  <p className="mb-4 text-[13px] text-ink-soft">Задаются один раз и действуют для всех учеников.</p>
+                  <PaymentInstructionsForm value={user.paymentInstructions} />
+                  <ChargeMissedForm value={!!user.chargeMissed} />
+                </section>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </TeacherShell>

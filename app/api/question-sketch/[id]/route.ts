@@ -7,7 +7,8 @@ import { getSessionUser } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 /** Снимок черновика к вопросу «Не понял»: видят только автор вопроса и его репетитор. */
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = await getSessionUser();
   if (!user) return new NextResponse("Требуется вход", { status: 401 });
   const [q] = await db

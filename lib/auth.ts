@@ -36,7 +36,7 @@ export async function verifySessionToken(
 }
 
 export async function setSessionCookie(token: string) {
-  cookies().set(COOKIE_NAME, token, {
+  (await cookies()).set(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
@@ -45,12 +45,12 @@ export async function setSessionCookie(token: string) {
   });
 }
 
-export function clearSessionCookie() {
-  cookies().set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
+export async function clearSessionCookie() {
+  (await cookies()).set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
 }
 
 export async function getSessionUser(): Promise<User | null> {
-  const token = cookies().get(COOKIE_NAME)?.value;
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);
   if (!session) return null;

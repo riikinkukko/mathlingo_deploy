@@ -22,6 +22,8 @@ export interface DayPanelStudent {
 export interface DayPanelData {
   /** всего работ на проверке у репетитора */
   reviewsCount: number;
+  /** у кого работы ждут проверки (по убыванию числа работ) */
+  reviewStudents?: { id: string; name: string; count: number }[];
   /** ученики с просроченным ДЗ */
   overdue: { id: string; name: string; count: number }[];
   /** ученики, которые давно не заходили */
@@ -34,12 +36,16 @@ export interface DayPanelData {
   openQuestions?: number;
 }
 
+// Нейтрально по роду: «Полина … не заходил» резало глаз.
 function daysLabel(days: number | null): string {
-  if (days === null) return "ни разу не заходил";
-  if (days === 0) return "заходил сегодня";
-  if (days === 1) return "был вчера";
-  return `не заходил ${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
+  if (days === null) return "ещё ни разу не заходил(а)";
+  if (days === 0) return "заходил(а) сегодня";
+  if (days === 1) return "последний вход вчера";
+  return `не заходит ${days} ${pluralRu(days, ["день", "дня", "дней"])}`;
 }
+
+/** Сколько строк «Давно не занимались» показывать сразу. */
+const INACTIVE_VISIBLE = 3;
 
 type Row = { key: string; href: string; badge: string; tone: string; title: string; sub?: string };
 
@@ -64,15 +70,19 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
   const names = (xs: { name: string }[]) =>
     xs.slice(0, 2).map((x) => x.name.split(" ")[0]).join(", ") + (xs.length > 2 ? ` и ещё ${xs.length - 2}` : "");
 
-  if (reviewsCount > 0)
+  if (reviewsCount > 0) {
+    // Ведём в очередь «Проверка решений» — все работы всех учеников по порядку;
+    // в списке учеников у каждого с работами стоит бейдж «на проверке N».
+    const rs = data.reviewStudents ?? [];
     rows.push({
       key: "reviews",
-      href: "/teacher#students",
+      href: "/teacher/reviews",
       badge: String(reviewsCount),
       tone: "bg-violet-light text-violet-text",
       title: `Проверить ${pluralRu(reviewsCount, ["работу", "работы", "работ"])}`,
-      sub: "Ученики ждут оценки",
+      sub: rs.length > 0 ? `Ждут оценки: ${names(rs)}` : "Ученики ждут оценки",
     });
+  }
   if (unmarkedLessons > 0)
     rows.push({
       key: "unmarked",
@@ -143,7 +153,7 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
               Давно не занимались
             </p>
             <ul className="pb-1">
-              {inactive.slice(0, 5).map((st) => (
+              {inactive.slice(0, INACTIVE_VISIBLE).map((st) => (
                 <li key={st.id} className="flex min-h-[52px] items-center gap-3 px-4 py-1.5">
                   <a href={`/teacher/student/${st.id}`} className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-extrabold text-ink">{st.name}</span>
@@ -152,8 +162,26 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
                   <NudgeButton studentId={st.id} already={st.nudged} />
                 </li>
               ))}
-              {inactive.length > 5 && (
-                <li className="px-4 pb-2 text-[12px] text-ink-soft">и ещё {inactive.length - 5}</li>
+              {inactive.length > INACTIVE_VISIBLE && (
+                <li className="px-4 pb-2">
+                  <details className="group/more">
+                    <summary className="flex min-h-[40px] cursor-pointer list-none items-center text-[13px] font-bold text-pine-dark hover:underline">
+                      <span className="group-open/more:hidden">ещё {inactive.length - INACTIVE_VISIBLE}</span>
+                      <span className="hidden group-open/more:inline">свернуть</span>
+                    </summary>
+                    <ul>
+                      {inactive.slice(INACTIVE_VISIBLE).map((st) => (
+                        <li key={st.id} className="flex min-h-[52px] items-center gap-3 py-1.5">
+                          <a href={`/teacher/student/${st.id}`} className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-extrabold text-ink">{st.name}</span>
+                            <span className="block truncate text-[12px] text-ink-soft">{daysLabel(st.days)}</span>
+                          </a>
+                          <NudgeButton studentId={st.id} already={st.nudged} />
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
               )}
             </ul>
           </li>

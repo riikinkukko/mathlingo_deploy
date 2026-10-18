@@ -47,12 +47,9 @@ export default async function AdminMetricsPage() {
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--app-sat))]">
-        <div className="mx-auto max-w-4xl">
-          <a href="/admin" className="text-xs font-bold text-ink-soft hover:underline">
-            ← Пользователи
-          </a>
-          <h1 className="mt-1 font-display text-xl font-black text-ink">Метрики</h1>
+      <header className="pt-5">
+        <div className="mx-auto px-4 max-w-4xl">
+          <h1 className="font-display text-xl font-black text-ink">Метрики</h1>
           <p className="text-xs text-ink-soft">По московскому времени. Демо- и тестовые аккаунты не учитываются.</p>
         </div>
       </header>

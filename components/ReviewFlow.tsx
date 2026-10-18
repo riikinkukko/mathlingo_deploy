@@ -77,7 +77,7 @@ export default function ReviewFlow({
       </div>
 
       <p className="mb-4 text-[11px] font-bold text-ink-soft">
-        Из навыка «{current.skillTitle}» · встречалась вам {current.box > 1 ? "уже несколько раз" : "недавно"}
+        Из навыка «{current.skillTitle}» · встречалась тебе {current.box > 1 ? "уже несколько раз" : "недавно"}
       </p>
 
       <ProblemCard
@@ -103,7 +103,7 @@ export default function ReviewFlow({
           disabled={index === items.length - 1}
           className="btn-secondary flex-1 disabled:opacity-30"
         >
-          Далее →
+          {solved ? "Далее →" : "Пропустить →"}
         </button>
       </div>
 

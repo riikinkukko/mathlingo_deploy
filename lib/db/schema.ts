@@ -11,7 +11,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ---------------- Enum'ы (настоящая проверка на уровне БД — в JSON её не было) ----------------
 
@@ -43,6 +43,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "teacher_nudge",
   "weekly_report",
   "plan_reminder",
+  "teacher_invite",
 ]);
 
 // ---------------- Таблицы ----------------
@@ -412,12 +413,40 @@ export const attempts = pgTable("attempts", {
   source: attemptSourceEnum("source").notNull(),
   reviewStatus: reviewStatusEnum("review_status"),
   teacherFeedback: text("teacher_feedback"),
+  // Баллы за развёрнутое решение по критериям ФИПИ (0..макс. для номера ЕГЭ,
+  // см. lib/ege-points.ts). NULL — репетитор баллы не ставил (старые проверки).
+  reviewScore: integer("review_score"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // Почти все запросы к попыткам — «попытки ученика X» (серия, статистика,
   // статус домашки). Без индекса каждый такой запрос читал всю таблицу.
   byStudentTime: index("attempts_student_created_idx").on(t.studentId, t.createdAt),
   byStudentProblem: index("attempts_student_problem_idx").on(t.studentId, t.problemId),
+}));
+
+// ---------------- Приглашения ученику от репетитора ----------------
+// Ученик зарегистрировался сам, а потом пришёл к репетитору: репетитор не может
+// привязать чужой аккаунт молча — он отправляет приглашение, ученик принимает
+// (тогда users.teacher_id = teacher_id) или отклоняет. Прогресс остаётся.
+export const teacherInviteStatusEnum = pgEnum("teacher_invite_status", ["pending", "accepted", "declined"]);
+
+export const teacherInvites = pgTable("teacher_invites", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  studentId: text("student_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: teacherInviteStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byStudent: index("teacher_invites_student_idx").on(t.studentId, t.status),
+  byTeacher: index("teacher_invites_teacher_idx").on(t.teacherId, t.status),
+  // Не больше одного ожидающего приглашения от репетитора одному ученику.
+  onePending: uniqueIndex("teacher_invites_one_pending_idx")
+    .on(t.teacherId, t.studentId)
+    .where(sql`${t.status} = 'pending'`),
 }));
 
 // ---------------- Группы учеников ----------------

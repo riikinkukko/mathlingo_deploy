@@ -19,7 +19,9 @@ import {
   getWeeklyStats,
   getUnmarkedPastLessons,
   getScheduledLessonById,
+  getRecentReviewedForStudent,
 } from "@/lib/queries";
+import { scoreLabel } from "@/lib/ege-points";
 import LessonDoneBanner from "@/components/LessonDoneBanner";
 import StudentDynamicsSection from "@/components/StudentDynamicsSection";
 import { formatDateRu } from "@/lib/money";
@@ -48,6 +50,7 @@ import { getGroupNamesByStudent } from "@/lib/groups";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
+import ScrollIntoViewOnMount from "@/components/teacher/ScrollIntoViewOnMount";
 import DeleteStudentButton from "./DeleteStudentButton";
 
 const KIND_LABEL: Record<string, string> = {
@@ -56,13 +59,25 @@ const KIND_LABEL: Record<string, string> = {
   exam: "Пробник",
 };
 
-export default async function StudentDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { done?: string; log?: string; tab?: string; ok?: string; hw?: string; quick?: string };
-}) {
+export default async function StudentDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{
+      done?: string;
+      log?: string;
+      tab?: string;
+      ok?: string;
+      hw?: string;
+      quick?: string;
+      /** число задач в только что назначенном вручную задании */
+      assigned?: string;
+      /** запись в журнал не сохранилась */
+      logerror?: string;
+    }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
   if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
@@ -123,6 +138,7 @@ export default async function StudentDetailPage({
     notesData,
     weekly,
     unmarkedLessons,
+    reviewed,
   ] = await Promise.all([
       getCurriculum(),
       computeStudentProgress(student.id),
@@ -139,6 +155,7 @@ export default async function StudentDetailPage({
       getStudentNotes(student.id),
       getWeeklyStats(student.id, 12),
       getUnmarkedPastLessons(teacher.id, student.id),
+      getRecentReviewedForStudent(student.id, 5),
     ]);
   const inGroup = ((await getGroupNamesByStudent(teacher.id)).get(student.id) ?? []).length > 0;
   const solved12w = weekly.reduce((s, w) => s + w.solved, 0);
@@ -155,10 +172,49 @@ export default async function StudentDetailPage({
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
   const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
+  const assignedCount = Number(searchParams.quick) > 0 ? Number(searchParams.quick) : Number(searchParams.assigned) || 0;
+
+  const parentsAndDelete = (
+    <>
+        <section id="parents" className="scroll-mt-24">
+          <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>
+          {parents.length > 0 && (
+            <ul className="mb-4 space-y-1 text-sm text-ink-soft">
+              {parents.map((p) => (
+                <li key={p.id}>
+                  {p.name} — {p.email}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="card p-5">
+            <p className="mb-3 text-sm text-ink-soft">
+              Пригласите родителя — он сможет следить за прогрессом, журналом занятий и заданиями ученика.
+            </p>
+            <AddParentForm studentId={student.id} />
+          </div>
+        </section>
+
+        <section className="mt-8 border-t border-line-soft pt-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-ink">Удаление ученика</p>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Если ученик перестал заниматься — удалите его, чтобы освободить место. Действие необратимо.
+              </p>
+            </div>
+            <DeleteStudentButton studentId={student.id} studentName={student.name} />
+          </div>
+        </section>
+    </>
+  );
 
   return (
     <TeacherShell active="students" title={student.name}>
-      <main className="mx-auto max-w-3xl px-4 pb-8 pt-4">
+      <main className="mx-auto max-w-3xl px-4 pb-8 pt-4 lg:max-w-[1200px]">
+        <a href="/teacher#students" className="mb-2 hidden text-[13px] font-bold text-ink-soft hover:text-pine-dark hover:underline lg:inline-block">
+          ← Мои ученики
+        </a>
         <div className="mb-3 flex items-center gap-3">
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-pine-light font-display text-[17px] font-black text-pine-dark">
             {student.name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
@@ -245,82 +301,137 @@ export default async function StudentDetailPage({
         </>)}
 
         {tab === "overview" && (<>
-        <GoalCard targetScore={student.targetScore} mocks={mocks} />
-
-        {pendingReviews.length > 0 && (
-          <section className="mb-8">
-            <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-black text-ink">
-              На проверке
-              <span className="rounded-pill bg-amber px-2 py-0.5 text-xs text-white">
-                {pendingReviews.length}
-              </span>
-            </h2>
-            <div className="space-y-3">
-              {pendingReviews.map((r) => (
-                <PendingReviewCard key={r.attemptId} review={r} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        <div id="goal" className="scroll-mt-20">
-          <CollapsibleSection
-            title="Цель и пробники"
-            summary={
-              mocks.length > 0
-                ? `${mocks.length} ${pluralRu(mocks.length, ["пробник", "пробника", "пробников"])}`
-                : undefined
-            }
-            defaultOpen={!student.targetScore}
-          >
-            <div className="card mb-4 p-4">
-              <TargetScoreForm studentId={student.id} targetScore={student.targetScore} />
-            </div>
-            <div className="mb-4">
-              <AddMockScoreForm studentId={student.id} />
-            </div>
-            {mocks.length > 0 ? (
-              <div className="space-y-2">
-                {mocks.map((m) => (
-                  <div key={m.id} className="card flex items-center gap-3 p-3.5">
-                    <span className="min-w-[44px] font-mono text-lg font-bold text-ink">{m.score}</span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold text-ink">{formatDateRu(m.takenAt)}</p>
-                      {m.note && <p className="truncate text-xs text-ink-soft">{m.note}</p>}
-                    </div>
-                    <DeleteMockButton mockId={m.id} />
+        {/* Телефон — одна колонка в прежнем порядке (order-*). lg: слева работа
+            ученика (проверки, динамика), справа цель, пробники, заметки, родители. */}
+        <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start lg:gap-x-8">
+          <div className="contents lg:block">
+            <div className="order-2 lg:order-none">
+              {pendingReviews.length > 0 && (
+                <section id="review" className="mb-8 scroll-mt-32">
+                  <h2 className="mb-3 flex items-center gap-2 font-display text-lg font-black text-ink">
+                    На проверке
+                    <span className="rounded-pill bg-amber px-2 py-0.5 text-xs text-white">
+                      {pendingReviews.length}
+                    </span>
+                  </h2>
+                  <div className="space-y-3">
+                    {pendingReviews.map((r) => (
+                      <PendingReviewCard key={r.attemptId} review={r} />
+                    ))}
                   </div>
-                ))}
+                </section>
+              )}
+            </div>
+            <div className="order-3 lg:order-none">
+              {reviewed.length > 0 && (
+                <CollapsibleSection
+                  title="Проверенные решения"
+                  summary={`последние ${reviewed.length}`}
+                  defaultOpen={pendingReviews.length === 0}
+                >
+                  <ul className="space-y-2">
+                    {reviewed.map((r) => (
+                      <li key={r.attemptId} className="card flex items-center gap-3 p-3.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[12px] font-bold text-ink-soft">
+                            {r.egeTaskNumber ? `№${r.egeTaskNumber} · ` : ""}
+                            {r.skillTitle} ·{" "}
+                      {new Date(r.submittedAt).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short" })}
+                          </p>
+                          <p className="truncate text-sm text-ink">{r.problemText}</p>
+                        </div>
+                        {r.score !== null && (
+                          <span className="shrink-0 rounded-pill bg-paper px-2.5 py-1 font-mono text-[12px] font-black text-ink" title={scoreLabel(r.score, r.maxScore)}>
+                            {r.score}/{r.maxScore}
+                          </span>
+                        )}
+                        <span
+                          className={`shrink-0 rounded-pill px-2.5 py-1 text-[11px] font-black ${
+                            r.decision === "approved" ? "bg-pine-light text-pine-dark" : "bg-coral-light text-coral-text"
+                          }`}
+                        >
+                          {r.decision === "approved" ? "одобрено" : "на доработке"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CollapsibleSection>
+              )}
+            </div>
+            <div className="order-6 lg:order-none">
+              <CollapsibleSection
+                title="Динамика"
+                summary={`${solved12w} ${pluralRu(solved12w, ["задача", "задачи", "задач"])} за 12 недель`}
+                defaultOpen
+              >
+                <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={student.targetScore} />
+              </CollapsibleSection>
+            </div>
+            <div className="order-7 lg:order-none">
+              {parentsAndDelete}
+            </div>
+          </div>
+          <div className="contents lg:block">
+            <div className="order-1 lg:order-none">
+              <GoalCard targetScore={student.targetScore} mocks={mocks} />
+            </div>
+            <div className="order-4 lg:order-none">
+              <div id="goal" className="scroll-mt-20">
+                <CollapsibleSection
+                  title="Цель и пробники"
+                  summary={
+                    mocks.length > 0
+                      ? `${mocks.length} ${pluralRu(mocks.length, ["пробник", "пробника", "пробников"])}`
+                      : undefined
+                  }
+                  defaultOpen={!student.targetScore}
+                >
+                  <div className="card mb-4 p-4">
+                    <TargetScoreForm studentId={student.id} targetScore={student.targetScore} />
+                  </div>
+                  <div className="mb-4">
+                    <AddMockScoreForm studentId={student.id} />
+                  </div>
+                  {mocks.length > 0 ? (
+                    <div className="space-y-2">
+                      {mocks.map((m) => (
+                        <div key={m.id} className="card flex items-center gap-3 p-3.5">
+                          <span className="min-w-[44px] font-mono text-lg font-bold text-ink">{m.score}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-ink">{formatDateRu(m.takenAt)}</p>
+                            {m.note && <p className="truncate text-xs text-ink-soft">{m.note}</p>}
+                          </div>
+                          <DeleteMockButton mockId={m.id} />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="card p-6 text-center text-sm text-ink-soft">Пробников пока не записано.</div>
+                  )}
+                </CollapsibleSection>
               </div>
-            ) : (
-              <div className="card p-6 text-center text-sm text-ink-soft">Пробников пока не записано.</div>
-            )}
-          </CollapsibleSection>
+            </div>
+            <div className="order-5 lg:order-none">
+              <CollapsibleSection title="Заметки" summary={notesPreview || undefined}>
+                <StudentNotesForm
+                  studentId={student.id}
+                  notes={notesData.notes}
+                  updatedLabel={notesUpdatedLabel}
+                />
+              </CollapsibleSection>
+            </div>
+          </div>
         </div>
-
-        <CollapsibleSection title="Заметки" summary={notesPreview || undefined}>
-          <StudentNotesForm
-            studentId={student.id}
-            notes={notesData.notes}
-            updatedLabel={notesUpdatedLabel}
-          />
-        </CollapsibleSection>
-
-        <CollapsibleSection
-          title="Динамика"
-          summary={`${solved12w} ${pluralRu(solved12w, ["задача", "задачи", "задач"])} за 12 недель`}
-          defaultOpen
-        >
-          <StudentDynamicsSection weekly={weekly} mocks={mocks} targetScore={student.targetScore} />
-        </CollapsibleSection>
         </>)}
 
-        {tab === "hw" && Number(searchParams.quick) > 0 && (
-          <p role="status" className="mb-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-bold text-pine-dark">
-            ✓ Задание из {searchParams.quick} {pluralRu(Number(searchParams.quick), ["задачи", "задач", "задач"])} назначено — ученик получил уведомление.
-          </p>
+        {tab === "hw" && assignedCount > 0 && (
+          <ScrollIntoViewOnMount role="status" className="mb-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-bold text-pine-dark">
+            ✓ Задание из {assignedCount} {pluralRu(assignedCount, ["задачи", "задач", "задач"])} назначено — ученик получил уведомление.
+          </ScrollIntoViewOnMount>
         )}
         {tab === "hw" && (<>
+        <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
+        <div>
         <CollapsibleSection
           title="Прогресс по навыкам"
           summary={`${stats.solvedProblems}/${stats.totalProblems} задач`}
@@ -356,6 +467,8 @@ export default async function StudentDetailPage({
           />
         </CollapsibleSection>
 
+        </div>
+        <div>
         <CollapsibleSection
           title="Задания"
           summary={homeworks.length > 0 ? `${homeworks.length} ${pluralRu(homeworks.length, ["задание", "задания", "заданий"])}` : undefined}
@@ -384,39 +497,12 @@ export default async function StudentDetailPage({
             })}
           />
         </CollapsibleSection>
-        </>)}
-
-        {tab === "lessons" && (<>
-        <CollapsibleSection
-          title="Расписание занятий"
-          summary={
-            [
-              upcomingLessons.length > 0
-                ? `${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])} впереди`
-                : null,
-              unmarkedLessons.length > 0 ? `${unmarkedLessons.length} не отмечено` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ") || undefined
-          }
-          defaultOpen
-        >
-          {unmarkedLessons.length > 0 && (
-            <div className="mb-4 rounded-card border-2 border-amber/40 bg-amber-light/30 p-3">
-              <p className="mb-2 text-sm font-bold text-ink">
-                Прошедшие занятия без отметки — от «Было» зависит баланс оплат
-              </p>
-              <UpcomingLessons lessons={unmarkedLessons} showStudent={false} from="student" past />
-            </div>
-          )}
-          <div className="mb-4">
-            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" limit={6} />
-          </div>
-          <AddLessonForm studentId={student.id} from="student" />
-        </CollapsibleSection>
+        </div>
+        </div>
         </>)}
 
         {tab === "payments" && (<>
+        <div className="lg:max-w-3xl">
         <CollapsibleSection
           title="Оплаты"
           summary={balance ? balanceText(balance) : undefined}
@@ -444,14 +530,51 @@ export default async function StudentDetailPage({
           </div>
           <PaymentHistory payments={payments} showStudent={false} from="student" />
         </CollapsibleSection>
+        </div>
         </>)}
 
         {tab === "lessons" && (<>
+        <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
+        <div>
+        <CollapsibleSection
+          title="Расписание занятий"
+          summary={
+            [
+              upcomingLessons.length > 0
+                ? `${upcomingLessons.length} ${pluralRu(upcomingLessons.length, ["занятие", "занятия", "занятий"])} впереди`
+                : null,
+              unmarkedLessons.length > 0 ? `${unmarkedLessons.length} не отмечено` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ") || undefined
+          }
+          defaultOpen
+        >
+          {unmarkedLessons.length > 0 && (
+            <div className="mb-4 rounded-card border-2 border-amber/40 bg-amber-light/30 p-3">
+              <p className="mb-2 text-sm font-bold text-ink">
+                Прошедшие занятия без отметки — от «Было» зависит баланс оплат
+              </p>
+              <UpcomingLessons lessons={unmarkedLessons} showStudent={false} from="student" past />
+            </div>
+          )}
+          <div className="mb-4">
+            <UpcomingLessons lessons={upcomingLessons} showStudent={false} from="student" limit={6} />
+          </div>
+          <AddLessonForm studentId={student.id} from="student" />
+        </CollapsibleSection>
+        </div>
+        <div>
+        {searchParams.logerror && (
+          <ScrollIntoViewOnMount role="alert" className="mb-4 rounded-2xl border-2 border-coral/40 bg-coral-light px-4 py-3 text-sm font-bold text-coral-text">
+            Запись не сохранилась: заполните дату, тему и отчёт о занятии и попробуйте ещё раз.
+          </ScrollIntoViewOnMount>
+        )}
         <div id="journal" className="scroll-mt-20">
         <CollapsibleSection
           title="Журнал занятий"
           summary={lessonLogs.length > 0 ? `${lessonLogs.length} ${pluralRu(lessonLogs.length, ["запись", "записи", "записей"])}` : undefined}
-          defaultOpen={!!logPrefill}
+          defaultOpen={!!logPrefill || !!searchParams.logerror}
         >
           <div className="mb-4">
             <RecentList
@@ -478,40 +601,11 @@ export default async function StudentDetailPage({
           />
         </CollapsibleSection>
         </div>
+        </div>
+        </div>
         </>)}
 
-        {tab === "overview" && (<>
-        <section id="parents" className="scroll-mt-24">
-          <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>
-          {parents.length > 0 && (
-            <ul className="mb-4 space-y-1 text-sm text-ink-soft">
-              {parents.map((p) => (
-                <li key={p.id}>
-                  {p.name} — {p.email}
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="card p-5">
-            <p className="mb-3 text-sm text-ink-soft">
-              Пригласите родителя — он сможет следить за прогрессом, журналом занятий и заданиями ученика.
-            </p>
-            <AddParentForm studentId={student.id} />
-          </div>
-        </section>
 
-        <section className="mt-8 border-t border-line-soft pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-bold text-ink">Удаление ученика</p>
-              <p className="mt-0.5 text-xs text-ink-soft">
-                Если ученик перестал заниматься — удалите его, чтобы освободить место. Действие необратимо.
-              </p>
-            </div>
-            <DeleteStudentButton studentId={student.id} studentName={student.name} />
-          </div>
-        </section>
-        </>)}
       </main>
     </TeacherShell>
   );

@@ -4,7 +4,8 @@ import PublicFooter from "@/components/PublicFooter";
 
 export const metadata = { title: "Подтверждение email — Планиметрика" };
 
-export default async function VerifyEmailPage({ searchParams }: { searchParams: { token?: string } }) {
+export default async function VerifyEmailPage(props: { searchParams: Promise<{ token?: string }> }) {
+  const searchParams = await props.searchParams;
   const result = searchParams.token ? await verifyEmailAction(searchParams.token) : { success: false };
 
   return (

@@ -5,7 +5,8 @@ import TeacherShell from "@/components/TeacherShell";
 import ProblemForm from "@/components/ProblemForm";
 import { createProblemAction } from "@/app/actions-content";
 
-export default async function NewProblemPage({ params }: { params: { id: string } }) {
+export default async function NewProblemPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const teacher = await requireContentEditor();
   const skill = await getSkill(params.id);
   if (!skill) notFound();

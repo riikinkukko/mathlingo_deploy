@@ -27,14 +27,14 @@ export async function applyPromoAction(formData: FormData) {
     revalidatePath(back);
     redirect(`${back}?promoOk=${encodeURIComponent(promo.code)}`);
   }
-  cookies().set(PROMO_COOKIE, promo.code, { maxAge: 30 * 86400, httpOnly: true, sameSite: "lax", path: "/" });
+  (await cookies()).set(PROMO_COOKIE, promo.code, { maxAge: 30 * 86400, httpOnly: true, sameSite: "lax", path: "/" });
   redirect(`${back}?promo=${encodeURIComponent(promo.code)}`);
 }
 
 export async function clearPromoAction() {
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  cookies().delete(PROMO_COOKIE);
+  (await cookies()).delete(PROMO_COOKIE);
   redirect(user.role === "TEACHER" ? "/teacher/upgrade" : "/student/upgrade");
 }
 

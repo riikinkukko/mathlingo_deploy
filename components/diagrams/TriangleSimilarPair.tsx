@@ -26,7 +26,7 @@ export default function TriangleSimilarPair({
         strokeWidth="2.5"
         strokeLinejoin="round"
       />
-      <Lbl x={45} y={175} value={small} />
+      <Lbl x={75} y={175} value={small} />
       {/* Штрихованная нотация (A'B'C') — стандартное обозначение подобной
           пары в школьной программе, ученику сразу ясно, что это два разных
           треугольника, а не продолжение одной фигуры. */}

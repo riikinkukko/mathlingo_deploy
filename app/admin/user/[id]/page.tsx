@@ -9,7 +9,8 @@ const STATUS_LABEL: Record<string, string> = {
   canceled: "Отменён",
 };
 
-export default async function AdminUserPage({ params }: { params: { id: string } }) {
+export default async function AdminUserPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   await requireAdmin();
   const user = await getUserById(params.id);
   if (!user) notFound();
@@ -18,8 +19,8 @@ export default async function AdminUserPage({ params }: { params: { id: string }
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--app-sat))]">
-        <div className="mx-auto max-w-2xl">
+      <header className="pt-5">
+        <div className="mx-auto px-4 max-w-4xl">
           <a href="/admin" className="text-xs font-bold text-ink-soft hover:underline">
             ← Все пользователи
           </a>
@@ -28,7 +29,7 @@ export default async function AdminUserPage({ params }: { params: { id: string }
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-4 pt-6">
+      <main className="mx-auto max-w-4xl px-4 pt-6">
         <div className="card mb-6 p-4">
           <div className="mb-3 flex items-center justify-between">
             <span

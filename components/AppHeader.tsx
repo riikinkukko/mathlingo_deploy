@@ -8,7 +8,7 @@ import {
   getEffectiveEnergy,
   FREE_MAX_ENERGY,
 } from "@/lib/queries";
-import { IconBolt, IconFlame, IconBattery, IconCrown } from "./icons";
+import { IconStar, IconFlame, IconBattery, IconCrown } from "./icons";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
 
@@ -39,7 +39,7 @@ export default async function AppHeader({
             ) : (
               <a
                 href={`/${user.role.toLowerCase()}`}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-pine font-display text-lg font-black text-white shadow-button"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-pine-strong font-display text-lg font-black text-white shadow-button"
               >
                 П
               </a>
@@ -57,7 +57,7 @@ export default async function AppHeader({
             {gamification && (
               <div className="flex items-center gap-2">
                 <Chip color="text-amber" bg="bg-amber-light">
-                  <IconBolt className="h-4 w-4" />
+                  <IconStar className="h-4 w-4" />
                   {gamification.xp}
                 </Chip>
                 <Chip

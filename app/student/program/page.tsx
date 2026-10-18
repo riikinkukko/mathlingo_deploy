@@ -18,11 +18,12 @@ import { getStudentExamPass } from "@/lib/tariffs";
 import StudentShell from "@/components/StudentShell";
 import { IconCheck, IconLock } from "@/components/icons";
 
-export default async function ProgramPage({
-  searchParams,
-}: {
-  searchParams: { topic?: string };
-}) {
+export default async function ProgramPage(
+  props: {
+    searchParams: Promise<{ topic?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   const [curriculum, progress] = await Promise.all([getCurriculum(), computeStudentProgress(user.id)]);
 
@@ -85,15 +86,19 @@ export default async function ProgramPage({
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pine font-display text-base font-black text-white">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-pine-strong font-display text-base font-black text-white">
                       {chapter.order}
                     </span>
                     <div className="min-w-0">
                       <p className="break-words font-display text-[15px] font-black text-ink [hyphens:auto]">{chapter.title}</p>
                       <p className="text-[12.5px] text-ink-soft">
                         {skills.length} {pluralRu(skills.length, ["навык", "навыка", "навыков"])} ·{" "}
+                        {/* Глава доступна по тарифу, но навыки внутри открываются по
+                            порядку — раньше «открыто полностью» стояло над замками. */}
                         {fullyOpen
-                          ? `открыто полностью · пройдено ${doneSkills}`
+                          ? `пройдено ${doneSkills}${
+                              skills.some((sk) => pathStates[sk.id] === "locked") ? " · навыки открываются по порядку" : ""
+                            }`
                           : `${totalProblems} ${pluralRu(totalProblems, ["задача", "задачи", "задач"])}`}
                       </p>
                     </div>
@@ -137,13 +142,13 @@ export default async function ProgramPage({
                             {state === "done" ? (
                               <IconCheck className="h-4 w-4 shrink-0 text-pine" />
                             ) : state === "locked" ? (
-                              <IconLock className="h-3.5 w-3.5 shrink-0 text-ink-soft/50" />
+                              <IconLock className="h-3.5 w-3.5 shrink-0 text-ink-soft" />
                             ) : (
                               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-pine" />
                             )}
                             <span
                               className={`flex-1 ${
-                                state === "locked" ? "text-ink-soft/60" : "font-semibold text-ink"
+                                state === "locked" ? "text-ink-soft" : "font-semibold text-ink"
                               }`}
                             >
                               {s.title}

@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 
 /** Фото решения к попытке: видят только сам ученик и его репетитор.
  * ?v=markup — то же фото с пометками репетитора. */
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const markup = new URL(req.url).searchParams.get("v") === "markup";
   const user = await getSessionUser();
   if (!user) return new NextResponse("Требуется вход", { status: 401 });

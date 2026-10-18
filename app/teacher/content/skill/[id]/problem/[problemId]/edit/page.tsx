@@ -5,11 +5,12 @@ import TeacherShell from "@/components/TeacherShell";
 import ProblemForm from "@/components/ProblemForm";
 import { updateProblemAction } from "@/app/actions-content";
 
-export default async function EditProblemPage({
-  params,
-}: {
-  params: { id: string; problemId: string };
-}) {
+export default async function EditProblemPage(
+  props: {
+    params: Promise<{ id: string; problemId: string }>;
+  }
+) {
+  const params = await props.params;
   const teacher = await requireContentEditor();
   const skill = await getSkill(params.id);
   const problem = await getProblem(params.problemId);

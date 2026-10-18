@@ -3,8 +3,10 @@ import {
   getNotificationsForUser,
   getUnreadNotificationCount,
   getPendingReviewsForTeacher,
+  getOpenQuestionsCount,
 } from "@/lib/queries";
-import TeacherSidebar from "./TeacherSidebar";
+import { countPaidChecksWaiting, isReviewer as isReviewerUser } from "@/lib/paid-review";
+import TeacherSidebar, { TeacherSection } from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
 import Mascot from "./Mascot";
 import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
@@ -15,16 +17,22 @@ export default async function TeacherShell({
   title,
   children,
 }: {
-  active: "students" | "schedule" | "payments" | "content" | "upgrade" | "settings";
+  active: TeacherSection;
   title: string;
   children: React.ReactNode;
 }) {
   const user = (await getSessionUser())!;
-  const [notifications, unreadCount, pendingReviews] = await Promise.all([
+  const reviewer = isReviewerUser(user);
+  const [notifications, unreadCount, pendingReviews, openQuestionsCount, paidChecksCount] = await Promise.all([
     getNotificationsForUser(user.id),
     getUnreadNotificationCount(user.id),
     getPendingReviewsForTeacher(user.id),
+    getOpenQuestionsCount(user.id),
+    reviewer ? countPaidChecksWaiting() : Promise.resolve(0),
   ]);
+  // На телефоне в нижней панели нет отдельных вкладок для групп, вопросов и
+  // проверок — это подразделы «Учеников».
+  const studentsTab = active === "students" || active === "reviews" || active === "groups" || active === "questions" || active === "checks";
   const pendingReviewCount = pendingReviews.length;
   const isAdmin = !!user.isAdmin;
   const canEditContent = isAdmin || !!user.isPlatformOwner;
@@ -54,6 +62,9 @@ export default async function TeacherShell({
         canEditContent={canEditContent}
         notifications={notifications}
         unreadCount={unreadCount}
+        openQuestionsCount={openQuestionsCount}
+        paidChecksCount={paidChecksCount}
+        isReviewer={reviewer}
       />
 
       <div className="pb-20 lg:ml-[236px] lg:pb-8">{children}</div>
@@ -67,14 +78,14 @@ export default async function TeacherShell({
           className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5"
         >
           <span className="relative">
-            <IconStudents className={`h-[22px] w-[22px] ${active === "students" ? "text-pine" : "text-line"}`} />
+            <IconStudents className={`h-[22px] w-[22px] ${studentsTab ? "text-pine" : "text-line"}`} />
             {pendingReviewCount > 0 && (
               <span className="absolute -right-2 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-pill bg-violet px-1 text-[9px] font-black text-white">
                 {pendingReviewCount}
               </span>
             )}
           </span>
-          <span className={`text-[10px] leading-none ${active === "students" ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
+          <span className={`text-[10px] leading-none ${studentsTab ? "font-black text-pine-dark" : "font-bold text-ink-soft"}`}>
             Ученики
           </span>
         </a>

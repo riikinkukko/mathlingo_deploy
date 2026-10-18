@@ -1,26 +1,28 @@
 "use client";
 
-import { useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { createPromoAction } from "@/app/actions-promo";
 
 function Submit() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-11 rounded-xl bg-pine px-5 text-[14px] font-black text-white hover:bg-pine-dark disabled:opacity-60">
+    <button type="submit" disabled={pending} className="h-11 rounded-xl bg-pine-strong px-5 text-[14px] font-black text-white hover:bg-pine-dark disabled:opacity-60">
       {pending ? "Создаём…" : "Создать промокод"}
     </button>
   );
 }
 
 export default function CreatePromoForm({ appUrl }: { appUrl: string }) {
-  const [state, action] = useFormState(createPromoAction, {});
+  const [state, action, actionPending] = useActionState(createPromoAction, {});
+  const keepAction = useKeepFormValues(actionPending);
   const [kind, setKind] = useState<"percent" | "days">("percent");
   const [audience, setAudience] = useState<"teacher" | "student">("teacher");
   const link = (code: string) => `${appUrl}${audience === "teacher" ? "/register/teacher" : "/register"}?promo=${code}`;
 
   return (
-    <form key={state?.ok ?? "new"} action={action} className="card space-y-4 p-5">
+    <form key={state?.ok ?? "new"} action={action} onSubmit={keepAction} className="card space-y-4 p-5">
       <h2 className="font-display text-lg font-black text-ink">Новый промокод</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <div>

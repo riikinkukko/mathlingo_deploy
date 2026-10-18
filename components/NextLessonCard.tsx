@@ -21,7 +21,7 @@ export default function NextLessonCard({ lessons, teacherName }: { lessons: Less
           <p className="text-[11px] font-black uppercase tracking-wide text-ink-soft">Ближайшее занятие</p>
           <p className="font-display text-[16px] font-black text-ink">{lessonWhenLabel(next.startsAt, next.durationMin)}</p>
           <p className="truncate text-[13px] text-ink-soft">
-            {[groupLabel(next), next.topic, !groupLabel(next) && !next.topic && teacherName ? `с ${teacherName}` : null]
+            {[groupLabel(next), next.topic, !groupLabel(next) && !next.topic && teacherName ? `Репетитор: ${teacherName}` : null]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -29,10 +29,13 @@ export default function NextLessonCard({ lessons, teacherName }: { lessons: Less
       </div>
       {rest.length > 0 && (
         <ul className="mt-2.5 space-y-1 border-t border-line-soft pt-2.5">
-          {rest.slice(0, 2).map((l) => (
+          {rest.slice(0, 2).map((l, i) => (
             <li key={l.id} className="flex items-baseline justify-between gap-3 text-[13px]">
-              <span className="font-bold text-ink">{lessonWhenLabel(l.startsAt, l.durationMin)}</span>
-              {groupLabel(l) && <span className="truncate text-[12px] text-violet">{groupLabel(l)}</span>}
+              <span className="font-bold text-ink">
+                {i === 0 && <span className="font-semibold text-ink-soft">Потом: </span>}
+                {lessonWhenLabel(l.startsAt, l.durationMin)}
+              </span>
+              {groupLabel(l) && <span className="truncate text-[12px] text-violet-text">{groupLabel(l)}</span>}
             </li>
           ))}
         </ul>

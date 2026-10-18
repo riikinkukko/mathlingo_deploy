@@ -69,7 +69,11 @@ export default function QuickHomework({
             : "У ученика пока нет нерешённых ошибок — подбирать нечего. Воспользуйтесь выбором по номерам."}
         </p>
         <Settings />
-        <button type="submit" disabled={!!weak && weak.mistakes === 0} className="btn-primary mt-4 w-full !normal-case !tracking-normal sm:w-auto">
+        <button
+          type="submit"
+          disabled={!!weak && weak.mistakes === 0}
+          className={`${!weak || weak.mistakes > 0 ? "btn-primary" : "btn-soft"} mt-4 w-full !normal-case !tracking-normal sm:w-auto`}
+        >
           Задать работу над ошибками
         </button>
       </form>
@@ -97,12 +101,14 @@ export default function QuickHomework({
           </div>
         </fieldset>
         <Settings />
-        <button type="submit" className="btn-primary mt-4 w-full !normal-case !tracking-normal sm:w-auto">
+        <button
+          type="submit"
+          className={`${weak && weak.mistakes === 0 ? "btn-primary" : "btn-soft"} mt-4 w-full !normal-case !tracking-normal sm:w-auto`}
+        >
           Задать по номерам
         </button>
       </form>
 
-      <p className="pt-2 text-center text-[13px] font-bold text-ink-soft">или соберите задание вручную ↓</p>
     </section>
   );
 }

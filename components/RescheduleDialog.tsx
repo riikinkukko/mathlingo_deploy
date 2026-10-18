@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { rescheduleLessonAction, RescheduleState } from "@/app/actions-schedule";
 
@@ -23,7 +24,7 @@ export function toMskInput(iso: string): string {
 function Submit() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="h-12 flex-1 rounded-2xl bg-pine text-[15px] font-black text-white disabled:opacity-60">
+    <button type="submit" disabled={pending} className="h-12 flex-1 rounded-2xl bg-pine-strong text-[15px] font-black text-white disabled:opacity-60">
       {pending ? "Переносим…" : "Перенести"}
     </button>
   );
@@ -48,7 +49,8 @@ export default function RescheduleDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [state, action] = useFormState<RescheduleState, FormData>(rescheduleLessonAction, null);
+  const [state, action, actionPending] = useActionState<RescheduleState, FormData>(rescheduleLessonAction, null);
+  const keepAction = useKeepFormValues(actionPending);
 
   useEffect(() => {
     if (!state?.ok) return;
@@ -59,7 +61,7 @@ export default function RescheduleDialog({
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center lg:items-center" role="dialog" aria-label="Перенести занятие">
       <button type="button" aria-label="Закрыть" onClick={onClose} className="absolute inset-0 bg-ink/40" />
-      <form action={action} className="relative w-full max-w-md space-y-3 rounded-t-[28px] bg-white p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-ink lg:rounded-[28px]">
+      <form action={action} onSubmit={keepAction} className="relative w-full max-w-md space-y-3 rounded-t-[28px] bg-white p-5 pb-[max(20px,env(safe-area-inset-bottom))] text-ink lg:rounded-[28px]">
         <div className="mx-auto mb-1 h-1.5 w-10 rounded-full bg-line lg:hidden" />
         <p className="font-display text-[19px] font-black">Перенести занятие</p>
         {title && <p className="-mt-2 text-[13px] text-ink-soft">{title}</p>}

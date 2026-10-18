@@ -134,6 +134,12 @@ export default function CompletionCelebration({
             {secondaryLabel}
           </a>
         )}
+        {/* Выход «на сегодня всё» — раньше была только кнопка следующего урока. */}
+        {nextHref !== "/student" && (
+          <a href="/student" className="mt-1 flex min-h-[44px] items-center justify-center text-[14px] font-bold text-white/75 hover:text-white">
+            На сегодня всё
+          </a>
+        )}
       </div>
     </div>
   );

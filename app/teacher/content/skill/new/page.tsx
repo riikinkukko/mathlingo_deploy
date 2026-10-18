@@ -5,11 +5,12 @@ import TeacherShell from "@/components/TeacherShell";
 import TheoryCardsBuilder from "@/components/TheoryCardsBuilder";
 import { createSkillAction } from "@/app/actions-content";
 
-export default async function NewSkillPage({
-  searchParams,
-}: {
-  searchParams: { subtopicId?: string };
-}) {
+export default async function NewSkillPage(
+  props: {
+    searchParams: Promise<{ subtopicId?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const teacher = await requireContentEditor();
   const subtopicId = searchParams.subtopicId;
   const chapter = subtopicId ? await getChapter(subtopicId) : undefined;

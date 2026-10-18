@@ -21,6 +21,7 @@ import {
   Payment,
 } from "./types";
 import { EXAM_ACCESS_UNTIL } from "./exam-plan";
+import { maxPointsForTask } from "./ege-points";
 import { markReviewOrderPaid, notifyReviewers } from "./paid-review";
 import { rewardReferralOnPayment, recordPromoPayment, REFERRAL_BONUS_DAYS, type ReferralReward } from "./promo";
 
@@ -134,6 +135,7 @@ function mapAttempt(row: typeof schema.attempts.$inferSelect): Attempt {
     source: row.source,
     reviewStatus: row.reviewStatus ?? undefined,
     teacherFeedback: row.teacherFeedback ?? undefined,
+    reviewScore: row.reviewScore ?? undefined,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -1169,6 +1171,52 @@ export async function getPendingReviewsForTeacher(teacherId: string): Promise<Pe
   return result.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));
 }
 
+/** Последние проверенные репетитором развёрнутые решения ученика (для карточки ученика). */
+export interface ReviewedSolution {
+  attemptId: string;
+  skillTitle: string;
+  problemText: string;
+  egeTaskNumber: number | null;
+  decision: "approved" | "needs_revision";
+  score: number | null;
+  maxScore: number;
+  submittedAt: string;
+}
+
+export async function getRecentReviewedForStudent(studentId: string, limit = 5): Promise<ReviewedSolution[]> {
+  const rows = await db
+    .select({
+      attemptId: schema.attempts.id,
+      reviewStatus: schema.attempts.reviewStatus,
+      reviewScore: schema.attempts.reviewScore,
+      createdAt: schema.attempts.createdAt,
+      problemText: schema.problems.text,
+      egeTaskNumber: schema.problems.egeTaskNumber,
+      skillTitle: schema.skills.title,
+    })
+    .from(schema.attempts)
+    .innerJoin(schema.problems, eq(schema.problems.id, schema.attempts.problemId))
+    .leftJoin(schema.skills, eq(schema.skills.id, schema.problems.skillId))
+    .where(
+      and(
+        eq(schema.attempts.studentId, studentId),
+        inArray(schema.attempts.reviewStatus, ["approved", "needs_revision"])
+      )
+    )
+    .orderBy(desc(schema.attempts.createdAt))
+    .limit(limit);
+  return rows.map((r) => ({
+    attemptId: r.attemptId,
+    skillTitle: r.skillTitle ?? "Своя задача",
+    problemText: r.problemText,
+    egeTaskNumber: r.egeTaskNumber ?? null,
+    decision: r.reviewStatus as "approved" | "needs_revision",
+    score: r.reviewScore ?? null,
+    maxScore: maxPointsForTask(r.egeTaskNumber),
+    submittedAt: r.createdAt.toISOString(),
+  }));
+}
+
 // ---------- Состояние задачи для карточки (учитывает DETAILED-ревью) ----------
 
 /** Проверка развёрнутого решения репетитором: фото ученика и пометки на нём. */
@@ -1179,6 +1227,9 @@ export interface ReviewInfo {
   /** комментарий репетитора (и при одобрении — его тоже стоит показать) */
   feedback?: string;
   approved: boolean;
+  /** баллы по критериям ФИПИ и максимум за этот номер; score нет — не ставили */
+  score?: number;
+  maxScore?: number;
 }
 
 export interface ProblemState {
@@ -1231,8 +1282,11 @@ export async function computeProblemStates(
         image: images.get(last.id) ?? null,
         feedback: last.teacherFeedback,
         approved: last.reviewStatus === "approved",
+        ...(last.reviewScore !== undefined && (last.reviewStatus === "approved" || last.reviewStatus === "needs_revision")
+          ? { score: last.reviewScore, maxScore: maxPointsForTask(p.egeTaskNumber) }
+          : {}),
       };
-      const reviewed = !!review.image || !!review.feedback;
+      const reviewed = !!review.image || !!review.feedback || review.score !== undefined;
       if (last.reviewStatus === "approved" || last.reviewStatus === "self_checked") {
         result[p.id] = {
           status: "solved",
@@ -2433,6 +2487,11 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
       lastActiveAt: string | null;
       pendingCount: number;
       overdueCount: number;
+      /** за последние 7 дней: решено разных задач и точность (null — попыток не было) */
+      solvedWeek?: number;
+      accuracyWeek?: number | null;
+      /** всего заданий (для статуса ДЗ в таблице) */
+      hwTotal?: number;
     }
   >
 > {
@@ -2442,7 +2501,10 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
              count(a.id)::int as attempts,
              count(distinct a.problem_id) filter (where a.is_correct)::int as solved,
              count(a.id) filter (where a.is_correct)::int as correct,
-             max(a.created_at) as last_at
+             max(a.created_at) as last_at,
+             count(a.id) filter (where a.created_at > now() - interval '7 days')::int as attempts_week,
+             count(a.id) filter (where a.is_correct and a.created_at > now() - interval '7 days')::int as correct_week,
+             count(distinct a.problem_id) filter (where a.is_correct and a.created_at > now() - interval '7 days')::int as solved_week
       from ${schema.users} u
       left join ${schema.attempts} a on a.student_id = u.id
       where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
@@ -2465,9 +2527,10 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
       where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
     `),
   ]);
-  const out = new Map<string, { attemptsCount: number; solvedProblems: number; accuracy: number; lastActiveAt: string | null; pendingCount: number; overdueCount: number }>();
-  for (const r of statRows.rows as { student_id: string; attempts: number; solved: number; correct: number; last_at: Date | string | null }[]) {
+  const out = new Map<string, { attemptsCount: number; solvedProblems: number; accuracy: number; lastActiveAt: string | null; pendingCount: number; overdueCount: number; solvedWeek: number; accuracyWeek: number | null; hwTotal: number }>();
+  for (const r of statRows.rows as { student_id: string; attempts: number; solved: number; correct: number; last_at: Date | string | null; attempts_week: number; correct_week: number; solved_week: number }[]) {
     const attempts = Number(r.attempts);
+    const attemptsWeek = Number(r.attempts_week);
     out.set(r.student_id, {
       attemptsCount: attempts,
       solvedProblems: Number(r.solved),
@@ -2475,11 +2538,15 @@ export async function getTeacherHomeStats(teacherId: string): Promise<
       lastActiveAt: r.last_at ? new Date(r.last_at).toISOString() : null,
       pendingCount: 0,
       overdueCount: 0,
+      solvedWeek: Number(r.solved_week),
+      accuracyWeek: attemptsWeek ? Math.round((Number(r.correct_week) / attemptsWeek) * 100) : null,
+      hwTotal: 0,
     });
   }
   const now = Date.now();
   for (const h of hwRows.rows as { student_id: string; due_date: Date | string; total: number; done: number }[]) {
     const s = out.get(h.student_id);
+    if (s) s.hwTotal++;
     if (!s || Number(h.done) >= Number(h.total)) continue;
     s.pendingCount++;
     if (new Date(h.due_date).getTime() < now) s.overdueCount++;

@@ -13,7 +13,8 @@ import {
 } from "@/lib/queries";
 import AssignmentFlow from "@/components/AssignmentFlow";
 
-export default async function HomeworkPage({ params }: { params: { id: string } }) {
+export default async function HomeworkPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const user = (await getSessionUser())!;
   const hw = await getHomeworkById(params.id);
 

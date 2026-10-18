@@ -4,11 +4,12 @@ import TeacherShell from "@/components/TeacherShell";
 import { createChapterAction, updateChapterAction, createTopicAction, updateTopicAction } from "@/app/actions-content";
 import { IconClipboard } from "@/components/icons";
 
-export default async function ContentOverviewPage({
-  searchParams,
-}: {
-  searchParams: { error?: string };
-}) {
+export default async function ContentOverviewPage(
+  props: {
+    searchParams: Promise<{ error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const teacher = await requireContentEditor();
   const curriculum = await getCurriculum({ includeEmpty: true });
   const allSkills = curriculum.flatMap((t) => t.chapters).flatMap((c) => c.skills);
@@ -24,9 +25,7 @@ export default async function ContentOverviewPage({
           <div>
             <h1 className="font-display text-2xl font-black text-ink">Контент программы</h1>
             <p className="mt-1 text-sm text-ink-soft">
-              Редактируйте темы/навыки/задачи прямо здесь — правка в{" "}
-              <code className="rounded bg-grid px-1 py-0.5 text-xs">scripts/seed.ts</code> больше не
-              обязательна.
+              Темы, навыки и задачи общего курса. Изменения сразу видят все ученики платформы.
             </p>
           </div>
         </div>

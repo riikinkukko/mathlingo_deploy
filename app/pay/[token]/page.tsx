@@ -31,13 +31,14 @@ const ERRORS: Record<string, string> = {
  * Pro без регистрации. Показываем только имя и сколько задач решено — этого
  * достаточно, чтобы понять, за кого платишь, и не раскрывать лишнего.
  */
-export default async function PayForStudentPage({
-  params,
-  searchParams,
-}: {
-  params: { token: string };
-  searchParams: { paid?: string; error?: string };
-}) {
+export default async function PayForStudentPage(
+  props: {
+    params: Promise<{ token: string }>;
+    searchParams: Promise<{ paid?: string; error?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const req = await getPayRequest(params.token);
 
   if (!req) {
@@ -119,7 +120,7 @@ export default async function PayForStudentPage({
                 Один платёж — Pro до {pass.untilLabel}, включая пересдачи. Около {rub(pass.perMonth)} в месяц.
                 {pass.earlyUntilLabel && ` Ранняя цена действует до ${pass.earlyUntilLabel}.`}
               </p>
-              <PayButton className="mt-3 h-12 w-full rounded-2xl bg-pine text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark">
+              <PayButton className="mt-3 h-12 w-full rounded-2xl bg-pine-strong text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] hover:bg-pine-dark">
                 Оплатить {rub(pass.priceRub)}
               </PayButton>
             </form>

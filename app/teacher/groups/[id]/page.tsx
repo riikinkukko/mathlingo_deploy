@@ -17,13 +17,14 @@ function shortDate(iso: string) {
   return new Date(iso).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short" });
 }
 
-export default async function GroupPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { created?: string; saved?: string; hw?: string; hwskip?: string; error?: string; ok?: string; add?: string };
-}) {
+export default async function GroupPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ created?: string; saved?: string; hw?: string; hwskip?: string; error?: string; ok?: string; add?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const user = (await getSessionUser())!;
   const group = await getGroupForTeacher(params.id, user.id);
   if (!group) notFound();
@@ -48,8 +49,8 @@ export default async function GroupPage({
   const sorted = [...students].sort((a, b) => a.name.localeCompare(b.name, "ru"));
 
   return (
-    <TeacherShell active="students" title={group.name}>
-      <main className="mx-auto max-w-3xl px-4 py-6">
+    <TeacherShell active="groups" title={group.name}>
+      <main className="mx-auto max-w-3xl px-4 py-6 lg:max-w-[1100px]">
         <a href="/teacher/groups" className="mb-3 inline-block text-sm font-bold text-ink-soft hover:text-ink">
           ← Все группы
         </a>
@@ -103,6 +104,7 @@ export default async function GroupPage({
           </a>
         </div>
 
+        <div className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
         <section className="mb-8">
           <h2 className="mb-3 font-display text-lg font-black text-ink">Занятия группы</h2>
           {lessons.unmarked.length > 0 && (
@@ -187,7 +189,9 @@ export default async function GroupPage({
             </div>
           )}
         </section>
+        </div>
 
+        <div className="lg:max-w-2xl">
         <CollapsibleSection title="Состав и название">
           <form action={updateGroupAction} className="card space-y-4 p-4">
             <input type="hidden" name="groupId" value={group.id} />
@@ -208,6 +212,7 @@ export default async function GroupPage({
             <DeleteGroupButton groupId={group.id} />
           </div>
         </CollapsibleSection>
+        </div>
       </main>
     </TeacherShell>
   );

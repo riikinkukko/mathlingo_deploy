@@ -180,6 +180,8 @@ export interface Attempt {
   // решения для самопроверки ("self_checked") — проверять всё равно некому.
   reviewStatus?: "pending" | "approved" | "needs_revision" | "self_checked";
   teacherFeedback?: string;
+  /** баллы репетитора по критериям ФИПИ (lib/ege-points.ts); нет — не ставил */
+  reviewScore?: number;
   createdAt: string;
 }
 
@@ -237,7 +239,8 @@ export type NotificationType =
   | "streak_frozen"
   | "teacher_nudge"
   | "weekly_report"
-  | "plan_reminder";
+  | "plan_reminder"
+  | "teacher_invite";
 
 export interface Notification {
   id: string;

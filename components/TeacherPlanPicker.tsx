@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { startTeacherPaymentAction } from "@/app/actions-payments";
 import { TEACHER_FREE_LIMIT, TEACHER_TIERS, TEACHER_TRIAL_DAYS, type BillingPeriod, type TeacherTier } from "@/lib/teacher-plan";
 import { ymGoal } from "@/lib/ym";
@@ -17,7 +18,7 @@ function PayButton({ label }: { label: string }) {
       type="submit"
       disabled={pending}
       onClick={() => ymGoal("payment_started")}
-      className="h-12 w-full rounded-2xl bg-pine text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark disabled:opacity-60"
+      className="h-12 w-full rounded-2xl bg-pine-strong text-[15px] font-black text-white shadow-[0_3px_0_#0E5E3A] transition hover:bg-pine-dark disabled:opacity-60"
     >
       {pending ? "Переходим к оплате…" : label}
     </button>
@@ -35,11 +36,12 @@ function firstPrice(price: number, promo?: PickerPromo | null) {
 }
 
 function BuyForm({ tier, period, promo }: { tier: TeacherTier; period: BillingPeriod; promo?: PickerPromo | null }) {
-  const [state, action] = useFormState<{ error?: string }, FormData>(startTeacherPaymentAction, {});
+  const [state, action, actionPending] = useActionState<{ error?: string }, FormData>(startTeacherPaymentAction, {});
+  const keepAction = useKeepFormValues(actionPending);
   const price = TEACHER_TIERS[tier][period];
   const first = firstPrice(price, promo);
   return (
-    <form action={action} className="mt-4 space-y-3">
+    <form action={action} onSubmit={keepAction} className="mt-4 space-y-3">
       <input type="hidden" name="tier" value={tier} />
       <input type="hidden" name="period" value={period} />
       {promo && <input type="hidden" name="promo" value={promo.code} />}
@@ -140,7 +142,7 @@ export default function TeacherPlanPicker({
               }`}
             >
               {c.accent && (
-                <span className="absolute -top-2.5 left-4 rounded-pill bg-pine px-2.5 py-0.5 text-[11px] font-black text-white">
+                <span className="absolute -top-2.5 left-4 rounded-pill bg-pine-strong px-2.5 py-0.5 text-[11px] font-black text-white">
                   Популярный
                 </span>
               )}

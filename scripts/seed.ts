@@ -9,6 +9,7 @@ import { addDeriv17 } from "./content/deriv17";
 import { addParams18 } from "./content/params18";
 import { addTask6 } from "./content/task6";
 import { addStereo15 } from "./content/stereo15";
+import { addNumberTheory20 } from "./content/nt20";
 
 // Явно грузим .env.local — не как CLI-обёртку (dotenv-cli конфликтовал с
 // одноимённой командой из Python на некоторых машинах), а прямым вызовом
@@ -262,13 +263,13 @@ async function main() {
           title: "Сумма углов треугольника",
           formula: "∠A + ∠B + ∠C = 180°",
           body: "В любом треугольнике — остроугольном, тупоугольном, прямоугольном — сумма всех трёх углов всегда равна 180°.",
-          diagram: { kind: "triangleAngles", a: "?", b: "?", c: "?" },
+          diagram: { kind: "triangleAngles", a: "α", b: "β", c: "γ" },
         },
         {
           title: "Равнобедренный треугольник",
           formula: "∠A = ∠B (углы при основании)",
           body: "В равнобедренном треугольнике углы при основании равны между собой. Это часто позволяет найти угол при вершине, зная только один угол при основании.",
-          diagram: { kind: "triangleAngles", a: "?", b: "?", c: "?", symmetric: true },
+          diagram: { kind: "triangleAngles", a: "α", b: "α", c: "β", symmetric: true },
         },
         {
           title: "Внешний угол треугольника",
@@ -545,7 +546,7 @@ async function main() {
         {
           title: "Биссектриса отсекает равнобедренный треугольник",
           body: "Биссектриса угла параллелограмма, пересекающая противоположную сторону (или её продолжение), всегда отсекает равнобедренный треугольник. Это следует из того, что накрест лежащие углы при параллельных сторонах равны углу, на который делит биссектриса исходный угол — значит, у отсечённого треугольника два равных угла.",
-          diagram: { kind: "parallelogram", bisector: { from: "A", toSide: "BC", t: 0.5, label: "M" } },
+          diagram: { kind: "parallelogram", ab: 5, ad: 8, bisector: { from: "A", toSide: "BC", t: 0.625, label: "M" } },
         },
         {
           title: "Как это использовать",
@@ -583,7 +584,7 @@ async function main() {
           title: "Углы трапеции",
           formula: "∠1 + ∠2 = 180°",
           body: "Углы, прилежащие к одной боковой стороне (между параллельными основаниями), в сумме дают 180°. В равнобедренной трапеции углы при каждом основании равны.",
-          diagram: { kind: "trapezoid", angleLabel: "∠1" },
+          diagram: { kind: "trapezoid", angleLabel: "∠1", angleLabel2: "∠2", top: "", bottom: "" },
         },
         {
           title: "Боковая сторона равнобедренной трапеции",
@@ -876,7 +877,7 @@ async function main() {
       text: "В треугольнике два угла равны 50° и 70°. Найдите третий угол в градусах.",
       answerType: "NUMBER",
       correctAnswer: "60",
-      diagram: { kind: "triangleAngles", a: "50°", b: "70°", c: "?" },
+      diagram: { kind: "triangleAngles", a: "70°", b: "50°", c: "?" },
       keyFormula: "∠A+∠B+∠C=180°",
       hints: [
         "Вспомните: сумма всех трёх углов в любом треугольнике — это одно и то же фиксированное число. Какое?",
@@ -923,7 +924,7 @@ async function main() {
       id: stableId("p"),
       skillId: skAngles,
       text: "Углы треугольника относятся как 2:3:4. Найдите наибольший угол в градусах.",
-      diagram: { kind: "triangleAngles", a: "2x", b: "3x", c: "4x" },
+      diagram: { kind: "triangleAngles", a: "3x", b: "2x", c: "4x" },
       answerType: "NUMBER",
       correctAnswer: "80",
       tier: "bank",
@@ -940,7 +941,7 @@ async function main() {
       id: stableId("p"),
       skillId: skAngles,
       text: "Внешний угол треугольника при вершине C равен 130°. Внутренний угол при вершине A равен 50°. Найдите угол при вершине B.",
-      diagram: { kind: "triangleExteriorAngle", inner1: "50°", exterior: "130°" },
+      diagram: { kind: "triangleExteriorAngle", inner1: "50°", inner2: "?", exterior: "130°" },
       answerType: "NUMBER",
       correctAnswer: "80",
       keyFormula: "∠внешний=∠A+∠B",
@@ -1056,7 +1057,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCevians,
       text: "В треугольнике ABC медиана AM проведена к стороне BC=18. Найдите длину отрезка BM.",
-      diagram: { kind: "triangleCevian", base: "18", variant: "median" },
+      diagram: { kind: "triangleCevian", base: "18", variant: "median", labelFoot: "M", leftSeg: "?" },
       answerType: "NUMBER",
       correctAnswer: "9",
       tier: "bank",
@@ -1070,7 +1071,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCevians,
       text: "В треугольнике стороны b=13, c=13, a=10. Найдите медиану, проведённую к стороне a.",
-      diagram: { kind: "triangleCevian", base: "10", variant: "median" },
+      diagram: { kind: "triangleCevian", base: "10", variant: "median", isosceles: true, sideLeft: "13", sideRight: "13", cevianLabel: "?" },
       answerType: "NUMBER",
       correctAnswer: "12",
       tier: "bank",
@@ -1089,7 +1090,7 @@ async function main() {
       text: "Биссектриса угла B треугольника ABC делит сторону AC на отрезки AD=6 и DC=9. Сторона AB=8. Найдите сторону BC.",
       answerType: "NUMBER",
       correctAnswer: "12",
-      diagram: { kind: "triangleCevian", variant: "bisector" },
+      diagram: { kind: "triangleCevian", variant: "bisector", labelA: "B", labelB: "A", labelC: "C", labelFoot: "D", footT: 0.4, leftSeg: "6", rightSeg: "9", sideLeft: "8", sideRight: "?" },
       keyFormula: "AD/DC=AB/BC",
       hints: [
         "Биссектриса угла треугольника делит противоположную сторону на отрезки, пропорциональные прилежащим сторонам.",
@@ -1103,7 +1104,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCevians,
       text: "В треугольнике биссектриса угла при вершине A делит противоположную сторону BC в отношении 3:5, считая от вершины B. Сторона AB=9. Найдите сторону AC.",
-      diagram: { kind: "triangleCevian", variant: "bisector" },
+      diagram: { kind: "triangleCevian", variant: "bisector", footT: 0.375, sideLeft: "9", sideRight: "?" },
       answerType: "NUMBER",
       correctAnswer: "15",
       tier: "bank",
@@ -1120,7 +1121,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCevians,
       text: "Биссектриса угла при вершине треугольника делит его на два угла, один из которых равен 35°. Чему равен исходный угол треугольника?",
-      diagram: { kind: "triangleCevian", variant: "bisector" },
+      diagram: { kind: "triangleCevian", variant: "bisector", halfLabel: "35°" },
       answerType: "NUMBER",
       correctAnswer: "70",
       tier: "bank",
@@ -1136,7 +1137,7 @@ async function main() {
       text: "В остроугольном треугольнике ABC высота BH делит угол B на два угла: 35° и 40°. Найдите угол B треугольника.",
       answerType: "NUMBER",
       correctAnswer: "75",
-      diagram: { kind: "triangleCevian", base: "a", height: "h", variant: "height" },
+      diagram: { kind: "triangleCevian", variant: "height", labelA: "B", labelB: "A", labelC: "C", labelFoot: "H", angle1: "35°", angle2: "40°" },
       keyFormula: "высота делит угол на два",
       hints: [
         "Высота из вершины B делит угол B на два меньших угла.",
@@ -1153,7 +1154,7 @@ async function main() {
       answerType: "NUMBER",
       correctAnswer: "12",
       tier: "bank",
-      diagram: { kind: "triangleRight", a: "15", b: "20", c: "?" },
+      diagram: { kind: "triangleRight", a: "15", b: "20", c: "", altitude: "?" },
       keyFormula: "h=(катет₁·катет₂)/гипотенуза",
       hints: [
         "Площадь прямоугольного треугольника можно посчитать двумя способами: через катеты и через гипотенузу с высотой к ней.",
@@ -1318,7 +1319,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCongruentSimilar,
       text: "Средняя линия треугольника, параллельная стороне BC, равна 8. Найдите сторону BC.",
-      diagram: { kind: "triangleCevian", base: "16", variant: "median" },
+      diagram: { kind: "triangleCevian", variant: "midline", midline: "8", base: "?" },
       answerType: "NUMBER",
       correctAnswer: "16",
       keyFormula: "MN=½·BC",
@@ -1452,7 +1453,7 @@ async function main() {
       answerType: "DETAILED",
       correctAnswer:
         "c=√(9²+12²)=√225=15. Медиана к гипотенузе прямоугольного треугольника равна её половине (это радиус описанной окружности, гипотенуза — диаметр). Медиана = 15/2 = 7.5.",
-      diagram: { kind: "triangleRight", a: "9", b: "12", c: "?" },
+      diagram: { kind: "triangleRight", a: "9", b: "12", c: "?", medianToHyp: "?" },
       keyFormula: "медиана к гипотенузе = c/2",
       hints: [
         "Распишите решение по шагам: сначала найдите гипотенузу по теореме Пифагора, затем примените свойство медианы к гипотенузе в прямоугольном треугольнике.",
@@ -1819,7 +1820,7 @@ async function main() {
       id: stableId("p"),
       skillId: skRectangleDiagonal,
       text: "Диагонали прямоугольника пересекаются в точке O. Отрезок от вершины до точки O равен 7. Найдите всю диагональ.",
-      diagram: { kind: "rectangle", a: "?", b: "?", diagonal: "?" },
+      diagram: { kind: "rectangle", a: "", b: "", diagonal: "?", halfDiagonal: "7" },
       answerType: "NUMBER",
       correctAnswer: "14",
       tier: "bank",
@@ -1969,7 +1970,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramArea,
       text: "Стороны параллелограмма равны 6 и 10, угол между ними равен 30°. Найдите площадь.",
-      diagram: { kind: "parallelogram", angleLabel: "30°" },
+      diagram: { kind: "parallelogram", angleLabel: "30°", a: "10", b: "6", ab: 10, ad: 6, angle: 30 },
       answerType: "NUMBER",
       correctAnswer: "30",
       tier: "bank",
@@ -1988,7 +1989,7 @@ async function main() {
       text: "Периметр параллелограмма равен 40, одна сторона на 4 больше другой. Найдите большую сторону.",
       answerType: "NUMBER",
       correctAnswer: "12",
-      diagram: { kind: "parallelogram", a: "x+4" },
+      diagram: { kind: "parallelogram", a: "x+4", b: "x" },
       keyFormula: "P=2(a+b)",
       hints: [
         "Периметр — это сумма всех сторон. У параллелограмма противоположные стороны равны, значит периметр выражается через сумму двух соседних сторон.",
@@ -2002,7 +2003,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramArea,
       text: "Стороны параллелограмма равны 8 и 15, а его площадь равна 60. Найдите синус угла между этими сторонами. Опишите решение.",
-      diagram: { kind: "parallelogram", angleLabel: "?" },
+      diagram: { kind: "parallelogram", angleLabel: "?", a: "15", b: "8" },
       answerType: "DETAILED",
       correctAnswer: "sin C = 0,5.",
       keyFormula: "S=a·b·sinC",
@@ -2021,7 +2022,7 @@ async function main() {
       text: "Один из углов параллелограмма равен 70°. Найдите соседний угол.",
       answerType: "NUMBER",
       correctAnswer: "110",
-      diagram: { kind: "parallelogram", angleLabel: "70°" },
+      diagram: { kind: "parallelogram", angleLabel: "70°", angleLabel2: "?", angle: 70 },
       keyFormula: "∠1+∠2=180°",
       hints: [
         "Соседние углы параллелограмма (не противоположные) в сумме дают развёрнутый угол.",
@@ -2035,7 +2036,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramAnglesDiagonals,
       text: "Один угол параллелограмма на 30° больше соседнего. Найдите меньший из этих двух углов.",
-      diagram: { kind: "parallelogram", angleLabel: "x" },
+      diagram: { kind: "parallelogram", angleLabel: "x", angleLabel2: "x+30°" },
       answerType: "NUMBER",
       correctAnswer: "75",
       tier: "bank",
@@ -2049,7 +2050,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramAnglesDiagonals,
       text: "Диагонали параллелограмма точкой пересечения делятся пополам. Один из отрезков диагонали равен 9. Найдите всю эту диагональ.",
-      diagram: { kind: "parallelogram", showDiagonals: true, d1: "?", d2: "?" },
+      diagram: { kind: "parallelogram", showDiagonals: true, d1Half: "9" },
       answerType: "NUMBER",
       correctAnswer: "18",
       tier: "bank",
@@ -2066,7 +2067,7 @@ async function main() {
       answerType: "NUMBER",
       correctAnswer: "112",
       tier: "bank",
-      diagram: { kind: "parallelogram", showDiagonals: true, d1: "6", d2: "?" },
+      diagram: { kind: "parallelogram", showDiagonals: true, d1: "6", d2: "?", a: "7", b: "5", ab: 7, ad: 5, angle: 57 },
       keyFormula: "d₁²+d₂²=2(a²+b²)",
       hints: [
         "Сумма квадратов диагоналей параллелограмма равна удвоенной сумме квадратов сторон.",
@@ -2080,7 +2081,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramAnglesDiagonals,
       text: "Диагонали параллелограмма равны 10 и 12, одна из сторон равна 7. Найдите квадрат второй стороны. Опишите решение.",
-      diagram: { kind: "parallelogram", showDiagonals: true, d1: "10", d2: "12" },
+      diagram: { kind: "parallelogram", showDiagonals: true, d1: "10", d2: "12", a: "7" },
       answerType: "DETAILED",
       correctAnswer: "b² = 73 (b ≈ 8,54).",
       keyFormula: "d₁²+d₂²=2(a²+b²)",
@@ -2175,7 +2176,7 @@ async function main() {
       text: "Биссектриса угла A параллелограмма ABCD пересекает сторону BC в точке M, причём BM=5, MC=3. Найдите периметр параллелограмма ABCD.",
       answerType: "DETAILED",
       correctAnswer: "26",
-      diagram: { kind: "parallelogram", bisector: { from: "A", toSide: "BC", t: 0.625, label: "M" } },
+      diagram: { kind: "parallelogram", ab: 5, ad: 8, bisector: { from: "A", toSide: "BC", t: 0.625, label: "M", seg1: "5", seg2: "3" } },
       keyFormula: "AB=BM (биссектриса отсекает равнобедренный треугольник)",
       hints: [
         "AD∥BC, поэтому накрест лежащие углы DAM и AMB равны. Биссектриса делает угол BAM равным углу DAM — значит, угол BAM равен углу AMB.",
@@ -2192,7 +2193,7 @@ async function main() {
       text: "Биссектриса угла A параллелограмма ABCD пересекает сторону BC в точке M. Периметр параллелограмма равен 34, сторона AB равна 7. Найдите MC.",
       answerType: "DETAILED",
       correctAnswer: "3",
-      diagram: { kind: "parallelogram", bisector: { from: "A", toSide: "BC", t: 0.7, label: "M" } },
+      diagram: { kind: "parallelogram", ab: 7, ad: 10, a: "7", bisector: { from: "A", toSide: "BC", t: 0.7, label: "M", seg2: "?" } },
       keyFormula: "AB=BM; периметр=2(AB+BC)",
       hints: [
         "Из периметра и известной стороны AB найдите сторону BC: периметр=2(AB+BC).",
@@ -2251,7 +2252,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidMidlineArea,
       text: "Средняя линия трапеции равна 12, высота равна 5. Найдите площадь трапеции.",
-      diagram: { kind: "trapezoid", midline: "12", height: "5" },
+      diagram: { kind: "trapezoid", top: "", bottom: "", midline: "12", height: "5" },
       answerType: "NUMBER",
       correctAnswer: "60",
       tier: "bank",
@@ -2284,7 +2285,7 @@ async function main() {
       text: "В трапеции один из углов при боковой стороне равен 70°. Найдите второй угол, прилежащий к той же боковой стороне.",
       answerType: "NUMBER",
       correctAnswer: "110",
-      diagram: { kind: "trapezoid", angleLabel: "70°" },
+      diagram: { kind: "trapezoid", angleLabel: "70°", angleLabel2: "?", top: "", bottom: "" },
       keyFormula: "∠1+∠2=180°",
       hints: [
         "Основания трапеции параллельны — углы, прилежащие к одной боковой стороне (между параллельными прямыми), в сумме составляют развёрнутый угол.",
@@ -2298,7 +2299,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidAnglesSides,
       text: "В равнобедренной трапеции угол при большем основании равен 65°. Найдите угол при меньшем основании, прилежащий к той же боковой стороне.",
-      diagram: { kind: "trapezoid", angleLabel: "65°" },
+      diagram: { kind: "trapezoid", angleLabel: "65°", angleLabel2: "?", top: "", bottom: "" },
       answerType: "NUMBER",
       correctAnswer: "115",
       tier: "bank",
@@ -2312,7 +2313,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidAnglesSides,
       text: "Основания равнобедренной трапеции равны 4 и 10, высота равна 4. Найдите боковую сторону.",
-      diagram: { kind: "trapezoid", top: "4", bottom: "10", height: "4" },
+      diagram: { kind: "trapezoid", top: "4", bottom: "10", height: "4", leg: "?" },
       answerType: "NUMBER",
       correctAnswer: "5",
       tier: "bank",
@@ -2329,7 +2330,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidAnglesSides,
       text: "В прямоугольной трапеции основания равны 5 и 13, меньшая боковая сторона (перпендикулярная основаниям) равна 6. Найдите большую (наклонную) боковую сторону.",
-      diagram: { kind: "trapezoid", top: "5", bottom: "13", height: "6", rightAngle: true },
+      diagram: { kind: "trapezoid", top: "5", bottom: "13", height: "6", rightAngle: true, leg: "?" },
       answerType: "NUMBER",
       correctAnswer: "10",
       keyFormula: "теорема Пифагора",
@@ -2345,7 +2346,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidAnglesSides,
       text: "Равнобедренная трапеция имеет основания 6 и 16, боковая сторона равна 13. Найдите высоту трапеции. Опишите решение.",
-      diagram: { kind: "trapezoid", top: "6", bottom: "16" },
+      diagram: { kind: "trapezoid", top: "6", bottom: "16", height: "?", leg: "13" },
       answerType: "DETAILED",
       correctAnswer: "Высота равна 12.",
       keyFormula: "теорема Пифагора",
@@ -2395,7 +2396,7 @@ async function main() {
       id: stableId("p"),
       skillId: skTrapezoidDiagonals,
       text: "Основания трапеции равны 4 и 12. Через точку пересечения диагоналей проведена прямая, параллельная основаниям, до пересечения с боковыми сторонами. Найдите длину отрезка этой прямой.",
-      diagram: { kind: "trapezoid", top: "4", bottom: "12", showDiagonals: true, showMidSegment: true },
+      diagram: { kind: "trapezoid", top: "4", bottom: "12", showDiagonals: true, showMidSegment: true, midSegmentLabel: "?" },
       answerType: "NUMBER",
       correctAnswer: "6",
       tier: "bank",
@@ -2553,7 +2554,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCircleAngles,
       text: "Вписанный угол ABC опирается на диаметр AC окружности. Докажите, что угол ABC равен 90°, и найдите этот угол.",
-      diagram: { kind: "circle", mode: "centralInscribed", central: "180°", inscribed: "?" },
+      diagram: { kind: "circle", mode: "centralInscribed", central: "180°", inscribed: "?", labelA: "C", labelB: "A", labelC: "B" },
       answerType: "DETAILED",
       correctAnswer: "Угол ABC = 90°.",
       keyFormula: "угол, опирающийся на диаметр, равен 90°",
@@ -2584,7 +2585,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCircleTangents,
       text: "Из точки A, удалённой от центра окружности на расстояние 13, проведена касательная к окружности радиусом 5. Найдите длину касательной.",
-      diagram: { kind: "circle", mode: "tangent", t1: "?", t2: "?" },
+      diagram: { kind: "circle", mode: "tangent", t1: "?", labelP: "A", labelT1: "B", labelT2: "C", showRadius: true, r: "5", showOP: true, op: "13" },
       answerType: "NUMBER",
       correctAnswer: "12",
       tier: "bank",
@@ -2617,7 +2618,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCircleTangents,
       text: "Из точки A проведены две касательные к окружности радиусом 6, длина каждой касательной равна 8. Найдите расстояние от точки A до центра окружности. Опишите решение.",
-      diagram: { kind: "circle", mode: "tangent", t1: "8", t2: "8" },
+      diagram: { kind: "circle", mode: "tangent", t1: "8", t2: "8", labelP: "A", labelT1: "B", labelT2: "C", showRadius: true, r: "6", showOP: true, op: "?" },
       answerType: "DETAILED",
       correctAnswer: "OA = 10.",
       keyFormula: "теорема Пифагора",
@@ -2650,7 +2651,7 @@ async function main() {
       id: stableId("p"),
       skillId: skCircleChords,
       text: "Хорда окружности равна 16, расстояние от центра до хорды равно 6. Найдите радиус окружности.",
-      diagram: { kind: "circle", mode: "chord", r: "?", d: "6" },
+      diagram: { kind: "circle", mode: "chord", r: "?", d: "6", chord: "16" },
       answerType: "NUMBER",
       correctAnswer: "10",
       tier: "bank",
@@ -3078,7 +3079,7 @@ async function main() {
       text: "Окружность касается стороны BC=15 и продолжений сторон AB=AC=8,5 треугольника ABC. Найдите радиус этой окружности.",
       answerType: "NUMBER",
       correctAnswer: "30",
-      diagram: { kind: "triangleExcircle" },
+      diagram: { kind: "triangleExcircle", ab: 8.5, bc: 15, baseLabel: "15", sideLabel: "8,5", rLabel: "?" },
       keyFormula: "Отрезки касательных от вершины равны полупериметру",
       hints: [
         "Точка касания окружности со стороной BC делит её пополам — треугольник равнобедренный, а расстояние от вершины B до точки касания равно p−c, где c=AC.",
@@ -6417,8 +6418,8 @@ async function main() {
         kind: "vectorPlane",
         range: 6,
         vectors: [
-          { from: [-3, -2], to: [1, 4], label: "a", color: "pine" },
-          { from: [1, 4], to: [7, 2], label: "b", color: "amber" },
+          { from: [-4, -2], to: [0, 4], label: "a", color: "pine" },
+          { from: [0, 4], to: [6, 2], label: "b", color: "amber" },
         ],
       },
       hints: ["Считайте координаты векторов по клеткам как (конец минус начало): a→(4;6), b→(6;−2)."],
@@ -6480,7 +6481,7 @@ async function main() {
       text: "В прямоугольном параллелепипеде ABCDA₁B₁C₁D₁ известно, что CC₁=9, AB=2, B₁C₁=6. Найдите длину диагонали BD₁.",
       answerType: "NUMBER",
       correctAnswer: "11",
-      diagram: { kind: "box" },
+      diagram: { kind: "box", size: [2, 6, 9], highlightEdges: [[1, 7]], edgeLabels: [{ i: 0, j: 1, label: "2" }, { i: 5, j: 6, label: "6" }, { i: 2, j: 6, label: "9" }, { i: 1, j: 7, label: "?" }] },
       keyFormula: "d = √(a²+b²+c²)",
       hints: ["Диагональ параллелепипеда находится через теорему Пифагора сразу по трём измерениям — не нужно искать промежуточные диагонали граней."],
       explanation: "BD₁²=CC₁²+AB²+B₁C₁²=9²+2²+6²=121 ⟹ BD₁=11.",
@@ -6493,7 +6494,7 @@ async function main() {
       text: "В кубе ABCDA₁B₁C₁D₁ найдите угол между прямыми CD₁ и BC₁. Ответ дайте в градусах.",
       answerType: "NUMBER",
       correctAnswer: "60",
-      diagram: { kind: "box", isCube: true },
+      diagram: { kind: "box", isCube: true, highlightEdges: [[2, 7], [1, 6]] },
       hints: [
         "Проведите AD₁ параллельно BC₁ — тогда искомый угол равен углу AD₁C.",
         "Стороны треугольника AD₁C — диагонали равных квадратных граней куба, значит треугольник равносторонний.",
@@ -6508,7 +6509,7 @@ async function main() {
       text: "В прямоугольном параллелепипеде ABCDA₁B₁C₁D₁ известны длины рёбер: AB=9, AD=12, AA₁=9. Найдите синус угла между прямыми DD₁ и B₁C.",
       answerType: "NUMBER",
       correctAnswer: "0.8",
-      diagram: { kind: "box" },
+      diagram: { kind: "box", size: [9, 12, 9], highlightEdges: [[3, 7], [5, 2]], edgeLabels: [{ i: 0, j: 1, label: "9" }, { i: 0, j: 3, label: "12" }, { i: 0, j: 4, label: "9" }] },
       hints: [
         "DD₁ параллельна BB₁ — значит искомый угол равен углу BB₁C.",
         "Найдите B₁C через теорему Пифагора в прямоугольном треугольнике BB₁C, затем sin как отношение противолежащего катета к гипотенузе.",
@@ -6523,7 +6524,7 @@ async function main() {
       text: "В прямоугольном параллелепипеде ABCDA₁B₁C₁D₁ известно, что AB=9, BC=7, AA₁=6. Найдите объём многогранника, вершинами которого являются точки A, B, C, B₁.",
       answerType: "NUMBER",
       correctAnswer: "63",
-      diagram: { kind: "box" },
+      diagram: { kind: "box", size: [9, 7, 6], highlightEdges: [[0, 5], [2, 5], [0, 2]], edgeLabels: [{ i: 0, j: 1, label: "9" }, { i: 1, j: 2, label: "7" }, { i: 0, j: 4, label: "6" }] },
       keyFormula: "V = (1/3)·Sосн·h",
       hints: ["Это треугольная пирамида с прямоугольным треугольником ABC в основании и высотой BB₁."],
       explanation: "V=(1/3)·(1/2·AB·BC)·BB₁=(1/6)·9·7·6=63.",
@@ -6536,7 +6537,7 @@ async function main() {
       text: "Найдите объём многогранника, вершинами которого являются вершины A, B, C, D, B₁ прямоугольного параллелепипеда ABCDA₁B₁C₁D₁, у которого AB=2, BC=5, BB₁=3.",
       answerType: "NUMBER",
       correctAnswer: "10",
-      diagram: { kind: "box" },
+      diagram: { kind: "box", size: [2, 5, 3], highlightEdges: [[0, 5], [2, 5], [3, 5]], edgeLabels: [{ i: 0, j: 1, label: "2" }, { i: 1, j: 2, label: "5" }, { i: 2, j: 6, label: "3" }] },
       hints: ["Это пирамида с прямоугольником ABCD в основании и высотой BB₁."],
       explanation: "V=(1/3)·Sосн·h=(1/3)·AB·BC·BB₁=(1/3)·2·5·3=10.",
       difficulty: 2,
@@ -6549,7 +6550,7 @@ async function main() {
       text: "В прямоугольном параллелепипеде ABCDA₁B₁C₁D₁ известно, что AB=6, BC=5, AA₁=4. Найдите объём многогранника, вершинами которого являются точки A, B, C, D, A₁, B₁.",
       answerType: "NUMBER",
       correctAnswer: "60",
-      diagram: { kind: "box" },
+      diagram: { kind: "box", size: [6, 5, 4], highlightEdges: [[3, 4], [2, 5]], edgeLabels: [{ i: 0, j: 1, label: "6" }, { i: 1, j: 2, label: "5" }, { i: 0, j: 4, label: "4" }] },
       hints: ["Этот многогранник — ровно половина параллелепипеда (треугольная призма ADA₁BCB₁)."],
       explanation: "V=(1/2)·AB·BC·AA₁=(1/2)·6·5·4=60.",
       difficulty: 2,
@@ -6599,7 +6600,7 @@ async function main() {
     {
       id: stableId("p"),
       skillId: skPrism,
-      diagram: { kind: "triangularPrism" },
+      diagram: { kind: "triangularPrism", midSection: true },
       text: "Площадь боковой поверхности треугольной призмы равна 36. Через среднюю линию основания этой призмы проведена плоскость, параллельная боковой грани. Найдите площадь боковой поверхности отсечённой треугольной призмы.",
       answerType: "NUMBER",
       correctAnswer: "18",
@@ -6611,7 +6612,7 @@ async function main() {
     {
       id: stableId("p"),
       skillId: skPrism,
-      diagram: { kind: "triangularPrism" },
+      diagram: { kind: "triangularPrism", midSection: true },
       text: "Через среднюю линию основания треугольной призмы проведена плоскость, параллельная боковому ребру. Объём отсечённой треугольной призмы равен 5. Найдите объём исходной призмы.",
       answerType: "NUMBER",
       correctAnswer: "20",
@@ -6624,7 +6625,7 @@ async function main() {
     {
       id: stableId("p"),
       skillId: skPrism,
-      diagram: { kind: "triangularPrism" },
+      diagram: { kind: "triangularPrism", midSection: true },
       text: "Через среднюю линию основания правильной треугольной призмы, объём которой равен 84, проведена плоскость, параллельная боковому ребру. Найдите объём отсечённой треугольной призмы.",
       answerType: "NUMBER",
       correctAnswer: "21",
@@ -6636,7 +6637,7 @@ async function main() {
     {
       id: stableId("p"),
       skillId: skPrism,
-      diagram: { kind: "triangularPrism" },
+      diagram: { kind: "triangularPrism", highlightEdges: [[0, 4], [2, 4]], edgeLabels: [{ i: 2, j: 5, label: "8" }] },
       text: "Найдите объём многогранника, вершинами которого являются вершины A, B, C, B₁ правильной треугольной призмы ABCA₁B₁C₁, площадь основания которой равна 6, а боковое ребро равно 8.",
       answerType: "NUMBER",
       correctAnswer: "16",
@@ -6649,7 +6650,7 @@ async function main() {
     {
       id: stableId("p"),
       skillId: skPrism,
-      diagram: { kind: "triangularPrism" },
+      diagram: { kind: "triangularPrism", highlightEdges: [[0, 2], [0, 3], [3, 4], [0, 4], [2, 3], [2, 4]], edgeLabels: [{ i: 2, j: 5, label: "4" }] },
       text: "Найдите объём многогранника, вершинами которого являются вершины A, C, A₁, B₁ правильной треугольной призмы ABCA₁B₁C₁. Площадь основания призмы равна 9, боковое ребро равно 4.",
       answerType: "NUMBER",
       correctAnswer: "12",
@@ -6690,7 +6691,7 @@ async function main() {
       text: "В правильной четырёхугольной пирамиде SABCD точка O — центр основания, S — вершина, SO=48, SC=80. Найдите длину отрезка BD.",
       answerType: "NUMBER",
       correctAnswer: "128",
-      diagram: { kind: "pyramid", showCenter: true },
+      diagram: { kind: "pyramid", showCenter: true, segments: [{ from: "S", to: "O", label: "48" }, { from: "S", to: "C", label: "80" }, { from: "B", to: "D", label: "?", highlight: true }] },
       keyFormula: "OC² = SC² − SO²",
       hints: [
         "SOC — прямоугольный треугольник (SO — высота, перпендикулярна основанию). Найдите OC по теореме Пифагора.",
@@ -6717,7 +6718,7 @@ async function main() {
       text: "В правильной четырёхугольной пирамиде SABCD с основанием ABCD боковое ребро SC равно 17, сторона основания равна 15√2. Найдите объём пирамиды.",
       answerType: "NUMBER",
       correctAnswer: "1200",
-      diagram: { kind: "pyramid", showCenter: true },
+      diagram: { kind: "pyramid", showCenter: true, segments: [{ from: "S", to: "C", label: "17" }, { from: "A", to: "B", label: "15√2" }] },
       hints: [
         "Найдите диагональ квадрата AC через теорему Пифагора для стороны основания, затем половину диагонали AO.",
         "SO найдите через теорему Пифагора в треугольнике AOS (SO⊥AO, гипотенуза SA=SC=17).",
@@ -6813,7 +6814,7 @@ async function main() {
       text: "Высота конуса равна 16, а диаметр основания равен 60. Найдите длину образующей конуса.",
       answerType: "NUMBER",
       correctAnswer: "34",
-      diagram: { kind: "cone" },
+      diagram: { kind: "cone", r: 30, h: 16, hLabel: "16", dLabel: "60", slantLabel: "?" },
       keyFormula: "l² = r²+h²",
       hints: ["Радиус — половина диаметра. Высота, радиус и образующая связаны теоремой Пифагора."],
       explanation: "r=30. l²=16²+30²=256+900=1156 ⟹ l=34.",
@@ -7048,7 +7049,7 @@ async function main() {
       text: "Радиус основания конуса равен 5, высота равна 3. Через вершину конуса проведена плоскость сечения так, что угол между боковыми сторонами полученного в сечении треугольника — прямой. Найдите площадь этого сечения.",
       answerType: "DETAILED",
       correctAnswer: "17",
-      diagram: { kind: "cone", section: { angleA: 55, angleB: 125, labelA: "A", labelB: "B" } },
+      diagram: { kind: "cone", r: 5, h: 3, rLabel: "5", hLabel: "3", section: { angleA: 35, angleB: 145, labelA: "A", labelB: "B" } },
       keyFormula: "l²=r²+h²;  S=(1/2)·l² (при прямом угле при вершине)",
       hints: [
         "Образующая конуса l=√(r²+h²). Проверьте, что хорда AB=l√2 не превышает диаметр основания — иначе такое сечение невозможно.",
@@ -7068,9 +7069,9 @@ async function main() {
       diagram: {
         kind: "cylinder",
         points: [
-          { angle: 0, label: "A", base: "bottom" },
-          { angle: 180, label: "B", base: "bottom" },
-          { angle: 90, label: "C", base: "top" },
+          { angle: 20, label: "A", base: "bottom" },
+          { angle: 200, label: "B", base: "bottom" },
+          { angle: 110, label: "C", base: "top" },
         ],
         segments: [
           ["A", "B"],
@@ -7266,7 +7267,7 @@ async function main() {
         funcType: "exponential",
         params: { a: 1, h: 0, v: 0, base: 5 },
         markedPoints: [{ x: 0, y: 1 }, { x: 1, y: 5 }],
-        range: 3,
+        range: 6,
       },
       keyFormula: "y = aˣ",
       hints: ["Точка (0;1) не даёт информации (a⁰=1 всегда). Подставьте вторую точку (1;5), чтобы найти основание a."],
@@ -7473,7 +7474,7 @@ async function main() {
         funcType: "sqrt",
         params: { a: -3, h: 0, v: 2 },
         markedPoints: [{ x: 0, y: 2 }, { x: 4, y: -4 }],
-        range: 18,
+        range: 8,
       },
       hints: [
         "Вершина (0;2) сразу даёт p=2. Подставьте вторую точку в y=k√x+2, чтобы найти k.",
@@ -7630,6 +7631,7 @@ async function main() {
           { x: 6.5, y: 1 },
           { x: 7, y: 1.5 },
         ],
+        markedXPoints: [{ x: -4, label: "-4" }, { x: 7, label: "7" }],
         xRange: [-5, 8],
         yRange: [-3, 3],
       },
@@ -7720,7 +7722,8 @@ async function main() {
           { x: -12, y: 1.5 },
           { x: -9, y: -1.5 },
           { x: -6, y: 1 },
-          { x: -4, y: -0.5 },
+          { x: -4, y: 0.8 },
+          { x: -2.5, y: -0.8 },
           { x: -1, y: 1.5 },
           { x: 3, y: 3 },
         ],
@@ -7751,6 +7754,7 @@ async function main() {
           { x: 6, y: 1.5 },
         ],
         markedXPoints: [{ x: -2, label: "-2" }],
+        markedPoints: [{ x: -2, y: 4 }],
         xRange: [-5, 7],
         yRange: [-2, 5],
       },
@@ -7777,7 +7781,7 @@ async function main() {
           { x: 3, y: 2.5 },
           { x: 6, y: -1 },
           { x: 8, y: 1.5 },
-          { x: 9, y: 2 },
+          { x: 9, y: 0.5 },
         ],
         markedXPoints: [
           { x: -7, label: "x1" },
@@ -8532,6 +8536,7 @@ async function main() {
   addParams18(db);
   addTask6(db, probTopicId);
   addStereo15(db, stereoTopicId);
+  addNumberTheory20(db);
 
   // ---------------- Демо-данные ниже — только при первом запуске ----------------
   if (isFreshInstall) {
@@ -8834,7 +8839,7 @@ function normalizePlanimetryNumbers(built: DB) {
 const EGE_2026_TO_2027: Record<number, number | undefined> = {
   6: 7, 7: 8, 8: 9, 9: 10, 10: 11, 11: 12, 12: undefined, 13: 14, 14: 15, 15: 16, 16: 13,
 };
-const EGE_2027_NATIVE = ["prm_", "d17_", "rv6_", "st15_"];
+const EGE_2027_NATIVE = ["prm_", "d17_", "rv6_", "st15_", "nt20_"];
 function toEge2027Numbers(built: DB) {
   for (const p of built.problems) {
     // Контент из scripts/content/* уже размечен по ЕГЭ-2027.

@@ -9,27 +9,15 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--app-sat))]">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
+      <header className="pt-5">
+        <div className="mx-auto px-4 flex max-w-4xl items-center justify-between">
           <div>
-            <p className="text-xs font-extrabold uppercase tracking-widest text-ink-soft">Admin</p>
             <h1 className="font-display text-xl font-black text-ink">Самостоятельные пользователи</h1>
-          </div>
-          <div className="flex gap-2">
-            <a href="/admin/metrics" className="btn-primary !text-xs">
-              Метрики
-            </a>
-            <a href="/admin/payments" className="btn-secondary !text-xs">
-              Все платежи
-            </a>
-            <a href="/admin/promo" className="btn-secondary !text-xs">
-              Промокоды
-            </a>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 pt-6">
+      <main className="mx-auto max-w-4xl px-4 pt-6">
         {pendingDeletions.length > 0 && (
           <div className="mb-6 rounded-2xl border-2 border-coral-light bg-coral-light/20 p-4">
             <p className="mb-3 font-display text-sm font-black text-coral">

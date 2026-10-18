@@ -4,7 +4,8 @@ import TeacherShell from "@/components/TeacherShell";
 import TelegramConnectCard from "@/components/TelegramConnectCard";
 import TeacherTelegramPrefs from "@/components/TeacherTelegramPrefs";
 
-export default async function TeacherSettingsPage({ searchParams }: { searchParams: { telegram?: string } }) {
+export default async function TeacherSettingsPage(props: { searchParams: Promise<{ telegram?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
 
   return (

@@ -4,11 +4,12 @@ import StudentShell from "@/components/StudentShell";
 import ReviewFlow from "@/components/ReviewFlow";
 import Mascot from "@/components/Mascot";
 
-export default async function ReviewPage({
-  searchParams,
-}: {
-  searchParams: { topic?: string };
-}) {
+export default async function ReviewPage(
+  props: {
+    searchParams: Promise<{ topic?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   const due = await getDueReviewProblems(user.id);
 
@@ -36,7 +37,7 @@ export default async function ReviewPage({
               <p className="font-display text-lg font-black text-ink">Повторять пока нечего</p>
               <p className="mt-1 text-sm text-ink-soft">
                 Решённые задачи появятся здесь через некоторое время — так работает
-                интервальное повторение: чем лучше вы помните задачу, тем реже она
+                интервальное повторение: чем лучше ты помнишь задачу, тем реже она
                 возвращается.
               </p>
               <a href={backHref} className="btn-primary mt-5 inline-block !text-sm">

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useRef, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { answerQuestionAction, AnswerQuestionState } from "@/app/actions-questions";
 
 function Submit() {
@@ -14,13 +15,14 @@ function Submit() {
 }
 
 export default function AnswerQuestionForm({ questionId }: { questionId: string }) {
-  const [state, action] = useFormState<AnswerQuestionState, FormData>(answerQuestionAction, null);
+  const [state, action, actionPending] = useActionState<AnswerQuestionState, FormData>(answerQuestionAction, null);
+  const keepAction = useKeepFormValues(actionPending);
   const ref = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (state?.ok) ref.current?.reset();
   }, [state]);
   return (
-    <form ref={ref} action={action} className="mt-3 space-y-2">
+    <form ref={ref} action={action} onSubmit={keepAction} className="mt-3 space-y-2">
       <input type="hidden" name="questionId" value={questionId} />
       <label className="sr-only" htmlFor={`a-${questionId}`}>Ответ ученику</label>
       <textarea

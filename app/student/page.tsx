@@ -29,6 +29,8 @@ import {
   getUserById,
 } from "@/lib/queries";
 import NextLessonCard from "@/components/NextLessonCard";
+import TeacherInviteBanner from "@/components/TeacherInviteBanner";
+import { getPendingInvitesForStudent } from "@/lib/teacher-invites";
 import { pluralRu } from "@/lib/pluralize";
 import StudentDashboardHeader, { DailyGoalBar } from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
@@ -38,7 +40,8 @@ import { targetScoreRecommendation } from "@/lib/curriculum-recommendations";
 import Mascot from "@/components/Mascot";
 import VerticalSkillPath from "@/components/VerticalSkillPath";
 import HorizontalSkillPath from "@/components/HorizontalSkillPath";
-import { IconCrown } from "@/components/icons";
+import { IconCrown, IconStar, IconFlame } from "@/components/icons";
+import StatChip from "@/components/StatChip";
 
 const GEO_TIPS = [
   "Ещё немного — и цель дня закрыта. Серия не оборвётся!",
@@ -47,11 +50,12 @@ const GEO_TIPS = [
   "Повторение без энергии — отличный способ занять свободную минуту.",
 ];
 
-export default async function StudentDashboard({
-  searchParams,
-}: {
-  searchParams: { topic?: string };
-}) {
+export default async function StudentDashboard(
+  props: {
+    searchParams: Promise<{ topic?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
 
   // Все 12 запросов ниже зависят только от user.id, известного уже сейчас —
@@ -102,7 +106,7 @@ export default async function StudentDashboard({
   // Без ?topic= берём последний выбранный предмет из cookie (RememberTopic),
   // иначе после перехода по вкладкам «Путь» сбрасывался на первый предмет.
   const defaultTopic = curriculum[0];
-  const savedTopicId = cookies().get(TOPIC_COOKIE)?.value;
+  const savedTopicId = (await cookies()).get(TOPIC_COOKIE)?.value;
   const selectedTopic =
     curriculum.find((t) => t.topic.id === searchParams.topic) ??
     curriculum.find((t) => t.topic.id === savedTopicId) ??
@@ -118,6 +122,11 @@ export default async function StudentDashboard({
   const pendingHw = allHw.filter((_, i) => !hwStatuses[i].complete);
 
   const standalone = isStandaloneStudent(user);
+  // Приглашения от репетиторов — только у самостоятельного ученика.
+  const invites = standalone ? await getPendingInvitesForStudent(user.id) : [];
+  // Рендерим всегда (пустой список → null): после «Принять» страница
+  // перерисовывается, а баннер остаётся смонтированным и показывает «Готово».
+  const inviteBanner = <TeacherInviteBanner invites={invites.map((i) => ({ id: i.id, teacherName: i.teacherName }))} />;
   const isFreeStandalone = standalone && !isEffectivelyPro(user);
   const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : null;
 
@@ -181,7 +190,7 @@ export default async function StudentDashboard({
         Осталось {remaining} {pluralRu(remaining, ["задача", "задачи", "задач"])} · ~{estMinutes} мин
         {energy !== null && Number.isFinite(energy) && ` · ${remaining} ${pluralRu(remaining, ["энергия", "энергии", "энергии"])}`}
       </p>
-      <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
+      <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine-strong px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
         {isNewbie ? "Начать →" : "Решать дальше →"}
       </span>
     </a>
@@ -226,7 +235,7 @@ export default async function StudentDashboard({
           {pendingHw.length} {pluralRu(pendingHw.length, ["задание", "задания", "заданий"])}
         </p>
         <p className="text-[12px] font-semibold text-ink-soft">
-          {pendingHw.length > 0 ? "ждут выполнения" : allHw.length > 0 ? "всё выполнено" : standalone && !isEffectivelyPro(user) ? "в Pro" : "пока нет"}
+          {pendingHw.length > 0 ? pluralRu(pendingHw.length, ["ждёт выполнения", "ждут выполнения", "ждут выполнения"]) : allHw.length > 0 ? "всё выполнено" : standalone && !isEffectivelyPro(user) ? "в Pro" : "пока нет"}
         </p>
       </a>
     </>
@@ -259,6 +268,7 @@ export default async function StudentDashboard({
         />
         {selectedTopic && <RememberTopic topicId={selectedTopic.topic.id} />}
         <main className="space-y-4 px-[18px] py-4">
+          {inviteBanner}
           <DailyGoalBar done={dailyGoal.done} total={dailyGoal.total} streak={streak} />
           <NextLessonCard lessons={nextLessons} teacherName={teacher?.name} />
           {(() => {
@@ -327,6 +337,7 @@ export default async function StudentDashboard({
         />
         <div className="ml-[236px] flex gap-6 px-8 py-6">
           <main className="min-w-0 flex-1 space-y-5">
+            {inviteBanner}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[12px] font-black uppercase tracking-wide text-ink-soft">{todayLabel}</p>
@@ -337,17 +348,31 @@ export default async function StudentDashboard({
                 </h1>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded-pill bg-amber-light px-3 py-1.5 text-[13px] font-black text-amber-text">
-                  ⚡ {xp} XP
-                </span>
-                {/* Серия 0 — нейтрально, как в мобильной шапке. Колокольчик уже есть в боковой панели. */}
-                <span
-                  className={`rounded-pill px-3 py-1.5 text-[13px] font-black ${
-                    streak > 0 ? "bg-coral-light text-coral-text" : "border border-line bg-white text-ink-soft"
-                  }`}
+                <StatChip
+                  size="sm"
+                  label={`Опыт: ${xp} XP`}
+                  className="bg-pine-light text-pine-dark"
+                  title={`Опыт: ${xp} XP`}
+                  text="+10 XP за каждую решённую задачу и бонус за урок без ошибок. Опыт повышает уровень."
+                  href="/student/profile"
+                  linkLabel="Уровень и достижения"
                 >
-                  🔥 {streak}
-                </span>
+                  <IconStar className="h-4 w-4" />
+                  {xp} XP
+                </StatChip>
+                {/* Серия 0 — нейтрально, как в мобильной шапке. Колокольчик уже есть в боковой панели. */}
+                <StatChip
+                  size="sm"
+                  label={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])} подряд`}
+                  className={streak > 0 ? "bg-coral-light text-coral-text" : "border border-line bg-white text-ink-soft"}
+                  title={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])}`}
+                  text="Сколько дней подряд ты закрываешь цель дня. Пропустишь день — серия начнётся заново."
+                  href="/student/profile"
+                  linkLabel="Мой прогресс"
+                >
+                  <IconFlame className="h-4 w-4" />
+                  {streak}
+                </StatChip>
               </div>
             </div>
 

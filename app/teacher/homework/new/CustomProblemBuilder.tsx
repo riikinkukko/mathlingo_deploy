@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export interface DraftProblem {
   text: string;
@@ -16,6 +16,17 @@ export default function CustomProblemBuilder() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<DraftProblem>(EMPTY);
   const [added, setAdded] = useState<DraftProblem[]>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // Скрытое поле не шлёт событий — сообщаем форме сами, чтобы счётчик
+  // на кнопке «Назначить задание» учитывал свои задачи.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    rootRef.current?.dispatchEvent(new Event("change", { bubbles: true }));
+  }, [added]);
 
   function addDraft() {
     if (!draft.text.trim() || !draft.correctAnswer.trim()) return;
@@ -29,7 +40,7 @@ export default function CustomProblemBuilder() {
   }
 
   return (
-    <div>
+    <div ref={rootRef}>
       <input type="hidden" name="customProblems" value={JSON.stringify(added)} />
 
       <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-ink-soft">

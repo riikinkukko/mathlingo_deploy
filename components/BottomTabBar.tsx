@@ -49,7 +49,7 @@ export default function BottomTabBar({
             className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-0.5 px-0.5"
           >
             <span className="relative">
-              <Icon className={`h-[22px] w-[22px] ${active ? "text-pine" : "text-line"}`} />
+              <Icon className={`h-[22px] w-[22px] ${active ? "text-pine" : "text-ink-soft"}`} />
               {!!tab.badge && tab.badge > 0 && (
                 <span className="absolute -right-2 -top-1 flex h-3.5 min-w-[14px] items-center justify-center rounded-pill bg-violet px-1 text-[9px] font-black text-white">
                   {tab.badge}
@@ -57,7 +57,7 @@ export default function BottomTabBar({
               )}
             </span>
             <span
-              className={`text-[10px] leading-none ${
+              className={`text-[11px] leading-none ${
                 active ? "font-black text-pine-dark" : "font-bold text-ink-soft"
               }`}
             >

@@ -84,6 +84,23 @@ export async function checkPromo(rawCode: unknown, user: User, now: Date = new D
       .where(and(eq(schema.payments.userId, user.id), eq(schema.payments.paymentType, type), eq(schema.payments.status, "succeeded")))
       .limit(1);
     if (paid) return { ok: false, error: "Скидка по промокоду действует только на первую оплату" };
+    // Лимит использований считаем вместе с ещё не оплаченными платежами по
+    // коду за последние 2 часа: иначе до первого успешного платежа можно
+    // открыть сколько угодно платежей со скидкой сверх лимита.
+    if (promo.maxUses !== null) {
+      const [{ n }] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.payments)
+        .where(
+          and(
+            eq(schema.payments.promoCode, code),
+            eq(schema.payments.status, "pending"),
+            sql`${schema.payments.userId} <> ${user.id}`,
+            sql`${schema.payments.createdAt} > now() - interval '2 hours'`
+          )
+        );
+      if (promo.usedCount + n >= promo.maxUses) return { ok: false, error: "Промокод уже использовали максимальное число раз" };
+    }
   }
   return { ok: true, promo, label: promoLabel(promo) };
 }

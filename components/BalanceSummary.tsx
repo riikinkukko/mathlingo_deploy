@@ -4,22 +4,22 @@ import { pluralRu } from "@/lib/pluralize";
 
 const LESSONS: [string, string, string] = ["занятие", "занятия", "занятий"];
 
-/** Текстовый статус баланса: "осталось 3 занятия" / "долг 2 занятия" / "в расчёте". */
+/** Текстовый статус баланса: "осталось 3 занятия" / "долг 2 занятия" / "долгов нет". */
 export function balanceLabel(balance: number): string {
   if (balance > 0) return `осталось ${balance} ${pluralRu(balance, LESSONS)}`;
   if (balance < 0) {
     const n = -balance;
     return `долг ${n} ${pluralRu(n, LESSONS)}`;
   }
-  return "в расчёте";
+  return "долгов нет";
 }
 
-/** Статус баланса с учётом рублей: «долг 3 200 ₽» / «оплачено вперёд 2 000 ₽» / «в расчёте». */
+/** Статус баланса с учётом рублей: «долг 3 200 ₽» / «оплачено вперёд 2 000 ₽» / «долгов нет». */
 export function balanceText(b: StudentBalance): string {
   if (b.balanceRub === null) return balanceLabel(b.balance);
   if (b.balanceRub < 0) return `долг ${formatRub(-b.balanceRub)}`;
   if (b.balanceRub > 0) return `оплачено вперёд ${formatRub(b.balanceRub)}`;
-  return "в расчёте";
+  return "долгов нет";
 }
 
 export function balanceTone(b: StudentBalance): string {

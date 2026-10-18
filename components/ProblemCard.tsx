@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import PaidReviewOffer from "./PaidReviewOffer";
 import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
-import { IconLightbulb, IconBook, IconCheck, IconClipboard } from "./icons";
+import { IconLightbulb, IconBook, IconCheck, IconClipboard, IconBattery } from "./icons";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
 import { ymGoal } from "@/lib/ym";
 import DiagramScratchpad from "./diagrams/DiagramScratchpad";
@@ -14,6 +14,7 @@ import AskTeacherButton from "./AskTeacherButton";
 import { hasSavedSketch, loadSketch, renderSketchJpeg } from "@/lib/sketch";
 import { fileToJpeg } from "@/lib/image-compress";
 import type { ReviewInfo } from "@/lib/queries";
+import { scoreLabel } from "@/lib/ege-points";
 
 /** Фото решения ученика — с пометками репетитора, если они есть. */
 function ReviewPhoto({ review }: { review: ReviewInfo }) {
@@ -28,6 +29,16 @@ function ReviewPhoto({ review }: { review: ReviewInfo }) {
         {marked ? "Пометки репетитора · нажми, чтобы открыть крупно" : "Твоё фото · нажми, чтобы открыть крупно"}
       </span>
     </a>
+  );
+}
+
+/** «2 из 3 баллов» — баллы репетитора по критериям ФИПИ, если он их ставил. */
+function ReviewScore({ review }: { review: ReviewInfo }) {
+  if (review.score === undefined || review.maxScore === undefined) return null;
+  return (
+    <span className="rounded-pill bg-white px-2.5 py-0.5 text-[12px] font-black text-ink">
+      {scoreLabel(review.score, review.maxScore)}
+    </span>
   );
 }
 
@@ -49,6 +60,7 @@ export default function ProblemCard({
   onWrong,
   onOpenTheory,
   canAskTeacher = false,
+  stickySubmit = false,
 }: {
   problem: PublicProblem;
   status: ProblemCardStatus;
@@ -69,6 +81,9 @@ export default function ProblemCard({
   onOpenTheory?: () => void;
   /** Кнопка «Не понял — спросить репетитора» (только у учеников репетитора). */
   canAskTeacher?: boolean;
+  /** Урок на телефоне: «Проверить» в закреплённой нижней панели — там же,
+   * где потом появляется «Дальше» (LessonFlow), чтобы кнопка не прыгала. */
+  stickySubmit?: boolean;
 }) {
   const isDetailed = problem.answerType === "DETAILED";
   const [answer, setAnswer] = useState(previousAnswer ?? "");
@@ -128,10 +143,42 @@ export default function ProblemCard({
   const [serverError, setServerError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const answerInputRef = useRef<HTMLInputElement>(null);
+  const hintRef = useRef<HTMLDivElement>(null);
+  // Пустая отправка — раньше кнопка молча ничего не делала и казалась сломанной.
+  const [emptyError, setEmptyError] = useState(false);
+
+  // После неверного ответа подсказка должна оказаться на экране. Раньше поле
+  // получало autoFocus, клавиатура открывалась заново и закрывала подсказку
+  // (а на 1280×720 подсказка просто уезжала ниже первого экрана).
+  useEffect(() => {
+    if (shakeSeq === 0) return;
+    answerInputRef.current?.blur();
+    const t = setTimeout(() => {
+      const el = hintRef.current;
+      if (!el) return;
+      // scrollIntoView({block:"nearest"}) не учитывает закреплённую нижнюю
+      // панель с «Проверить» (scroll-margin в Chrome тут игнорируется), поэтому
+      // докручиваем сами: низ подсказки — над панелью, верх — не под шапкой урока.
+      const r = el.getBoundingClientRect();
+      const bottomBar = stickySubmit && window.innerWidth < 1024 ? 104 : 16;
+      const topBar = 72;
+      const overBottom = r.bottom - (window.innerHeight - bottomBar);
+      if (overBottom > 0) {
+        window.scrollBy({ top: Math.min(overBottom, Math.max(0, r.top - topBar)), behavior: "smooth" });
+      } else if (r.top < topBar) {
+        el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }, 60);
+    return () => clearTimeout(t);
+  }, [shakeSeq, stickySubmit]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!answer.trim() && !(isDetailed && solutionImage)) return;
+    if (!answer.trim() && !(isDetailed && solutionImage)) {
+      setEmptyError(true);
+      return;
+    }
+    setEmptyError(false);
     startTransition(async () => {
       await runSubmit();
     });
@@ -206,7 +253,7 @@ export default function ProblemCard({
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
           {problem.egeTaskNumber && (
-            <span className="rounded-pill bg-amber-light px-2.5 py-1 text-[11px] font-extrabold text-amber-text">
+            <span className="whitespace-nowrap rounded-pill bg-amber-light px-2.5 py-1 text-[11px] font-extrabold text-amber-text">
               ЕГЭ №{problem.egeTaskNumber}
             </span>
           )}
@@ -309,7 +356,7 @@ export default function ProblemCard({
               </span>
             )}
           </button>
-          <p className="mb-4 text-[11px] font-bold text-ink-soft">
+          <p className="mb-4 text-[12px] font-bold text-ink-soft">
             {hasSketch ? "Пометки сохранены — нажми, чтобы продолжить" : "Нажми на чертёж, чтобы чертить и решать"}
           </p>
         </>
@@ -337,9 +384,12 @@ export default function ProblemCard({
         {problem.text}
       </p>
 
-      {needsRevision && (feedback || rev?.image) && !pendingReview && (
+      {needsRevision && (feedback || rev?.image || rev?.score !== undefined) && !pendingReview && (
         <div className="mb-4 rounded-2xl border-2 border-coral-light bg-coral-light p-3.5 text-sm">
-          <p className="mb-1 font-extrabold text-coral">Репетитор просит доработать:</p>
+          <p className="mb-1 flex flex-wrap items-center gap-2 font-extrabold text-coral">
+            Репетитор просит доработать{feedback ? ":" : ""}
+            {rev && <ReviewScore review={rev} />}
+          </p>
           {feedback && <p className="whitespace-pre-wrap text-ink-soft">{feedback}</p>}
           {rev && <ReviewPhoto review={rev} />}
         </div>
@@ -347,7 +397,10 @@ export default function ProblemCard({
 
       {solved && rev?.approved && (
         <div className="mb-4 rounded-2xl border-2 border-pine-light bg-pine-light/60 p-3.5 text-sm">
-          <p className="mb-1 font-extrabold text-pine-dark">Комментарий репетитора</p>
+          <p className="mb-1 flex flex-wrap items-center gap-2 font-extrabold text-pine-dark">
+            {rev.feedback || rev.image ? "Комментарий репетитора" : "Проверено репетитором"}
+            <ReviewScore review={rev} />
+          </p>
           {rev.feedback && <p className="whitespace-pre-wrap text-ink-soft">{rev.feedback}</p>}
           <ReviewPhoto review={rev} />
         </div>
@@ -355,7 +408,7 @@ export default function ProblemCard({
 
       {pendingReview && (
         <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4 text-sm">
-          <p className="mb-2 font-extrabold text-amber">Решение отправлено на проверку</p>
+          <p className="mb-2 font-extrabold text-amber-text">Решение отправлено на проверку</p>
           {answer && answer !== "(решение на фото)" && <p className="whitespace-pre-wrap text-ink-soft">{answer}</p>}
           {rev?.image && !needsRevision && <ReviewPhoto review={rev} />}
           {!rev?.image && (!answer || answer === "(решение на фото)") && (
@@ -378,10 +431,13 @@ export default function ProblemCard({
                 placeholder={
                   solutionImage
                     ? "Можно добавить пояснение или ответ (необязательно)"
-                    : "Опишите решение: что дано, какие теоремы применяете, шаги, ответ. Или приложите фото решения из тетради."
+                    : "Опиши решение: что дано, какие теоремы применяешь, шаги, ответ. Или приложи фото из тетради."
                 }
                 value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
+                onChange={(e) => {
+                  setAnswer(e.target.value);
+                  if (emptyError) setEmptyError(false);
+                }}
                 disabled={pending}
               />
               {solutionImage ? (
@@ -444,26 +500,61 @@ export default function ProblemCard({
                 } ${shakeSeq > 0 ? "animate-shake" : ""}`}
                 key={shakeSeq}
               >
+                {/* inputMode="decimal" — цифровая клавиатура с запятой. Минуса и «/»
+                    на ней нет (на iOS), поэтому они есть в MathKeyboard ниже:
+                    ответы бывают отрицательными и дробями a/b. */}
                 <input
                   ref={answerInputRef}
                   className="w-full bg-transparent font-mono text-[20px] font-black text-ink outline-none placeholder:text-ink-soft/50"
                   placeholder="Ответ"
+                  aria-label="Ответ"
+                  aria-invalid={emptyError || !!wrongState}
+                  aria-describedby={emptyError ? `empty-${problem.id}` : undefined}
                   value={answer}
-                  onChange={(e) => setAnswer(e.target.value)}
+                  onChange={(e) => {
+                    setAnswer(e.target.value);
+                    if (emptyError) setEmptyError(false);
+                  }}
                   disabled={pending}
-                  autoFocus={shakeSeq > 0}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
                 />
               </div>
-              <MathKeyboard inputRef={answerInputRef} onInsert={setAnswer} />
+              <MathKeyboard
+                inputRef={answerInputRef}
+                onInsert={(v) => {
+                  setAnswer(v);
+                  if (emptyError) setEmptyError(false);
+                }}
+              />
             </>
           )}
-          <button
-            className="btn-primary !h-14 w-full !text-base"
-            type="submit"
-            disabled={pending}
+          {emptyError && (
+            <p id={`empty-${problem.id}`} role="alert" className="text-[13px] font-bold text-coral-text">
+              {isDetailed ? "Напиши решение или приложи фото" : "Сначала введи ответ"}
+            </p>
+          )}
+          <div
+            className={
+              stickySubmit
+                ? "fixed inset-x-0 bottom-0 z-30 border-t border-line-soft bg-white px-4 pb-[max(16px,var(--app-sab))] pt-3 lg:static lg:z-auto lg:border-0 lg:bg-transparent lg:p-0"
+                : ""
+            }
           >
-            {pending ? "Отправляем…" : isDetailed ? "Отправить на проверку" : "Проверить"}
-          </button>
+            <div className={stickySubmit ? "mx-auto max-w-2xl" : ""}>
+              <button
+                className="btn-primary !h-14 w-full !text-base"
+                type="submit"
+                disabled={pending}
+              >
+                {pending ? "Отправляем…" : isDetailed ? "Отправить на проверку" : "Проверить"}
+              </button>
+            </div>
+          </div>
         </form>
       )}
 
@@ -475,7 +566,10 @@ export default function ProblemCard({
 
       {noEnergy && (
         <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4">
-          <p className="mb-1 font-extrabold text-amber">⚡ Энергия закончилась</p>
+          <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber-text">
+            <IconBattery className="h-4 w-4 shrink-0" />
+            Энергия закончилась
+          </p>
           {noEnergyUnverified ? (
             <>
               <p className="mb-3 text-sm text-ink-soft">
@@ -512,12 +606,15 @@ export default function ProblemCard({
         </p>
       )}
       {wrongState && !correctResult && (
-        <div className="mt-4 flex animate-slide-up-fade items-start gap-2.5 rounded-2xl border-2 border-amber-light bg-amber-light p-3.5 text-sm leading-relaxed">
+        <div
+          ref={hintRef}
+          className="mt-4 flex animate-slide-up-fade items-start gap-2.5 rounded-2xl border-2 border-amber-light bg-amber-light p-3.5 text-sm leading-relaxed"
+        >
           {allowHints && <Mascot mood="thinking" size={40} float={false} className="mt-0.5 shrink-0" />}
           <div className="min-w-0 flex-1">
           {allowHints ? (
             <>
-              <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber">
+              <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber-text">
                 <IconLightbulb className="h-4 w-4 shrink-0" />
                 Пока не то. Подсказка:
               </p>
@@ -545,8 +642,8 @@ export default function ProblemCard({
               )}
             </>
           ) : (
-            <p className="font-extrabold text-amber">
-              Неверно. Это контрольный режим — подсказки и разбор недоступны, попробуйте ещё раз.
+            <p className="font-extrabold text-amber-text">
+              Неверно. Это контрольный режим — подсказки и разбор недоступны, попробуй ещё раз.
             </p>
           )}
           </div>
@@ -562,7 +659,7 @@ export default function ProblemCard({
             <p className="mb-1 flex items-center gap-1.5 font-extrabold">
               <IconCheck className="h-4 w-4 shrink-0" />
               {selfChecked
-                ? "Решение принято — сверьтесь с эталоном ниже"
+                ? "Решение принято — сверься с эталоном ниже"
                 : isDetailed
                   ? "Преподаватель проверил — верно!"
                   : "Верно!"}

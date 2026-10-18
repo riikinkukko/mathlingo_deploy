@@ -1,8 +1,10 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
 import MobileAppBar from "./MobileAppBar";
-import { IconGrid, IconBolt, IconFlame, IconBattery } from "./icons";
-import { getNotificationsForUser, getUnreadNotificationCount } from "@/lib/queries";
+import StatChip from "./StatChip";
+import { IconGrid, IconStar, IconFlame, IconBattery } from "./icons";
+import { getNotificationsForUser, getUnreadNotificationCount, ENERGY_RECHARGE_MINUTES } from "@/lib/queries";
+import { pluralRu } from "@/lib/pluralize";
 
 /**
  * Шапка главной ученика на телефоне — та же MobileAppBar (56 px), что и на
@@ -46,29 +48,55 @@ export default async function StudentDashboardHeader({
       }
       right={
         <>
-          <span
-            aria-label={`Серия: ${streak} дн.`}
-            className={`flex h-9 items-center gap-1 rounded-pill px-2.5 text-[14px] font-black ${streakCls}`}
+          <StatChip
+            label={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])} подряд`}
+            className={streakCls}
+            title={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])}`}
+            text="Сколько дней подряд ты закрываешь цель дня. Пропустишь день — серия начнётся заново."
+            href="/student/profile"
+            linkLabel="Мой прогресс"
           >
             <IconFlame className="h-4 w-4" />
             {streak}
-          </span>
-          <span
-            aria-label={`Опыт: ${xp}`}
-            className="flex h-9 items-center gap-1 rounded-pill bg-pine-light px-2.5 text-[14px] font-black text-pine-dark"
+          </StatChip>
+          <StatChip
+            label={`Опыт: ${xp} XP`}
+            className="bg-pine-light text-pine-dark"
+            title={`Опыт: ${xp} XP`}
+            text="+10 XP за каждую решённую задачу и бонус за урок без ошибок. Опыт повышает уровень."
+            href="/student/profile"
+            linkLabel="Уровень и достижения"
           >
-            <IconBolt className="h-4 w-4" />
+            <IconStar className="h-4 w-4" />
             {xp}
-          </span>
+          </StatChip>
           {energy !== null && (
-            <a
+            <StatChip
+              label={Number.isFinite(energy) ? `Энергия: ${energy} из ${energyMax}` : "Энергия без ограничений"}
+              className={energy === 0 ? "bg-coral-light text-coral-text" : "bg-teal-light text-teal-text"}
+              title={Number.isFinite(energy) ? `Энергия: ${energy} из ${energyMax}` : "Энергия без ограничений"}
+              text={
+                Number.isFinite(energy)
+                  ? `Каждая новая задача тратит 1 энергию. Восстанавливается +1 каждые ${ENERGY_RECHARGE_MINUTES} мин (нужна подтверждённая почта). Повторение — без энергии.`
+                  : "На Pro энергия не заканчивается — решай сколько хочешь."
+              }
               href="/student/upgrade"
-              aria-label={Number.isFinite(energy) ? `Энергия: ${energy} из ${energyMax}` : "Энергия без ограничений"}
-              className="flex h-9 items-center gap-1 rounded-pill bg-teal-light px-2.5 text-[14px] font-black text-teal-text"
+              linkLabel={Number.isFinite(energy) ? "Безлимит в Pro" : "Мой тариф"}
             >
               <IconBattery className="h-4 w-4" />
-              {Number.isFinite(energy) ? energy : <span className="text-[17px] leading-none">∞</span>}
-            </a>
+              {Number.isFinite(energy) ? (
+                energy < energyMax ? (
+                  <span>
+                    {energy}
+                    <span className="text-[11px] opacity-70">/{energyMax}</span>
+                  </span>
+                ) : (
+                  energy
+                )
+              ) : (
+                <span className="text-[17px] leading-none">∞</span>
+              )}
+            </StatChip>
           )}
           <a
             href="/student/subjects"

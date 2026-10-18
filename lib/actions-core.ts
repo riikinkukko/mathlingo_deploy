@@ -196,7 +196,8 @@ export async function performSubmitAttempt(
           type: "review_pending",
           title: `${user.name}: решение ждёт проверки`,
           body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку${img ? " (с фото)" : ""}.`,
-          link: `/teacher/student/${user.id}`,
+          // Сразу на эту работу в очереди «Проверка решений».
+          link: `/teacher/reviews?id=${attemptId}`,
           telegram,
         });
       });

@@ -40,14 +40,14 @@ export default function DeleteAccountSection({ requestedAt }: { requestedAt?: st
     <div className="mt-6 card p-5">
       <h2 className="mb-1 font-display text-base font-black text-ink">Удаление аккаунта</h2>
       <p className="mb-3 text-sm text-ink-soft">
-        Удаление аккаунта необратимо удалит ваш профиль, историю решённых
+        Удаление аккаунта необратимо удалит твой профиль, историю решённых
         задач и все связанные данные. Обработка запроса занимает до 30 дней.
       </p>
       <button
         type="button"
         disabled={isPending}
         onClick={() => {
-          if (window.confirm("Точно хотите запросить удаление аккаунта? Это необратимо.")) {
+          if (window.confirm("Точно запросить удаление аккаунта? Это необратимо.")) {
             startTransition(() => requestAccountDeletionAction());
           }
         }}

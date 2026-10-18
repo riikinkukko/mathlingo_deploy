@@ -4,7 +4,8 @@ import PublicFooter from "@/components/PublicFooter";
 
 export const metadata = { title: "Новый пароль — Планиметрика" };
 
-export default function ResetPasswordPage({ searchParams }: { searchParams: { token?: string } }) {
+export default async function ResetPasswordPage(props: { searchParams: Promise<{ token?: string }> }) {
+  const searchParams = await props.searchParams;
   const token = searchParams.token;
 
   return (

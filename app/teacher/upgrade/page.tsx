@@ -24,11 +24,12 @@ function fmtDate(d: Date | null) {
 import TrackGoal from "@/components/TrackGoal";
 
 
-export default async function TeacherUpgradePage({
-  searchParams,
-}: {
-  searchParams: { paid?: string; error?: string; promo?: string; promoError?: string; promoOk?: string };
-}) {
+export default async function TeacherUpgradePage(
+  props: {
+    searchParams: Promise<{ paid?: string; error?: string; promo?: string; promoError?: string; promoOk?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
   if (user.role !== "TEACHER") redirect("/login");
 
@@ -42,7 +43,7 @@ export default async function TeacherUpgradePage({
 
   // Код-скидка: из ссылки (?promo=) или запомненный в куке. Ошибку показываем,
   // только если код пришёл явно — устаревшая кука молча игнорируется.
-  const promoRaw = searchParams.promo ?? cookies().get(PROMO_COOKIE)?.value;
+  const promoRaw = searchParams.promo ?? (await cookies()).get(PROMO_COOKIE)?.value;
   let promoError = searchParams.promoError ?? null;
   let activePromo: { code: string; percent: number; label: string } | null = null;
   if (promoRaw && !isOwner) {

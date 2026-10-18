@@ -1,18 +1,21 @@
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import StudentShell from "@/components/StudentShell";
+import Mascot from "@/components/Mascot";
 import { getStudentChecks, PAID_REVIEW_DAYS } from "@/lib/paid-review";
+import { scoreLabel } from "@/lib/ege-points";
 
 export const dynamic = "force-dynamic";
 
 const STATUS: Record<string, { label: string; cls: string }> = {
-  paid: { label: "На проверке", cls: "bg-amber-light text-amber" },
+  paid: { label: "На проверке", cls: "bg-amber-light text-amber-text" },
   approved: { label: "Засчитано", cls: "bg-pine-light text-pine-dark" },
   needs_revision: { label: "Есть что исправить", cls: "bg-coral-light text-coral" },
 };
 
 /** «Мои проверки»: решения, отправленные эксперту за плату, и результаты. */
-export default async function StudentChecksPage({ searchParams }: { searchParams: { paid?: string } }) {
+export default async function StudentChecksPage(props: { searchParams: Promise<{ paid?: string }> }) {
+  const searchParams = await props.searchParams;
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") redirect("/login");
   const checks = await getStudentChecks(user.id);
@@ -27,10 +30,13 @@ export default async function StudentChecksPage({ searchParams }: { searchParams
           </p>
         )}
         {checks.length === 0 ? (
-          <p className="mt-6 text-sm text-ink-soft">
-            Здесь появятся решения, которые ты отправишь на проверку эксперту. Кнопка «Отправить на проверку» — под эталонным решением
-            после того, как решишь задачу второй части.
-          </p>
+          <div className="mt-6 flex flex-col items-center rounded-[20px] border border-line-soft bg-white p-6 text-center">
+            <Mascot mood="thinking" size={88} float={false} />
+            <p className="mt-3 text-sm text-ink-soft">
+              Здесь появятся решения, которые ты отправишь на проверку эксперту. Кнопка «Отправить на проверку» — под эталонным решением
+              после того, как решишь задачу второй части.
+            </p>
+          </div>
         ) : (
           <div className="mt-5 space-y-3">
             {checks.map((c) => {
@@ -42,6 +48,11 @@ export default async function StudentChecksPage({ searchParams }: { searchParams
                     <span className={`rounded-pill px-2.5 py-1 text-[11px] font-black ${st.cls}`}>{st.label}</span>
                   </div>
                   <p className="mt-2 line-clamp-3 text-[14px] font-semibold text-ink">{c.problemText}</p>
+                  {c.status === "done" && c.score !== null && (
+                    <p className="mt-2 inline-flex rounded-pill bg-paper px-2.5 py-1 text-[12px] font-black text-ink">
+                      {scoreLabel(c.score, c.maxScore)}
+                    </p>
+                  )}
                   {c.status === "done" && c.feedback && (
                     <div className="mt-3 rounded-xl bg-paper p-3">
                       <p className="text-[11px] font-black text-ink-soft">Комментарий эксперта</p>

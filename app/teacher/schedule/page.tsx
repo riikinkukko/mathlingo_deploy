@@ -17,11 +17,12 @@ import UpcomingLessons from "@/components/UpcomingLessons";
 import CollapsibleSection from "@/components/CollapsibleSection";
 import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
 
-export default async function SchedulePage({
-  searchParams,
-}: {
-  searchParams: { done?: string; view?: string; week?: string };
-}) {
+export default async function SchedulePage(
+  props: {
+    searchParams: Promise<{ done?: string; view?: string; week?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
   // По умолчанию — сетка на неделю; «Список» — прежняя лента занятий.
   const view = searchParams.view === "list" ? "list" : "week";
   const todayKey = mskDayKey(new Date());
@@ -46,7 +47,7 @@ export default async function SchedulePage({
 
   return (
     <TeacherShell active="schedule" title="Расписание">
-      <main className={`mx-auto px-4 py-6 ${view === "week" ? "max-w-5xl" : "max-w-3xl"}`}>
+      <main className={`mx-auto px-4 py-6 ${view === "week" ? "max-w-5xl lg:max-w-[1280px]" : "max-w-3xl lg:max-w-[1200px]"}`}>
         <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="sr-only lg:not-sr-only font-display text-2xl font-black text-ink">Расписание</h1>
@@ -117,6 +118,9 @@ export default async function SchedulePage({
               </div>
             )}
 
+            {/* Список: на lg форма справа, занятия слева (на телефоне — как раньше, друг под другом). */}
+            <div className={view === "list" ? "lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:gap-x-8" : ""}>
+            <div className={view === "list" ? "lg:col-start-2 lg:row-start-1" : ""}>
             <CollapsibleSection title="Запланировать занятие" defaultOpen={lessons.length === 0}>
               <AddLessonForm
                 students={[...students].sort((a, b) => a.name.localeCompare(b.name, "ru")).map((s) => ({ id: s.id, name: s.name }))}
@@ -130,12 +134,14 @@ export default async function SchedulePage({
                 </p>
               )}
             </CollapsibleSection>
+            </div>
 
             {view === "list" && (
-              <div className="mt-6">
+              <div className="mt-6 lg:col-start-1 lg:row-start-1 lg:mt-0">
                 <UpcomingLessons lessons={lessons} showStudent from="schedule" limit={30} />
               </div>
             )}
+            </div>
           </>
         )}
       </main>

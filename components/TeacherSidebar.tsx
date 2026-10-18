@@ -1,7 +1,31 @@
 import Mascot from "./Mascot";
 import NotificationBell from "./NotificationBell";
 import { logoutAction } from "@/app/actions";
-import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconStar, IconCalendar, IconWallet, IconSettings } from "./icons";
+import {
+  IconUser as IconStudents,
+  IconBook as IconContent,
+  IconCrown,
+  IconStar,
+  IconCalendar,
+  IconWallet,
+  IconSettings,
+  IconGrid,
+  IconLightbulb,
+  IconClipboard,
+  IconCheck,
+} from "./icons";
+
+export type TeacherSection =
+  | "students"
+  | "reviews"
+  | "groups"
+  | "questions"
+  | "checks"
+  | "schedule"
+  | "payments"
+  | "content"
+  | "upgrade"
+  | "settings";
 import { Notification } from "@/lib/types";
 
 export default function TeacherSidebar({
@@ -11,16 +35,27 @@ export default function TeacherSidebar({
   canEditContent,
   notifications,
   unreadCount,
+  openQuestionsCount = 0,
+  paidChecksCount = 0,
+  isReviewer = false,
 }: {
-  active: "students" | "schedule" | "payments" | "content" | "upgrade" | "settings";
+  active: TeacherSection;
   pendingReviewCount: number;
+  openQuestionsCount?: number;
+  paidChecksCount?: number;
+  /** эксперт платных проверок (владелец/админ) — видит раздел «Проверки» */
+  isReviewer?: boolean;
   isAdmin: boolean;
   canEditContent: boolean;
   notifications: Notification[];
   unreadCount: number;
 }) {
   const allItems = [
-    { key: "students", label: "Мои ученики", href: "/teacher", icon: IconStudents, badge: pendingReviewCount },
+    { key: "students", label: "Мои ученики", href: "/teacher", icon: IconStudents, badge: 0 },
+    { key: "reviews", label: "Проверка решений", href: "/teacher/reviews", icon: IconCheck, badge: pendingReviewCount },
+    { key: "groups", label: "Группы", href: "/teacher/groups", icon: IconGrid, badge: 0 },
+    { key: "questions", label: "Вопросы учеников", href: "/teacher/questions", icon: IconLightbulb, badge: openQuestionsCount },
+    { key: "checks", label: "Платные проверки", href: "/teacher/checks", icon: IconClipboard, badge: paidChecksCount },
     { key: "schedule", label: "Расписание", href: "/teacher/schedule", icon: IconCalendar, badge: 0 },
     { key: "payments", label: "Оплаты", href: "/teacher/payments", icon: IconWallet, badge: 0 },
     { key: "content", label: "Контент программы", href: "/teacher/content", icon: IconContent, badge: 0 },
@@ -28,7 +63,10 @@ export default function TeacherSidebar({
     { key: "settings", label: "Настройки", href: "/teacher/settings", icon: IconSettings, badge: 0 },
   ] as const;
   // Редактор общего курса — только владельцу платформы и админам.
-  const items = allItems.filter((i) => i.key !== "content" || canEditContent);
+  // Очередь платных проверок — только экспертам платформы.
+  const items = allItems.filter(
+    (i) => (i.key !== "content" || canEditContent) && (i.key !== "checks" || isReviewer)
+  );
 
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-[236px] flex-col bg-pine-dark px-4 py-5 lg:flex">
@@ -51,7 +89,8 @@ export default function TeacherSidebar({
             <a
               key={item.key}
               href={item.href}
-              className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13.5px] font-bold transition ${
+              aria-current={isActive ? "page" : undefined}
+              className={`flex items-center gap-2 rounded-xl px-2.5 py-2.5 text-[13.5px] font-bold transition ${
                 isActive ? "bg-white text-pine-dark" : "text-white/80 hover:bg-white/10"
               }`}
             >

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useRef, useState, useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { createLessonAction, CreateLessonState } from "@/app/actions-schedule";
 
 function SubmitButton() {
@@ -51,7 +52,8 @@ export default function AddLessonForm({
   /** оставлено для совместимости со старыми вызовами */
   from?: "student" | "schedule";
 }) {
-  const [state, formAction] = useFormState<CreateLessonState, FormData>(createLessonAction, null);
+  const [state, formAction, formActionPending] = useActionState<CreateLessonState, FormData>(createLessonAction, null);
+  const keepFormAction = useKeepFormValues(formActionPending);
   const startsAtRef = useRef<HTMLInputElement>(null);
   const topicRef = useRef<HTMLInputElement>(null);
   const repeatRef = useRef<HTMLSelectElement>(null);
@@ -70,7 +72,7 @@ export default function AddLessonForm({
   }, [state]);
 
   return (
-    <form action={formAction} className="card space-y-3 p-4">
+    <form action={formAction} onSubmit={keepFormAction} className="card space-y-3 p-4">
       {studentId && <input type="hidden" name="studentId" value={studentId} />}
       {groupId && <input type="hidden" name="studentId" value={`g:${groupId}`} />}
 

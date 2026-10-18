@@ -5,7 +5,12 @@ import { resendVerificationEmailAction } from "@/app/actions";
 
 /** reason — что именно не работает без подтверждения (энергия, добавление
  * учеников). Без него показывается общий текст. */
-export default function VerifyEmailReminder({ reason, compact = false }: { reason?: string; compact?: boolean } = {}) {
+/** informal — обращение на «ты» (кабинет ученика); по умолчанию «вы» (репетитор). */
+export default function VerifyEmailReminder({
+  reason,
+  compact = false,
+  informal = false,
+}: { reason?: string; compact?: boolean; informal?: boolean } = {}) {
   const [isPending, startTransition] = useTransition();
   const [sent, setSent] = useState(false);
 
@@ -15,7 +20,11 @@ export default function VerifyEmailReminder({ reason, compact = false }: { reaso
     return (
       <div className="flex items-center gap-3 rounded-2xl bg-amber-light px-4 py-2.5 text-[13px] font-bold text-amber-dark">
         <span className="min-w-0 flex-1">
-          {sent ? "Письмо отправлено — проверьте почту и «Спам»" : reason ?? "Подтвердите email, чтобы не потерять доступ"}
+          {sent
+            ? informal
+              ? "Письмо отправлено — проверь почту и «Спам»"
+              : "Письмо отправлено — проверьте почту и «Спам»"
+            : reason ?? (informal ? "Подтверди email, чтобы не потерять доступ" : "Подтвердите email, чтобы не потерять доступ")}
         </span>
         {!sent && (
           <button
@@ -41,12 +50,16 @@ export default function VerifyEmailReminder({ reason, compact = false }: { reaso
       <p className="mb-1 font-display text-base font-black text-ink">Email не подтверждён</p>
       <p className="mb-3 text-sm text-ink-soft">
         {reason ??
-          "Подтвердите email, чтобы точно не потерять доступ к аккаунту."}{" "}
+          (informal
+            ? "Подтверди email, чтобы точно не потерять доступ к аккаунту."
+            : "Подтвердите email, чтобы точно не потерять доступ к аккаунту.")}{" "}
         Ссылку мы отправили при регистрации — письмо могло затеряться среди
         других или попасть в «Спам».
       </p>
       {sent ? (
-        <p className="text-xs font-bold text-pine-dark">Письмо отправлено ещё раз — проверьте почту.</p>
+        <p className="text-xs font-bold text-pine-dark">
+          Письмо отправлено ещё раз — {informal ? "проверь" : "проверьте"} почту.
+        </p>
       ) : (
         <button
           type="button"

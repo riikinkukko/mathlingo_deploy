@@ -20,19 +20,16 @@ export default async function AdminPromoPage() {
 
   return (
     <div className="min-h-screen bg-paper pb-16">
-      <header className="border-b border-line bg-white px-4 pb-4 pt-[max(1rem,var(--app-sat))]">
-        <div className="mx-auto max-w-3xl">
-          <a href="/admin" className="text-xs font-bold text-ink-soft hover:underline">
-            ← Все пользователи
-          </a>
-          <h1 className="mt-1 font-display text-xl font-black text-ink">Промокоды</h1>
+      <header className="pt-5">
+        <div className="mx-auto px-4 max-w-4xl">
+          <h1 className="font-display text-xl font-black text-ink">Промокоды</h1>
           <p className="text-xs text-ink-soft">
             Ссылка с кодом подставляет его при регистрации: /register/teacher?promo=КОД или /register?promo=КОД
           </p>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-6 px-4 pt-6">
+      <main className="mx-auto max-w-4xl space-y-6 px-4 pt-6">
         <CreatePromoForm appUrl={appUrl} />
 
         <section>

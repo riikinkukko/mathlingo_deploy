@@ -5,9 +5,12 @@ const nextConfig = {
   // само по себе не уязвимость, но упрощает целевой поиск известных CVE
   // под конкретную версию, если она когда-то появится.
   poweredByHeader: false,
-  // instrumentation.ts — пересылка ошибок сервера владельцу в Telegram.
+  // next/image в проекте не используется — оптимизатор /_next/image
+  // отключён целиком (меньше поверхности атаки; в прошлом в нём были CVE).
+  images: { unoptimized: true },
+  // instrumentation.ts (пересылка ошибок сервера владельцу в Telegram) в
+  // Next 15 включён по умолчанию — флаг instrumentationHook больше не нужен.
   experimental: {
-    instrumentationHook: true,
     // Фото решения (сжимается в браузере до ~650 КБ) уходит через серверный
     // экшен; стандартный предел Next — 1 МБ впритык, даём запас.
     serverActions: { bodySizeLimit: "1.5mb" },

@@ -1,8 +1,8 @@
-import { D, givenStyle, unknownStyle, isUnknown, VertexLabel } from "./shared";
+import { D, givenStyle, unknownStyle, isUnknown, VertexLabel, num, fitPoints, segLabelPos, halo, Pt } from "./shared";
 
 function Lbl({ x, y, value }: { x: number; y: number; value: string }) {
   return (
-    <text x={x} y={y} textAnchor="middle" style={isUnknown(value) ? unknownStyle : givenStyle}>
+    <text x={x} y={y} textAnchor="middle" style={{ ...(isUnknown(value) ? unknownStyle : givenStyle), ...halo }}>
       {value}
     </text>
   );
@@ -23,9 +23,33 @@ export default function TriangleSides({
   labelB?: string; // вершина справа внизу
   labelC?: string; // верхняя вершина
 }) {
-  const apex = { x: 130, y: 28 };
-  const left = { x: 55, y: 172 };
-  const right = { x: 245, y: 172 };
+  let apex: Pt = { x: 130, y: 28 };
+  let left: Pt = { x: 55, y: 172 };
+  let right: Pt = { x: 245, y: 172 };
+  // Если все три стороны — числа (и треугольник существует), строим его
+  // по теореме косинусов: тупоугольный 9-10-17 должен и выглядеть тупым.
+  const na = num(a);
+  const nb = num(b);
+  const nc = num(c);
+  if (na && nb && nc && na + nb > nc && na + nc > nb && nb + nc > na) {
+    const px = (nb * nb + na * na - nc * nc) / (2 * nb);
+    const py = Math.sqrt(Math.max(na * na - px * px, 0));
+    const raw = [
+      { x: 0, y: 0 },
+      { x: nb, y: 0 },
+      { x: px, y: -py },
+    ];
+    const { map } = fitPoints(raw, { x0: 45, y0: 30, x1: 255, y1: 172 });
+    [left, right, apex] = raw.map(map);
+    // прижимаем основание к низу холста
+    const shift = 172 - left.y;
+    left = { x: left.x, y: left.y + shift };
+    right = { x: right.x, y: right.y + shift };
+    apex = { x: apex.x, y: apex.y + shift };
+  }
+  const center = { x: (apex.x + left.x + right.x) / 3, y: (apex.y + left.y + right.y) / 3 };
+  const la = segLabelPos(apex, left, center, 14);
+  const lc = segLabelPos(apex, right, center, 14);
 
   return (
     <svg viewBox="0 0 300 200" className="h-full w-full">
@@ -36,9 +60,9 @@ export default function TriangleSides({
         strokeWidth="2.5"
         strokeLinejoin="round"
       />
-      <Lbl x={(apex.x + left.x) / 2 - 18} y={(apex.y + left.y) / 2} value={a} />
-      <Lbl x={150} y={190} value={b} />
-      <Lbl x={(apex.x + right.x) / 2 + 18} y={(apex.y + right.y) / 2} value={c} />
+      <Lbl x={la.x} y={la.y} value={a} />
+      <Lbl x={(left.x + right.x) / 2} y={left.y + 19} value={b} />
+      <Lbl x={lc.x} y={lc.y} value={c} />
       <VertexLabel x={apex.x} y={apex.y} dy={-10}>
         {labelC}
       </VertexLabel>

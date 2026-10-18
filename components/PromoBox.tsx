@@ -50,7 +50,7 @@ export default function PromoBox({
               placeholder="Промокод"
               className="input h-11 flex-1 uppercase"
             />
-            <button type="submit" className="h-11 shrink-0 rounded-xl bg-pine px-4 text-[14px] font-black text-white hover:bg-pine-dark">
+            <button type="submit" className="h-11 shrink-0 rounded-xl bg-pine-strong px-4 text-[14px] font-black text-white hover:bg-pine-dark">
               Применить
             </button>
           </form>

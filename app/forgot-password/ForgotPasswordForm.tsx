@@ -1,6 +1,8 @@
 "use client";
 
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { useKeepFormValues } from "@/lib/use-keep-form-values";
+import { useFormStatus } from "react-dom";
 import { requestPasswordResetAction } from "@/app/actions";
 
 function SubmitButton() {
@@ -13,10 +15,11 @@ function SubmitButton() {
 }
 
 export default function ForgotPasswordForm() {
-  const [state, formAction] = useFormState<{ error?: string; success?: boolean }, FormData>(
+  const [state, formAction, formActionPending] = useActionState<{ error?: string; success?: boolean }, FormData>(
     requestPasswordResetAction,
     {}
   );
+  const keepFormAction = useKeepFormValues(formActionPending);
 
   if (state?.success) {
     return (
@@ -28,7 +31,7 @@ export default function ForgotPasswordForm() {
   }
 
   return (
-    <form action={formAction} className="space-y-4">
+    <form action={formAction} onSubmit={keepFormAction} className="space-y-4">
       <div>
         <label className="label" htmlFor="email">Email</label>
         <input className="input" id="email" name="email" type="email" required placeholder="you@example.ru" />

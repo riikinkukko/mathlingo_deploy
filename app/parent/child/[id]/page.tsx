@@ -14,7 +14,8 @@ import {
   getUpcomingLessonsForStudent,
   getStudentBalance,
 } from "@/lib/queries";
-import { balanceLabel } from "@/components/BalanceSummary";
+import { balanceText } from "@/components/BalanceSummary";
+import { formatRub, hasDebt } from "@/lib/money";
 import { IconCalendar, IconClipboard } from "@/components/icons";
 import GoalCard from "@/components/GoalCard";
 import UpcomingLessons from "@/components/UpcomingLessons";
@@ -36,13 +37,14 @@ const KIND_LABEL: Record<string, string> = {
   exam: "Пробник",
 };
 
-export default async function ChildDetailPage({
-  params,
-  searchParams,
-}: {
-  params: { id: string };
-  searchParams: { telegram?: string };
-}) {
+export default async function ChildDetailPage(
+  props: {
+    params: Promise<{ id: string }>;
+    searchParams: Promise<{ telegram?: string }>;
+  }
+) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const parent = (await getSessionUser())!;
   const isMyChild = await isParentOf(parent.id, params.id);
   const child = await getUserById(params.id);
@@ -76,6 +78,10 @@ export default async function ChildDetailPage({
       : undefined;
 
   const thisWeek = weekly[weekly.length - 1] ?? { solved: 0, accuracy: null };
+  // Занятие с репетитором в ближайшие 7 дней — упоминаем в сводке недели.
+  const lessonSoon = upcomingLessons.find(
+    (l) => new Date(l.startsAt).getTime() - Date.now() < 7 * 24 * 3600 * 1000
+  );
   const hwDone = homeworks.filter((h) => statusById.get(h.id)?.complete).length;
   const hwOverdue = homeworks.filter((h) => statusById.get(h.id)?.overdue).length;
   const nextDue = homeworks
@@ -91,17 +97,24 @@ export default async function ChildDetailPage({
             <p className="text-[13px] font-extrabold text-pine-mint">
               {child.name.split(" ")[0]} · эта неделя
             </p>
+            {/* Речь о самостоятельной практике в приложении, а не об уроках с
+                репетитором: «Неделя без занятий» при занятии завтра сбивало с толку. */}
             <p className="mt-1 font-display text-[22px] font-black leading-tight">
               {stats.activeDaysLast7 > 0
-                ? `Занятия ${stats.activeDaysLast7} ${pluralRu(stats.activeDaysLast7, ["день", "дня", "дней"])} из 7`
-                : "Неделя без занятий"}
+                ? `Практика ${stats.activeDaysLast7} ${pluralRu(stats.activeDaysLast7, ["день", "дня", "дней"])} из 7`
+                : "Задач в приложении пока не было"}
             </p>
             <p className="mt-1.5 text-[14px] text-pine-mint">
               {thisWeek.solved} {pluralRu(thisWeek.solved, ["задача", "задачи", "задач"])}
-              {thisWeek.accuracy !== null ? ` · точность ${thisWeek.accuracy}%` : ""}
+              {thisWeek.accuracy !== null && thisWeek.solved > 0 ? ` · точность ${thisWeek.accuracy}%` : ""}
+              {lessonSoon ? ` · занятие ${lessonWhenLabel(lessonSoon.startsAt, lessonSoon.durationMin).split(" · ")[0].toLowerCase()}` : ""}
             </p>
           </div>
-          <Mascot mood={stats.activeDaysLast7 >= 3 ? "happy" : stats.activeDaysLast7 > 0 ? "idle" : "worried"} size={80} float={false} />
+          <Mascot
+            mood={stats.activeDaysLast7 >= 3 ? "happy" : stats.activeDaysLast7 > 0 || lessonSoon ? "idle" : "worried"}
+            size={80}
+            float={false}
+          />
         </section>
 
         <GoalCard targetScore={child.targetScore} mocks={mocks} readOnly />
@@ -153,11 +166,15 @@ export default async function ChildDetailPage({
           />
           {balance && (
             <SummaryRow
-              tone={balance.balance < 0 ? "bg-coral-light text-coral-text" : "bg-pine-light text-pine-dark"}
+              tone={hasDebt(balance) ? "bg-coral-light text-coral-text" : "bg-pine-light text-pine-dark"}
               icon="₽"
-              title={balanceLabel(balance.balance)}
+              title={
+                hasDebt(balance) && balance.balanceRub !== null
+                  ? `Долг ${formatRub(-balance.balanceRub)}${balance.balance < 0 ? ` (${-balance.balance} ${pluralRu(-balance.balance, ["занятие", "занятия", "занятий"])})` : ""}`
+                  : balanceText(balance).replace(/^\S/, (c) => c.toUpperCase())
+              }
               sub={teacher?.paymentInstructions ? `Как оплатить: ${teacher.paymentInstructions}` : `Оплачено ${balance.paidLessons} · проведено ${balance.doneLessons}`}
-              alert={balance.balance < 0}
+              alert={hasDebt(balance)}
               last
             />
           )}
@@ -234,17 +251,18 @@ export default async function ChildDetailPage({
               return (
                 <div key={hw.id} className="card flex items-center justify-between p-3.5">
                   <div>
-                    <p className="text-[10px] font-extrabold uppercase text-ink-soft">
+                    <p className="text-[11px] font-extrabold uppercase text-ink-soft">
                       {KIND_LABEL[hw.kind] ?? "Задание"}
                     </p>
                     <p className="text-sm font-semibold text-ink">{hw.title}</p>
                     <p className="text-xs text-ink-soft">
                       Срок: {new Date(hw.dueDate).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}
-                      {st.overdue && <span className="ml-2 text-coral">просрочено</span>}
-                      {st.complete && <span className="ml-2 text-pine">выполнено</span>}
+                      {" · "}решено {st.done} из {st.total}
+                      {st.overdue && <span className="ml-2 font-bold text-coral-text">просрочено</span>}
+                      {st.complete && <span className="ml-2 font-bold text-pine-dark">выполнено</span>}
                     </p>
                   </div>
-                  <GradeBadge solved={st.done} total={st.total} size="sm" showFraction />
+                  <GradeBadge solved={st.done} total={st.total} size="sm" />
                 </div>
               );
             })}

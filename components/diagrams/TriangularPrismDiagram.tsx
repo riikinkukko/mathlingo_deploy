@@ -1,82 +1,145 @@
-import { D } from "./shared";
+import { D, fitPoints, halo, isUnknown, givenStyle, unknownStyle, Pt } from "./shared";
+
+interface EdgeLabel {
+  i: number;
+  j: number;
+  label: string;
+}
 
 /**
- * Треугольная призма (прямая) — два треугольных основания, соединённые
- * тремя боковыми рёбрами. Задняя вершина треугольника выше по глубине —
- * её рёбра к передним вершинам частично скрыты (пунктир), как и у
- * остальных 3D-диаграмм в проекте (BoxDiagram, PyramidDiagram).
+ * Прямая треугольная призма в принятой в ЕГЭ ориентации: основание ABC
+ * лежит горизонтально внизу (A — слева сзади, B — спереди, C — справа
+ * сзади), боковые рёбра AA₁, BB₁, CC₁ вертикальны, A₁B₁C₁ — верхнее
+ * основание. Смотрим сверху-спереди, поэтому невидимо только заднее ребро
+ * нижнего основания AC.
+ * labels — [A, B, C, A₁, B₁, C₁] (индексы 0–5 для highlightEdges/edgeLabels).
+ * midSection — сечение плоскостью через среднюю линию основания,
+ * параллельную AC (и боковой грани AA₁C₁C): отсекает призму при вершине B.
  */
 export default function TriangularPrismDiagram({
   labels = ["A", "B", "C", "A₁", "B₁", "C₁"],
+  midSection = false,
+  highlightEdges = [],
+  edgeLabels = [],
 }: {
   labels?: string[];
+  midSection?: boolean;
+  /** Отрезки между вершинами (индексы 0–5), выделяемые янтарным; видимость
+   * считается по граням автоматически. */
+  highlightEdges?: [number, number][];
+  edgeLabels?: EdgeLabel[];
 }) {
-  // Переднее основание — треугольник ABC
-  const A = { x: 60, y: 175 };
-  const B = { x: 170, y: 175 };
-  const C = { x: 115, y: 90 };
-  // Смещение "вглубь" (тот же пологий угол ~27°, что и в остальных 3D-
-  // диаграммах — было dx=55/dy=-28, при ширине основания всего 110px это
-  // давало 50% смещения от размера фигуры, и задняя грань выглядела не
-  // "позади", а как отдельный соседний треугольник. Тот же угол, меньше
-  // абсолютная величина — держит форму узнаваемой призмой.
-  const dx = 35;
-  const dy = -18;
-  const A1 = { x: A.x + dx, y: A.y + dy };
-  const B1 = { x: B.x + dx, y: B.y + dy };
-  const C1 = { x: C.x + dx, y: C.y + dy };
+  const H = 1.15;
+  const base: Pt[] = [
+    { x: 0, y: 0 }, // A
+    { x: 0.62, y: 0.42 }, // B (ближе к зрителю — ниже на рисунке)
+    { x: 1.6, y: 0 }, // C
+  ];
+  const raw = [...base, ...base.map((p) => ({ x: p.x, y: p.y - H }))];
+  const { map } = fitPoints(raw, { x0: 34, y0: 24, x1: 216, y1: 182 });
+  const pts = raw.map(map);
+  const center = {
+    x: (pts[0].x + pts[1].x + pts[2].x) / 3,
+    y: (pts[0].y + pts[3].y) / 2,
+  };
+
+  const visibleFaces = [
+    [0, 1, 4, 3],
+    [1, 2, 5, 4],
+    [3, 4, 5],
+  ];
+  const isVisible = (i: number, j: number) => visibleFaces.some((f) => f.includes(i) && f.includes(j));
+  const edges: [number, number][] = [
+    [0, 1], [1, 2], [2, 0],
+    [3, 4], [4, 5], [5, 3],
+    [0, 3], [1, 4], [2, 5],
+  ];
+
+  const seg = (p: Pt, q: Pt, key: string, color: string, width: number, dashed: boolean) => (
+    <line key={key} x1={p.x} y1={p.y} x2={q.x} y2={q.y} stroke={color} strokeWidth={width} strokeDasharray={dashed ? "4 3" : undefined} />
+  );
+  const mid = (p: Pt, q: Pt): Pt => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+
+  const labelOffsets: Pt[] = [
+    { x: -12, y: 4 }, // A
+    { x: 0, y: 18 }, // B
+    { x: 12, y: 4 }, // C
+    { x: -12, y: 0 }, // A₁
+    { x: 2, y: -8 }, // B₁ — внутри верхнего треугольника, над вершиной
+    { x: 13, y: 0 }, // C₁
+  ];
+
+  const M = mid(pts[1], pts[0]);
+  const N = mid(pts[1], pts[2]);
+  const M1 = mid(pts[4], pts[3]);
+  const N1 = mid(pts[4], pts[5]);
 
   return (
-    <svg viewBox="0 0 250 200" className="h-full w-full">
-      {/* заднее основание — целиком видно (тело призмы его не загораживает) */}
-      <polygon
-        points={`${A1.x},${A1.y} ${B1.x},${B1.y} ${C1.x},${C1.y}`}
-        fill={D.pineLight}
-        fillOpacity="0.35"
-        stroke={D.ink}
-        strokeWidth="1.5"
-      />
+    <svg viewBox="0 0 250 205" className="h-full w-full">
+      <polygon points={[0, 1, 4, 3].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")} fill={D.pineLight} fillOpacity="0.55" />
+      <polygon points={[1, 2, 5, 4].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")} fill={D.pineLight} fillOpacity="0.35" />
 
-      {/* боковая грань — заливка между основаниями */}
-      <polygon
-        points={`${A.x},${A.y} ${B.x},${B.y} ${B1.x},${B1.y} ${A1.x},${A1.y}`}
-        fill={D.pineLight}
-        fillOpacity="0.5"
-      />
+      {edges.filter(([i, j]) => !isVisible(i, j)).map(([i, j], k) => seg(pts[i], pts[j], `d${k}`, D.inkSoft, 1.5, true))}
 
-      {/* переднее основание — сплошное, поверх заливки */}
-      <polygon
-        points={`${A.x},${A.y} ${B.x},${B.y} ${C.x},${C.y}`}
-        fill={D.pineLight}
-        fillOpacity="0.6"
-        stroke={D.ink}
-        strokeWidth="2"
-      />
+      {midSection && (
+        <>
+          <polygon
+            points={[M, N, N1, M1].map((p) => `${p.x},${p.y}`).join(" ")}
+            fill={D.amber}
+            fillOpacity="0.22"
+            stroke="none"
+          />
+          {seg(M, N, "mn", D.amber, 2, true)}
+        </>
+      )}
 
-      {/* боковые рёбра — все видимы (призма выпуклая, тело не загораживает боковые рёбра спереди) */}
-      <line x1={A.x} y1={A.y} x2={A1.x} y2={A1.y} stroke={D.ink} strokeWidth="2" />
-      <line x1={B.x} y1={B.y} x2={B1.x} y2={B1.y} stroke={D.ink} strokeWidth="2" />
-      <line x1={C.x} y1={C.y} x2={C1.x} y2={C1.y} stroke={D.inkSoft} strokeWidth="1.5" strokeDasharray="4 3" />
+      {edges.filter(([i, j]) => isVisible(i, j)).map(([i, j], k) => seg(pts[i], pts[j], `s${k}`, D.ink, 2, false))}
 
-      {/* подписи вершин */}
-      <text x={A.x - 12} y={A.y + 10} textAnchor="middle" fontSize="14" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[0]}
-      </text>
-      <text x={B.x + 12} y={B.y + 10} textAnchor="middle" fontSize="14" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[1]}
-      </text>
-      <text x={C.x} y={C.y - 10} textAnchor="middle" fontSize="14" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[2]}
-      </text>
-      <text x={A1.x - 4} y={A1.y - 8} textAnchor="middle" fontSize="13" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[3]}
-      </text>
-      <text x={B1.x + 14} y={B1.y + 4} textAnchor="middle" fontSize="13" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[4]}
-      </text>
-      <text x={C1.x + 12} y={C1.y - 6} textAnchor="middle" fontSize="13" fontWeight="800" fontStyle="italic" fill={D.ink}>
-        {labels[5]}
-      </text>
+      {midSection && (
+        <>
+          {seg(M1, N1, "m1n1", D.amber, 2.5, false)}
+          {seg(M, M1, "mm1", D.amber, 2.5, false)}
+          {seg(N, N1, "nn1", D.amber, 2.5, false)}
+          {[M, N, M1, N1].map((p, i) => (
+            <circle key={`mp${i}`} cx={p.x} cy={p.y} r="2.5" fill={D.amber} />
+          ))}
+        </>
+      )}
+
+      {highlightEdges.map(([i, j], k) => seg(pts[i], pts[j], `h${k}`, D.amber, 2.5, !isVisible(i, j)))}
+
+      {edgeLabels.map((e, k) => {
+        const m = mid(pts[e.i], pts[e.j]);
+        const dx = m.x - center.x;
+        const dy = m.y - center.y;
+        const l = Math.hypot(dx, dy) || 1;
+        return (
+          <text
+            key={`l${k}`}
+            x={m.x + (dx / l) * 14}
+            y={m.y + (dy / l) * 14 + 5}
+            textAnchor="middle"
+            style={{ ...(isUnknown(e.label) ? unknownStyle : givenStyle), ...halo }}
+          >
+            {e.label}
+          </text>
+        );
+      })}
+
+      {pts.map((p, i) => (
+        <text
+          key={i}
+          x={p.x + labelOffsets[i].x}
+          y={p.y + labelOffsets[i].y + 4}
+          textAnchor="middle"
+          fontSize="14"
+          fontWeight="800"
+          fontStyle="italic"
+          fill={D.ink}
+        >
+          {labels[i]}
+        </text>
+      ))}
     </svg>
   );
 }

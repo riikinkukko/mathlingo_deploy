@@ -15,7 +15,7 @@ export const CHART = {
 } as const;
 
 /** Ширина контейнера в пикселях — чтобы рисовать SVG в реальном размере, без растяжения. */
-export function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
+export function useWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
   const ref = useRef<T>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
