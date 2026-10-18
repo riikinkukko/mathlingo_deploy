@@ -4,12 +4,7 @@ import StudentShell from "@/components/StudentShell";
 import { pluralRu } from "@/lib/pluralize";
 import { cookies } from "next/headers";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
-
-// Заглушки будущих разделов — без записи в БД, реального контента там пока
-// нет, это витрина того, что впереди по программе профильного ЕГЭ.
-const UPCOMING_SUBJECTS: { title: string; icon: string; colorClass: string }[] = [
-  { title: "Задачи на теорию чисел", icon: "🔢", colorClass: "bg-teal-light text-teal-text" },
-];
+import { topicIcon } from "@/lib/topic-icons";
 
 export default async function SubjectsPage() {
   const user = (await getSessionUser())!;
@@ -25,8 +20,8 @@ export default async function SubjectsPage() {
         <div className="mx-auto max-w-3xl">
           <h1 className="font-display text-2xl font-black text-ink">Программа подготовки к ЕГЭ</h1>
           <p className="mt-1.5 text-sm text-ink-soft">
-            Выбери раздел — он откроется на «Пути». Готовы все разделы
-            профильной математики, кроме последнего — он скоро.
+            Выбери раздел — он откроется на «Пути». Здесь все разделы
+            профильной математики, от первого задания до двадцатого.
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -56,7 +51,10 @@ export default async function SubjectsPage() {
                       {current ? "Сейчас изучаешь" : "Начат"}
                     </p>
                   )}
-                  <p className="font-display text-lg font-black leading-tight">{topic.title}</p>
+                  <p className="font-display text-lg font-black leading-tight">
+                    <span aria-hidden className="mr-2">{topicIcon(topic.title)}</span>
+                    {topic.title}
+                  </p>
                   <div className={`mt-3 h-1.5 w-full overflow-hidden rounded-pill ${current ? "bg-white/20" : "bg-grid"}`}>
                     <div className="h-full rounded-pill bg-pine transition-all" style={{ width: `${pct}%` }} />
                   </div>
@@ -67,21 +65,6 @@ export default async function SubjectsPage() {
               );
             })}
 
-            {UPCOMING_SUBJECTS.map((s) => (
-              <div
-                key={s.title}
-                className="relative rounded-2xl border border-dashed border-line bg-white p-5 opacity-80"
-              >
-                <span
-                  className={`absolute right-4 top-4 rounded-pill px-2 py-0.5 text-[10px] font-extrabold uppercase ${s.colorClass}`}
-                >
-                  скоро
-                </span>
-                <span className="text-2xl">{s.icon}</span>
-                <p className="mt-2 font-display text-[15px] font-black leading-tight text-ink">{s.title}</p>
-                <p className="mt-1 text-[12px] text-ink-soft">Добавим по мере готовности контента</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>

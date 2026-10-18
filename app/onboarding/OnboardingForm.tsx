@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { saveOnboardingAction } from "@/app/actions";
 import { TARGET_SCORE_RANGES } from "@/lib/curriculum-recommendations";
+import { topicIcon } from "@/lib/topic-icons";
 
 export default function OnboardingForm({ topics }: { topics: { id: string; title: string }[] }) {
   const [targetScore, setTargetScore] = useState<number | null>(null);
@@ -55,6 +56,7 @@ export default function OnboardingForm({ topics }: { topics: { id: string; title
                     : "border-line text-ink-soft hover:border-pine"
                 }`}
               >
+                <span aria-hidden className="mr-1">{topicIcon(t.title)}</span>
                 {t.title}
               </button>
             ))}
