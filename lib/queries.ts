@@ -1128,6 +1128,8 @@ export interface PendingReview {
   submittedAt: string;
   /** Приложено фото решения / снимок черновика (/api/attempt-image/[id]). */
   hasImage: boolean;
+  /** Решение из пробника ЕГЭ (вторая часть варианта). */
+  fromMock?: boolean;
 }
 
 export async function getPendingReviewsForTeacher(teacherId: string): Promise<PendingReview[]> {
@@ -1168,6 +1170,7 @@ export async function getPendingReviewsForTeacher(teacherId: string): Promise<Pe
       answer: a.answer,
       submittedAt: a.createdAt.toISOString(),
       hasImage: withImage.has(a.id),
+      fromMock: a.source === "mock",
     });
   }
   return result.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt));

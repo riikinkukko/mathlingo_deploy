@@ -74,6 +74,9 @@ export default function PendingReviewCard({
               №{review.problem.egeTaskNumber}
             </span>
           )}
+          {review.fromMock && (
+            <span className="rounded-pill bg-pine-light px-2.5 py-1 text-[11px] font-extrabold text-pine-dark">Пробник</span>
+          )}
           <span className="rounded-pill bg-violet-light px-2.5 py-1 text-[11px] font-extrabold text-violet">
             {review.skillTitle}
           </span>

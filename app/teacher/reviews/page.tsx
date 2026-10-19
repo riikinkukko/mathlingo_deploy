@@ -89,6 +89,7 @@ export default async function ReviewQueuePage(props: { searchParams: Promise<{ i
                       <span className="min-w-0 flex-1">
                         <span className="block truncate font-display text-[15px] font-black text-ink">{r.student.name}</span>
                         <span className="block truncate text-[12px] text-ink-soft">
+                          {r.fromMock ? "Пробник · " : ""}
                           {n ? `№${n} · ` : ""}
                           {r.skillTitle}
                         </span>

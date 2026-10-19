@@ -52,6 +52,8 @@ import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
 import ScrollIntoViewOnMount from "@/components/teacher/ScrollIntoViewOnMount";
 import DeleteStudentButton from "./DeleteStudentButton";
+import { listMockAttempts } from "@/lib/mock-queries";
+import { MOCK_MODES, isMockMode } from "@/lib/mock-exam";
 
 const KIND_LABEL: Record<string, string> = {
   homework: "Домашка",
@@ -157,6 +159,7 @@ export default async function StudentDetailPage(
       getUnmarkedPastLessons(teacher.id, student.id),
       getRecentReviewedForStudent(student.id, 5),
     ]);
+  const platformMocks = await listMockAttempts(student.id);
   const inGroup = ((await getGroupNamesByStudent(teacher.id)).get(student.id) ?? []).length > 0;
   const solved12w = weekly.reduce((s, w) => s + w.solved, 0);
   const notesUpdatedLabel = notesData.updatedAt
@@ -376,6 +379,61 @@ export default async function StudentDetailPage(
               <GoalCard targetScore={student.targetScore} mocks={mocks} />
             </div>
             <div className="order-4 lg:order-none">
+              <div id="mocks" className="scroll-mt-20">
+                <CollapsibleSection
+                  title="Пробники на платформе"
+                  summary={
+                    platformMocks.length > 0
+                      ? `${platformMocks.length} ${pluralRu(platformMocks.length, ["вариант", "варианта", "вариантов"])}`
+                      : "пока не решал"
+                  }
+                  defaultOpen={platformMocks.length > 0}
+                >
+                  {platformMocks.length > 0 ? (
+                    <ul className="space-y-2">
+                      {platformMocks.slice(0, 10).map((pm) => {
+                        const finished = !!pm.finishedAt;
+                        const date = new Date(pm.finishedAt ?? pm.startedAt).toLocaleDateString("ru-RU", {
+                          timeZone: "Europe/Moscow",
+                          day: "numeric",
+                          month: "short",
+                        });
+                        return (
+                          <li key={pm.id}>
+                            <a
+                              href={`/teacher/student/${student.id}/mock/${pm.id}`}
+                              className="card flex items-center gap-3 p-3.5 transition hover:border-pine"
+                            >
+                              <span className="min-w-[44px] font-mono text-lg font-bold text-ink">
+                                {finished ? pm.testScore ?? 0 : "…"}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-xs font-semibold text-ink">
+                                  Вариант {pm.variant} · {date}
+                                </span>
+                                <span className="block truncate text-xs text-ink-soft">
+                                  {isMockMode(pm.mode) ? MOCK_MODES[pm.mode].title : ""}
+                                  {finished ? ` · ${pm.primaryScore ?? 0} перв.` : " · решает сейчас"}
+                                </span>
+                              </span>
+                              {pm.part2Pending > 0 && (
+                                <span className="shrink-0 rounded-pill bg-amber px-2 py-0.5 text-[11px] font-black text-white">
+                                  проверить {pm.part2Pending}
+                                </span>
+                              )}
+                            </a>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <div className="card p-5 text-center text-sm text-ink-soft">
+                      Ученик ещё не решал пробники. Они в разделе «Пробники ЕГЭ» у него в кабинете: 20 вариантов в формате
+                      экзамена. Вторая часть придёт к вам на проверку.
+                    </div>
+                  )}
+                </CollapsibleSection>
+              </div>
               <div id="goal" className="scroll-mt-20">
                 <CollapsibleSection
                   title="Цель и пробники"
@@ -399,7 +457,14 @@ export default async function StudentDetailPage(
                           <span className="min-w-[44px] font-mono text-lg font-bold text-ink">{m.score}</span>
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-semibold text-ink">{formatDateRu(m.takenAt)}</p>
-                            {m.note && <p className="truncate text-xs text-ink-soft">{m.note}</p>}
+                            {m.note &&
+                              (m.id.startsWith("mks_") ? (
+                                <a href={`/teacher/student/${student.id}/mock/${m.id.slice(4)}`} className="block truncate text-xs font-bold text-pine hover:underline">
+                                  {m.note} · разбор
+                                </a>
+                              ) : (
+                                <p className="truncate text-xs text-ink-soft">{m.note}</p>
+                              ))}
                           </div>
                           <DeleteMockButton mockId={m.id} />
                         </div>

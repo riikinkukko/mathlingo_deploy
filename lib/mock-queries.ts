@@ -309,13 +309,20 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
       .where(eq(schema.mockAttempts.id, id));
     await tx.delete(schema.mockImages).where(eq(schema.mockImages.mockAttemptId, id));
 
-    if (teacherId && sentToTeacher > 0) {
+    // Репетитор узнаёт о каждом сданном пробнике — и сразу видит итог первой части.
+    if (teacherId) {
+      const part1Total = m.items.filter((it) => isPart1(it.n)).length;
+      const part1Ok = Object.values(part1Correct).filter(Boolean).length;
+      const p2Text =
+        sentToTeacher > 0
+          ? ` ${sentToTeacher} ${sentToTeacher === 1 ? "решение" : sentToTeacher < 5 ? "решения" : "решений"} второй части ждут проверки.`
+          : "";
       await pushNotification(tx, {
         userId: teacherId,
-        type: "review_pending",
-        title: `${user.name} сдал(а) пробник`,
-        body: `Вариант ${m.variant}: ${sentToTeacher} ${sentToTeacher === 1 ? "решение" : sentToTeacher < 5 ? "решения" : "решений"} второй части ждут проверки.`,
-        link: "/teacher/reviews",
+        type: sentToTeacher > 0 ? "review_pending" : "homework_completed",
+        title: `${user.name} сдал(а) пробник, вариант ${m.variant}`,
+        body: `Часть 1: ${part1Ok} из ${part1Total}.${p2Text}`,
+        link: `/teacher/student/${user.id}/mock/${id}`,
       });
     }
   });
