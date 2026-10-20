@@ -48,7 +48,7 @@ export default async function SubjectsPage() {
                 >
                   {(current || started) && (
                     <p className={`mb-1 text-[11px] font-black uppercase tracking-wide ${current ? "text-white/60" : "text-pine-dark"}`}>
-                      {current ? "Сейчас изучаешь" : "Начат"}
+                      {current ? "Сейчас изучаешь" : doneCount === allSkills.length ? "Пройден" : "Начат"}
                     </p>
                   )}
                   <p className="font-display text-lg font-black leading-tight">
