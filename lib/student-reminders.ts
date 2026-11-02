@@ -1,17 +1,18 @@
-// Вечернее напоминание ученику в Telegram (19:00–21:00 МСК), только если
+// Вечернее напоминание ученику в Telegram и push в приложение (19:00–21:00 МСК), только если
 // сегодня он ещё не занимался и есть повод:
 //  • серия дней подряд > 0 — «не дай серии прерваться»;
 //  • завтра срок домашки, а она не сдана.
-// Только Telegram (без записи в колокольчик — в приложении это и так видно).
+// Telegram и/или push в приложение (без записи в колокольчик — это не событие).
 // Раз в день: users.evening_reminded_on ставится атомарно ДО отправки, так
 // что второй экземпляр воркера не продублирует. Отключается учеником в
-// профиле (users.tg_student_reminders).
+// профиле на сайте или в приложении (users.tg_student_reminders).
 // Относительные импорты — модуль работает в воркере бота (tsx, вне Next.js).
-import { and, eq, gte, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, eq, exists, gte, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { computeStreak, getHomeworksForStudent, homeworkStatus } from "./queries";
 import { escapeTelegramHtml, sendTelegramMessage } from "./telegram";
+import { sendPushToUser } from "./push";
 import { pluralRu } from "./pluralize";
 
 const TZ = "Europe/Moscow";
@@ -37,11 +38,14 @@ function appUrl(): string {
   return (process.env.NEXT_PUBLIC_APP_URL || "").trim().replace(/\/$/, "");
 }
 
-/** Текст напоминания или null, если писать незачем. Экспорт — для тестов. */
+/**
+ * Текст напоминания (простой текст, без HTML) или null, если писать незачем.
+ * title — заголовок push-уведомления. Экспорт — для тестов.
+ */
 export async function buildEveningReminder(
   student: { id: string; name: string },
   now: Date = new Date()
-): Promise<{ text: string; link: string } | null> {
+): Promise<{ text: string; title: string; link: string } | null> {
   const { day } = mskDay(now);
   const todayStart = new Date(`${day}T00:00:00+03:00`);
 
@@ -65,7 +69,7 @@ export async function buildEveningReminder(
   const streak = await computeStreak(student.id);
   if (streak === 0 && dueSoon.length === 0) return null;
 
-  const first = escapeTelegramHtml(student.name.split(" ")[0] || student.name);
+  const first = student.name.split(" ")[0] || student.name;
   const lines: string[] = [];
   if (streak === 1) {
     lines.push(`🔥 ${first}, вчера ты начал(а) серию — реши сегодня хотя бы одну задачу, чтобы её продолжить.`);
@@ -78,11 +82,13 @@ export async function buildEveningReminder(
   }
   for (const h of dueSoon.slice(0, 3)) {
     lines.push(
-      `📚 Скоро срок: «${escapeTelegramHtml(h.title)}» — осталось ${h.left} ${pluralRu(h.left, ["задача", "задачи", "задач"])}.`
+      `📚 Скоро срок: «${h.title}» — осталось ${h.left} ${pluralRu(h.left, ["задача", "задачи", "задач"])}.`
     );
   }
   const link = dueSoon.length > 0 ? `/student/homework/${dueSoon[0].id}` : "/student";
-  return { text: lines.join("\n\n"), link };
+  const title =
+    streak > 1 ? `Серия ${streak} ${pluralRu(streak, ["день", "дня", "дней"])} — не прерви её 🔥` : dueSoon.length > 0 ? "Скоро срок домашки 📚" : "Пора позаниматься 🔥";
+  return { text: lines.join("\n\n"), title, link };
 }
 
 /** Из воркера бота раз в несколько минут. Возвращает число отправленных напоминаний. */
@@ -98,7 +104,10 @@ export async function sendStudentEveningReminders(now: Date = new Date()): Promi
       and(
         eq(schema.users.role, "STUDENT"),
         eq(schema.users.tgStudentReminders, true),
-        isNotNull(schema.users.telegramChatId),
+        or(
+          isNotNull(schema.users.telegramChatId),
+          exists(db.select({ one: sql`1` }).from(schema.pushTokens).where(eq(schema.pushTokens.userId, schema.users.id)))
+        ),
         or(isNull(schema.users.eveningRemindedOn), sql`${schema.users.eveningRemindedOn} <> ${day}`)
       )
     )
@@ -109,13 +118,16 @@ export async function sendStudentEveningReminders(now: Date = new Date()): Promi
   for (const s of claimed) {
     try {
       const r = await buildEveningReminder(s, now);
-      if (!r || !s.chatId) continue;
-      const ok = await sendTelegramMessage(
-        s.chatId,
-        r.text,
-        base ? { replyMarkup: { inline_keyboard: [[{ text: "Открыть Планиметрику", url: base + r.link }]] } } : {}
-      );
-      if (ok) sent++;
+      if (!r) continue;
+      const pushed = await sendPushToUser(s.id, { title: r.title, body: r.text.replace(/\n\n/g, "\n"), link: r.link });
+      const tg = s.chatId
+        ? await sendTelegramMessage(
+            s.chatId,
+            escapeTelegramHtml(r.text),
+            base ? { replyMarkup: { inline_keyboard: [[{ text: "Открыть Планиметрику", url: base + r.link }]] } } : {}
+          )
+        : false;
+      if (pushed || tg) sent++;
     } catch (e) {
       console.error("[student-reminders] не удалось отправить", s.id, e);
     }

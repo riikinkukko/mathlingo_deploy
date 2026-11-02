@@ -13,6 +13,8 @@ interface AuthApi {
   login(email: string, password: string): Promise<void>;
   register(input: { name: string; email: string; password: string; consent: boolean }): Promise<void>;
   logout(): Promise<void>;
+  /** Обновить профиль после изменения настроек на сервере. */
+  setUser(user: UserSummary): void;
 }
 
 const Ctx = createContext<AuthApi | null>(null);
@@ -65,6 +67,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout: async () => {
         await unregisterPush().catch(() => {});
         await clear();
+      },
+      setUser: (user) => {
+        setState({ status: "signedIn", user });
+        AsyncStorage.setItem(USER_KEY, JSON.stringify(user)).catch(() => {});
       },
     }),
     [state, apply, clear]

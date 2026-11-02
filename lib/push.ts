@@ -34,15 +34,15 @@ interface ExpoTicket {
   details?: { error?: string };
 }
 
-/** Отправить push на все устройства пользователя. Никогда не бросает. */
+/** Отправить push на все устройства пользователя. Никогда не бросает; true — Expo принял хотя бы одно. */
 export async function sendPushToUser(
   userId: string,
   msg: { title: string; body: string; link?: string }
-): Promise<void> {
-  if (process.env.PUSH_DISABLED === "1") return;
+): Promise<boolean> {
+  if (process.env.PUSH_DISABLED === "1") return false;
   try {
     const tokens = await db.select().from(schema.pushTokens).where(eq(schema.pushTokens.userId, userId));
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) return false;
     const messages = tokens.map((t) => ({
       to: t.token,
       title: msg.title.slice(0, 120),
@@ -59,14 +59,16 @@ export async function sendPushToUser(
     });
     if (!res.ok) {
       console.error("[push] Expo ответил", res.status);
-      return;
+      return false;
     }
     const json = (await res.json()) as { data?: ExpoTicket[] };
     const dead = (json.data ?? [])
       .map((ticket, i) => (ticket.details?.error === "DeviceNotRegistered" ? tokens[i]?.token : null))
       .filter((t): t is string => !!t);
     if (dead.length) await db.delete(schema.pushTokens).where(inArray(schema.pushTokens.token, dead));
+    return (json.data ?? []).some((t) => t.status === "ok");
   } catch (e) {
     console.error("[push] не удалось отправить:", e);
+    return false;
   }
 }

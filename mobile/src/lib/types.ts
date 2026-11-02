@@ -12,6 +12,8 @@ export interface UserSummary {
   hasTeacher: boolean;
   emailVerified: boolean;
   targetScore: number | null;
+  /** Вечерние напоминания о серии и сроках домашки (push и Telegram). */
+  reminders?: boolean;
 }
 
 export interface SessionPayload {

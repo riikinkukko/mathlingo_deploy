@@ -19,5 +19,6 @@ export function userSummary(user: User) {
     hasTeacher: !!user.teacherId,
     emailVerified: !!user.emailVerifiedAt,
     targetScore: user.targetScore ?? null,
+    reminders: user.tgStudentReminders !== false,
   };
 }

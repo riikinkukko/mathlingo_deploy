@@ -1,7 +1,10 @@
-import { Alert, Pressable, View } from "react-native";
+import { useState } from "react";
+import { Alert, Pressable, Switch, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { useAuth, useUser } from "@/lib/auth";
+import { api, errorText } from "@/lib/api";
+import type { UserSummary } from "@/lib/types";
 import { useHome, useSelectedTopic, plural } from "@/lib/hooks";
 import { openOnSite, openPublic } from "@/lib/web";
 import { Button, Card, H1, Pill, ProgressBar, Row, Screen, T } from "@/components/ui";
@@ -11,7 +14,18 @@ import { C, R } from "@/theme";
 
 export default function Profile() {
   const user = useUser();
-  const { logout } = useAuth();
+  const { logout, setUser } = useAuth();
+  const [reminders, setReminders] = useState(user.reminders !== false);
+  async function toggleReminders(v: boolean) {
+    setReminders(v);
+    try {
+      const r = await api<{ user: UserSummary }>("/api/m/settings", { body: { reminders: v } });
+      setUser(r.user);
+    } catch (e) {
+      setReminders(!v);
+      Alert.alert("Не сохранилось", errorText(e));
+    }
+  }
   const [topic] = useSelectedTopic();
   const home = useHome(topic).data;
   const s = home?.stats;
@@ -56,6 +70,16 @@ export default function Profile() {
           </T>
         </Card>
       ) : null}
+
+      <Card style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <T w="black">Напоминания вечером</T>
+          <T size={13} color={C.inkSoft}>
+            Если до 19:00 не было ни одной задачи, а серия или срок домашки под угрозой.
+          </T>
+        </View>
+        <Switch value={reminders} onValueChange={toggleReminders} trackColor={{ true: C.pine, false: C.line }} thumbColor={C.white} />
+      </Card>
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
         {user.hasTeacher || (home?.counts.homework ?? 0) > 0 ? <Item icon="Clipboard" label="Задания репетитора" onPress={() => router.push("/homework")} /> : null}
