@@ -1,4 +1,5 @@
 import { db } from "./db/client";
+import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
 import { randomBytes } from "crypto";
 import { convertRemainingDays } from "./teacher-plan";
@@ -1354,6 +1355,9 @@ export async function pushNotification(
     link: params.link,
     read: false,
   });
+
+  // Push в мобильное приложение — фоном, не задерживаем транзакцию сетью.
+  void sendPushToUser(params.userId, { title: params.title, body: params.body, link: params.link });
 
   if (params.telegram === false) return;
 

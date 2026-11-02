@@ -795,3 +795,35 @@ export const mockImages = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.mockAttemptId, t.problemId] }) })
 );
+
+// ---------- Мобильное приложение ----------
+// Токены push-уведомлений (Expo Push). Один пользователь — несколько
+// устройств; токен уникален. Невалидные токены удаляются после ответа Expo
+// «DeviceNotRegistered» (lib/push.ts).
+export const pushTokens = pgTable(
+  "push_tokens",
+  {
+    token: text("token").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(), // android | ios
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({ byUser: index("push_tokens_user_idx").on(t.userId) })
+);
+
+// Одноразовые ссылки «открыть кабинет на сайте» из приложения: приложение
+// получает ссылку с токеном, сайт по ней ставит cookie-сессию и сразу
+// помечает токен использованным. Живёт 2 минуты.
+export const appLoginTokens = pgTable("app_login_tokens", {
+  id: text("id").primaryKey(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  next: text("next").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

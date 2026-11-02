@@ -1,0 +1,81 @@
+# Планиметрика — мобильное приложение (Android / iOS)
+
+Нативное приложение на Expo (React Native). Заменяет старую обёртку Capacitor:
+тот же идентификатор `ru.planimetrika.app`, поэтому в Google Play это обновление
+того же приложения.
+
+## Что умеет
+
+- Путь обучения, уроки с теорией и чертежами, повторение, «Мои ошибки».
+- Пробники ЕГЭ: таймер, бланк ответов, фото второй части, разбор и самооценка по критериям.
+- Задания репетитора (домашки и контрольные).
+- **Без сети**: открытые раньше уроки доступны из кэша; ответы проверяются на телефоне
+  (по отпечатку, сам ответ в приложение не попадает) и уходят на сервер при появлении связи.
+- **Пуш-уведомления**: всё, что сайт кладёт в колокольчик (проверенное решение, новая домашка,
+  напоминание о серии), приходит на телефон.
+- Репетитор и родитель: уведомления в приложении, кабинет открывается на сайте уже вошедшим.
+- Оплаты в приложении нет (правила Google Play): тариф оформляется на сайте.
+
+Сервер для приложения — `/api/m/*` в основном проекте.
+
+## Разработка
+
+```bash
+cd mobile
+npm install
+npx expo start            # QR-код для Expo Go / dev-сборки
+EXPO_PUBLIC_API_URL=http://192.168.0.10:3000 npx expo start   # против локального сервера
+npm run typecheck
+```
+
+## Сборка Android (один раз — настройка)
+
+```bash
+npm install -g eas-cli
+eas login                  # аккаунт expo.dev (бесплатный)
+cd mobile
+eas init                   # создаст проект и пропишет extra.eas.projectId в app.json — закоммитить
+```
+
+Без `projectId` пуш-уведомления не регистрируются (Expo Push выдаёт токен только с ним).
+
+**Ключ подписи.** Приложение уже есть в Google Play, поэтому новая сборка должна быть
+подписана тем же ключом загрузки, что и сборки Capacitor:
+
+```bash
+eas credentials -p android     # Keystore → Set up a new keystore → загрузить старый .jks (upload key)
+```
+
+Если старого ключа нет — в Play Console: «Целостность приложения» → «Сбросить ключ загрузки».
+
+**Пуш на Android** требует FCM: создать проект в Firebase, добавить Android-приложение
+`ru.planimetrika.app`, загрузить ключ сервисного аккаунта через
+`eas credentials -p android` → Google Service Account → FCM V1.
+
+## Сборки
+
+```bash
+eas build -p android --profile preview      # APK — поставить на свой телефон и проверить
+eas build -p android --profile production   # AAB — в Google Play (закрытое тестирование → прод)
+```
+
+Перед каждой новой выкладкой в Play — поднять `android.versionCode` в `app.json`.
+
+## iOS
+
+Нужны аккаунт Apple Developer (99 $/год) и больше ничего: Mac не нужен, сборка идёт в облаке EAS.
+
+```bash
+eas build -p ios --profile production
+eas submit -p ios
+```
+
+## Иконки и маскот
+
+`src/assets/svg.ts` генерируется из веб-компонентов (`components/icons.tsx`, `components/Mascot.tsx`):
+
+```bash
+npx tsx --tsconfig tsconfig.tsx-test.json scripts/gen-mobile-assets.ts   # из корня репозитория
+```
+
+`src/lib/answer-key.ts` — копия `lib/answer-key.ts`; тест `tests/unit/answer-key.test.ts` следит, чтобы они совпадали.

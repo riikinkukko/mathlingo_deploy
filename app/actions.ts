@@ -39,26 +39,16 @@ import {
   clearLoginFailures,
   isAuthEmailRateLimited,
 } from "@/lib/queries";
-import { performSubmitAttempt } from "@/lib/actions-core";
+import { performSubmitAttempt, performRevealSolution } from "@/lib/actions-core";
+import { checkRegistrationEmail, clientIpFromHeaders, passwordLogin, registerStudent } from "@/lib/auth-flows";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
 import { isYooKassaConfigured } from "@/lib/yookassa";
 import { generatePassword } from "@/lib/secure-random";
 
-/** Реальный IP клиента — читает заголовки, которые nginx проставляет на
- * сервере (X-Real-IP/X-Forwarded-For, см. README про настройку прокси).
- * Пустая строка в локальной разработке без nginx перед сервером — это
- * ожидаемо, isRegistrationRateLimited() специально не блокирует в этом
- * случае вместо того, чтобы ошибочно резать реальных пользователей. */
+/** Реальный IP клиента (заголовки nginx) — см. lib/auth-flows.ts. */
 async function getClientIp(): Promise<string> {
-  const h = await headers();
-  // X-Real-IP выставляет nginx из реального соединения — подделать нельзя.
-  // Первый адрес X-Forwarded-For присылает сам клиент, поэтому из XFF берём
-  // последний (его добавил наш nginx) и только если X-Real-IP нет.
-  const realIp = h.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-  const forwarded = h.get("x-forwarded-for");
-  return forwarded ? forwarded.split(",").pop()!.trim() : "";
+  return clientIpFromHeaders(await headers());
 }
 import { ASSIGNMENT_KINDS, AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
@@ -84,27 +74,11 @@ async function isOwnStudent(teacherId: string, studentId: string): Promise<boole
 // ---------- AUTH ----------
 
 export async function loginAction(_prevState: unknown, formData: FormData) {
-  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
-  const password = String(formData.get("password") || "");
-
-  const clientIp = await getClientIp();
-  if (await isLoginRateLimited(clientIp, email)) {
-    return { error: "Слишком много неудачных попыток входа. Подождите 15 минут или восстановите пароль." };
-  }
-
-  // Одинаковое сообщение для «нет такого email» и «неверный пароль» — иначе
-  // по ответу можно узнать, зарегистрирован ли человек на сайте.
-  const user = await getUserByEmail(email);
-  const ok = user ? await verifyPassword(password, user.passwordHash) : false;
-  if (!user || !ok) {
-    await recordLoginFailure(clientIp, email);
-    return { error: "Неверный email или пароль" };
-  }
-  await clearLoginFailures(email);
-
-  const token = await createSessionToken(user.id, user.role);
+  const res = await passwordLogin(formData.get("email"), formData.get("password"), await getClientIp());
+  if ("error" in res) return { error: res.error };
+  const token = await createSessionToken(res.user.id, res.user.role);
   await setSessionCookie(token);
-  redirect(`/${user.role.toLowerCase()}`);
+  redirect(`/${res.user.role.toLowerCase()}`);
 }
 
 export async function logoutAction() {
@@ -158,32 +132,7 @@ export async function submitAttemptAction(
 export async function revealSolutionAction(problemId: string) {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") return { error: "Нужно войти как ученик" };
-  const problem = await getProblem(problemId);
-  if (!problem) return { error: "Задача не найдена" };
-
-  // Раньше экшен отдавал правильный ответ к ЛЮБОЙ задаче сразу. Теперь то же
-  // правило, что показывает интерфейс: ответ — после 3 неверных попыток или
-  // если задача уже решена; только к доступной ученику задаче и не во время
-  // контрольной/пробника.
-  const accessible =
-    (await canStudentAccessProblem(user, problem, "lesson")) ||
-    (await canStudentAccessProblem(user, problem, "assignment"));
-  if (!accessible) return { error: "Задача недоступна" };
-
-  const assignments = await getHomeworksForStudent(user.id);
-  if (assignments.some((h) => h.kind !== "homework" && h.problemIds.includes(problem.id))) {
-    return { error: "В контрольной и пробнике ответ не показывается" };
-  }
-
-  const own = await db
-    .select({ isCorrect: schema.attempts.isCorrect })
-    .from(schema.attempts)
-    .where(and(eq(schema.attempts.studentId, user.id), eq(schema.attempts.problemId, problem.id)));
-  const solved = own.some((a) => a.isCorrect === true);
-  const wrong = own.filter((a) => a.isCorrect === false).length;
-  if (!solved && wrong < 3) return { error: "Ответ откроется после трёх попыток" };
-
-  return { explanation: problem.explanation, correctAnswer: problem.correctAnswer };
+  return performRevealSolution(user, problemId);
 }
 
 // ---------- TEACHER: проверка развёрнутых решений ----------
@@ -730,18 +679,6 @@ export async function markAllNotificationsReadAction() {
  * Возвращает текст ошибки или null. Анти-абуз: один реальный ящик — один
  * аккаунт (с учётом +меток и синонимов, см. lib/email-rules.ts), одноразовые
  * почты не принимаются. */
-async function checkRegistrationEmail(email: string): Promise<string | null> {
-  if (!isValidEmailFormat(email)) return "Проверьте адрес email — похоже, в нём опечатка";
-  if (isDisposableEmail(email)) {
-    return "Одноразовые почтовые адреса не подходят — укажите свою постоянную почту";
-  }
-  if (await getUserByEmail(email)) return "Пользователь с таким email уже существует";
-  if (await isMailboxTakenBySelfRegisteredAccount(email)) {
-    return "Аккаунт с этим почтовым ящиком уже есть. Войдите в него или восстановите пароль";
-  }
-  return null;
-}
-
 /** Промокод из ссылки или формы регистрации: «+N дней» — сразу, скидка —
  * ждёт первой оплаты в куке. Неподходящий код регистрацию не срывает. */
 async function applyPromoAtRegistration(userId: string, promoRaw: FormDataEntryValue | null) {
@@ -754,67 +691,18 @@ async function applyPromoAtRegistration(userId: string, promoRaw: FormDataEntryV
 }
 
 export async function registerAction(_prevState: unknown, formData: FormData) {
-  const name = String(formData.get("name") || "").trim().slice(0, 80);
-  const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
-  const password = String(formData.get("password") || "");
-  const consent = formData.get("consent");
-  const clientIp = await getClientIp();
-
-  // Анти-абуз: без этого лимит по энергии у самостоятельного Free-ученика
-  // (5 задач в день) обходится тривиально — просто регистрируешь новый
-  // аккаунт после исчерпания энергии. Считаем ЛЮБУЮ попытку ниже, не
-  // только успешную, иначе бот перебирал бы email без ограничений.
-  if (await isRegistrationRateLimited(clientIp, "STUDENT")) {
-    return { error: "Слишком много попыток регистрации с этого адреса. Попробуйте позже." };
-  }
-
-  if (!name || !email || password.length < 6) {
-    await recordRegistrationAttempt(clientIp, "STUDENT");
-    return { error: "Заполните имя, email и пароль (минимум 6 символов)" };
-  }
-  // Серверная проверка обязательна — клиентский required на чекбоксе легко
-  // обойти прямым POST-запросом, минуя форму в браузере. Без согласия на
-  // обработку персональных данных регистрация не должна проходить ни при
-  // каких условиях (требование 152-ФЗ, см. app/legal/consent).
-  if (consent !== "on") {
-    await recordRegistrationAttempt(clientIp, "STUDENT");
-    return { error: "Нужно принять условия и дать согласие на обработку персональных данных" };
-  }
-
-  const emailError = await checkRegistrationEmail(email);
-  if (emailError) {
-    await recordRegistrationAttempt(clientIp, "STUDENT");
-    return { error: emailError };
-  }
-  await recordRegistrationAttempt(clientIp, "STUDENT");
-
-  const userId = genId("u");
-  await db.insert(schema.users).values({
-    id: userId,
-    name,
-    email,
-    passwordHash: await hashPassword(password),
-    role: "STUDENT" as Role,
-    consentGivenAt: new Date(),
-    // teacherId сознательно не задаём — это самостоятельный пользователь.
-    plan: "free",
-    // Полный запас с первого дня: 15 хватает на 3–4 урока, а подзарядка
-    // включается только после подтверждения почты.
-    energy: FREE_MAX_ENERGY,
-    energyUpdatedAt: new Date(),
-  });
-
-  // Не блокируем регистрацию, если письмо не уйдёт по какой-то причине
-  // (например, временная проблема на стороне SMTP-провайдера) — email
-  // сможет подтвердить позже кнопкой "отправить письмо ещё раз" в профиле.
-  const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
-  await sendVerificationEmail(email, verificationToken).catch((e) =>
-    console.error("Не удалось отправить письмо верификации:", e)
+  const res = await registerStudent(
+    {
+      name: formData.get("name"),
+      email: formData.get("email"),
+      password: formData.get("password"),
+      consent: formData.get("consent") === "on",
+    },
+    await getClientIp()
   );
-
-  await applyPromoAtRegistration(userId, formData.get("promo"));
-
-  const token = await createSessionToken(userId, "STUDENT");
+  if ("error" in res) return { error: res.error };
+  await applyPromoAtRegistration(res.userId, formData.get("promo"));
+  const token = await createSessionToken(res.userId, "STUDENT");
   await setSessionCookie(token);
   redirect("/onboarding?ym=register");
 }

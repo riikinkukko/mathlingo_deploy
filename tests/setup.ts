@@ -10,5 +10,6 @@ if (!url || !/test/i.test(new URL(url).pathname)) {
 }
 process.env.DATABASE_URL = url;
 delete process.env.TELEGRAM_BOT_TOKEN;
+process.env.PUSH_DISABLED = "1";
 delete process.env.SMTP_HOST;
 delete process.env.YOOKASSA_SHOP_ID;

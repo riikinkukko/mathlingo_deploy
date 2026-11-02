@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
+import { getBearerUser } from "@/lib/api-auth";
 import { getPaidOrderForAttempt, isReviewer } from "@/lib/paid-review";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,8 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const markup = new URL(req.url).searchParams.get("v") === "markup";
-  const user = await getSessionUser();
+  // Сайт — по cookie, мобильное приложение — по Bearer-токену.
+  const user = (await getSessionUser()) ?? (await getBearerUser(req));
   if (!user) return new NextResponse("Требуется вход", { status: 401 });
   const [row] = await db
     .select({ data: schema.attemptImages.data, annotated: schema.attemptImages.annotated, studentId: schema.attempts.studentId, teacherId: schema.users.teacherId })

@@ -314,3 +314,34 @@ export async function performSubmitAttempt(
     canRevealSolution: wrongCount >= 3,
   };
 }
+
+/**
+ * Показать ответ и разбор (сайт и мобильное приложение). Правило то же, что в
+ * интерфейсе: после трёх неверных попыток или если задача уже решена; только
+ * к доступной ученику задаче и не во время контрольной или пробника.
+ */
+export async function performRevealSolution(
+  user: User,
+  problemId: string
+): Promise<{ explanation: string; correctAnswer: string } | { error: string }> {
+  if (typeof problemId !== "string") return { error: "Задача не найдена" };
+  const problem = await getProblem(problemId);
+  if (!problem) return { error: "Задача не найдена" };
+  const accessible =
+    (await canStudentAccessProblem(user, problem, "lesson")) ||
+    (await canStudentAccessProblem(user, problem, "assignment"));
+  if (!accessible) return { error: "Задача недоступна" };
+
+  const assignments = await getHomeworksForStudent(user.id);
+  if (assignments.some((h) => h.kind !== "homework" && h.problemIds.includes(problem.id))) {
+    return { error: "В контрольной и пробнике ответ не показывается" };
+  }
+  const own = await db
+    .select({ isCorrect: schema.attempts.isCorrect })
+    .from(schema.attempts)
+    .where(and(eq(schema.attempts.studentId, user.id), eq(schema.attempts.problemId, problem.id)));
+  const solved = own.some((a) => a.isCorrect === true);
+  const wrong = own.filter((a) => a.isCorrect === false).length;
+  if (!solved && wrong < 3) return { error: "Ответ откроется после трёх попыток" };
+  return { explanation: problem.explanation, correctAnswer: problem.correctAnswer };
+}
