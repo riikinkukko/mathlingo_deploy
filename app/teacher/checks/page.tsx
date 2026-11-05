@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import TeacherShell from "@/components/TeacherShell";
 import PendingReviewCard from "@/app/teacher/student/[id]/PendingReviewCard";
+import ReviewQueueButton from "@/components/review/ReviewQueueButton";
+import { toReviewItem } from "@/lib/review-item";
 import { getPaidReviewQueue, isReviewer, PAID_REVIEW_DAYS } from "@/lib/paid-review";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +21,10 @@ export default async function PaidChecksPage() {
   const user = await getSessionUser();
   if (!user || !isReviewer(user)) redirect("/teacher");
   const queue = await getPaidReviewQueue();
+  const items = queue.map((r) => {
+    const w = waited(r.paidAt);
+    return toReviewItem(r, { note: { text: w.label, late: w.late } });
+  });
 
   return (
     <TeacherShell active="checks" title="Платные проверки">
@@ -27,19 +33,17 @@ export default async function PaidChecksPage() {
         <p className="mt-1 text-sm text-ink-soft">
           Ученики без репетитора оплатили проверку развёрнутого решения. Обещанный срок — {PAID_REVIEW_DAYS} дня с момента оплаты.
         </p>
+        <ReviewQueueButton items={items} className="mt-4 w-full sm:w-auto" />
         {queue.length === 0 ? (
           <p className="mt-8 text-center text-sm font-bold text-ink-soft">Очередь пуста — все решения проверены.</p>
         ) : (
           <div className="mt-6 space-y-4">
-            {queue.map((r) => {
-              const w = waited(r.paidAt);
-              return (
-                <div key={r.attemptId}>
-                  <p className={`mb-1.5 text-[12px] font-black ${w.late ? "text-coral" : "text-ink-soft"}`}>{w.label}</p>
-                  <PendingReviewCard review={r} />
-                </div>
-              );
-            })}
+            {items.map((r) => (
+              <div key={r.attemptId}>
+                <p className={`mb-1.5 text-[12px] font-black ${r.note?.late ? "text-coral" : "text-ink-soft"}`}>{r.note?.text}</p>
+                <PendingReviewCard review={r} queue={items} />
+              </div>
+            ))}
           </div>
         )}
       </main>

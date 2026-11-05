@@ -4,20 +4,10 @@ import { pluralRu } from "@/lib/pluralize";
 import { maxPointsForTask } from "@/lib/ege-points";
 import TeacherShell from "@/components/TeacherShell";
 import PendingReviewCard from "@/app/teacher/student/[id]/PendingReviewCard";
+import ReviewQueueButton from "@/components/review/ReviewQueueButton";
+import { submittedLabel, toReviewItem } from "@/lib/review-item";
 
 export const dynamic = "force-dynamic";
-
-/** «сегодня, 14:05» / «вчера, 9:30» / «12 окт, 18:00» — по Москве. */
-function submittedLabel(iso: string): string {
-  const d = new Date(iso);
-  const key = (x: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(x);
-  const time = d.toLocaleTimeString("ru-RU", { timeZone: "Europe/Moscow", hour: "2-digit", minute: "2-digit" });
-  const today = key(new Date());
-  const yesterday = key(new Date(Date.now() - 86_400_000));
-  if (key(d) === today) return `сегодня, ${time}`;
-  if (key(d) === yesterday) return `вчера, ${time}`;
-  return `${d.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "short" })}, ${time}`;
-}
 
 /**
  * «Проверка решений» — очередь всех развёрнутых решений учеников этого
@@ -37,17 +27,22 @@ export default async function ReviewQueuePage(props: { searchParams: Promise<{ i
   const chosen = idx >= 0;
   const next = queue[curIdx + 1] ?? queue[curIdx - 1];
   const nextHref = next ? `/teacher/reviews?id=${next.attemptId}` : "/teacher/reviews?done=1";
+  // В браузер — только нужные поля работы (без полного профиля ученика).
+  const items = queue.map((r) => toReviewItem(r, { studentHref: `/teacher/student/${r.student.id}` }));
 
   return (
     <TeacherShell active="reviews" title="Проверка решений">
       <main className="mx-auto max-w-3xl px-4 pb-8 pt-6 lg:max-w-[1280px]">
-        <div className={`mb-5 ${chosen ? "hidden lg:block" : ""}`}>
-          <h1 className="font-display text-2xl font-black text-ink">Проверка решений</h1>
-          <p className="mt-1 text-sm text-ink-soft">
-            {queue.length > 0
-              ? `${queue.length} ${pluralRu(queue.length, ["решение ждёт", "решения ждут", "решений ждут"])} проверки · сначала самые старые`
-              : "Развёрнутые решения второй части от всех ваших учеников."}
-          </p>
+        <div className={`mb-5 flex flex-wrap items-end justify-between gap-3 ${chosen ? "hidden lg:flex" : ""}`}>
+          <div>
+            <h1 className="font-display text-2xl font-black text-ink">Проверка решений</h1>
+            <p className="mt-1 text-sm text-ink-soft">
+              {queue.length > 0
+                ? `${queue.length} ${pluralRu(queue.length, ["решение ждёт", "решения ждут", "решений ждут"])} проверки · сначала самые старые`
+                : "Развёрнутые решения второй части от всех ваших учеников."}
+            </p>
+          </div>
+          <ReviewQueueButton items={items} className="w-full sm:w-auto" />
         </div>
 
         {queue.length === 0 ? (
@@ -118,7 +113,7 @@ export default async function ReviewQueuePage(props: { searchParams: Promise<{ i
                   </a>
                 </div>
                 {/* key — чтобы состояние карточки (баллы, комментарий) не переезжало на следующую работу. */}
-                <PendingReviewCard key={current.attemptId} review={current} nextHref={nextHref} />
+                <PendingReviewCard key={current.attemptId} review={items[curIdx]} queue={items} nextHref={nextHref} />
               </section>
             )}
           </div>

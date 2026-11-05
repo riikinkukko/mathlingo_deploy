@@ -8,6 +8,7 @@ import {
 import { countPaidChecksWaiting, isReviewer as isReviewerUser } from "@/lib/paid-review";
 import TeacherSidebar, { TeacherSection } from "./TeacherSidebar";
 import NotificationBell from "./NotificationBell";
+import ReviewWorkspaceHost from "./review/ReviewWorkspaceHost";
 import Mascot from "./Mascot";
 import MobileAppBar, { AppBarTitle } from "./MobileAppBar";
 import { IconUser as IconStudents, IconBook as IconContent, IconCrown, IconCalendar, IconWallet, IconSettings } from "./icons";
@@ -68,6 +69,7 @@ export default async function TeacherShell({
       />
 
       <div className="pb-20 lg:ml-[236px] lg:pb-8">{children}</div>
+      <ReviewWorkspaceHost />
 
       <nav
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-line-soft bg-white pb-[max(10px,var(--app-sab))] pt-2 lg:hidden"

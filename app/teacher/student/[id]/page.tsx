@@ -50,6 +50,7 @@ import { getGroupNamesByStudent } from "@/lib/groups";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
 import PendingReviewCard from "./PendingReviewCard";
+import { toReviewItem } from "@/lib/review-item";
 import ScrollIntoViewOnMount from "@/components/teacher/ScrollIntoViewOnMount";
 import DeleteStudentButton from "./DeleteStudentButton";
 import { listMockAttempts } from "@/lib/mock-queries";
@@ -175,6 +176,8 @@ export default async function StudentDetailPage(
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
   const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
+  // В браузер — только нужные поля работы (без полного профиля ученика).
+  const reviewItems = pendingReviews.map((r) => toReviewItem(r));
   const assignedCount = Number(searchParams.quick) > 0 ? Number(searchParams.quick) : Number(searchParams.assigned) || 0;
 
   const parentsAndDelete = (
@@ -318,8 +321,8 @@ export default async function StudentDetailPage(
                     </span>
                   </h2>
                   <div className="space-y-3">
-                    {pendingReviews.map((r) => (
-                      <PendingReviewCard key={r.attemptId} review={r} />
+                    {reviewItems.map((r) => (
+                      <PendingReviewCard key={r.attemptId} review={r} queue={reviewItems} />
                     ))}
                   </div>
                 </section>
