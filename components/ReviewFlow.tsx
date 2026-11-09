@@ -9,8 +9,16 @@ import CompletionCelebration from "./CompletionCelebration";
 export default function ReviewFlow({
   items,
   backHref = "/student",
+  mode = "review",
+  title,
 }: {
   items: { problem: PublicProblem; skillTitle: string; box: number }[];
+  /** review — интервальное повторение; mistakes — работа над ошибками;
+   * practice — тренировка по номеру ЕГЭ (lib/practice.ts). Отличаются только
+   * текстами: отправка ответа везде через source="review". */
+  mode?: "review" | "mistakes" | "practice";
+  /** Заголовок вместо «Повторение» (например, «Задание №7»). */
+  title?: string;
   /** Куда ведёт стрелка "←" — см. app/student/review/page.tsx: повторение
    * может смешивать задачи из разных тем, поэтому это либо тема, с
    * дашборда которой ученик открыл повторение, либо общий дашборд. */
@@ -41,13 +49,15 @@ export default function ReviewFlow({
       <div className="mb-4 flex items-center gap-3">
         <a
           href={backHref}
-          aria-label="Назад к пути обучения"
+          aria-label="Назад"
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line bg-white text-ink-soft transition hover:border-pine hover:text-pine"
         >
           ←
         </a>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-[17px] font-black text-ink">Повторение</h1>
+          <h1 className="truncate font-display text-[17px] font-black text-ink">
+            {title ?? (mode === "mistakes" ? "Работа над ошибками" : mode === "practice" ? "Тренировка" : "Повторение")}
+          </h1>
           <p className="text-[12px] font-bold text-ink-soft">
             Задача {index + 1} из {items.length} · решено {solvedIds.size}/{items.length}
           </p>
@@ -58,18 +68,23 @@ export default function ReviewFlow({
       </div>
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center">
           {items.map((it, i) => {
             const st = solvedIds.has(it.problem.id);
             return (
               <button
                 key={it.problem.id}
                 onClick={() => setIndex(i)}
-                className={`h-2.5 rounded-pill transition-all ${
-                  i === index ? "w-7 bg-teal" : st ? "w-2.5 bg-teal/50" : "w-2.5 bg-line hover:bg-teal/30"
-                }`}
+                className="group flex h-9 min-w-[24px] items-center justify-center px-[7px]"
                 aria-label={`Задача ${i + 1}`}
-              />
+                aria-current={i === index ? "step" : undefined}
+              >
+                <span
+                  className={`block h-2.5 rounded-pill transition-all ${
+                    i === index ? "w-7 bg-teal" : st ? "w-2.5 bg-teal/50" : "w-2.5 bg-line group-hover:bg-teal/30"
+                  }`}
+                />
+              </button>
             );
           })}
         </div>
@@ -77,7 +92,12 @@ export default function ReviewFlow({
       </div>
 
       <p className="mb-4 text-[11px] font-bold text-ink-soft">
-        Из навыка «{current.skillTitle}» · встречалась тебе {current.box > 1 ? "уже несколько раз" : "недавно"}
+        Из навыка «{current.skillTitle}»
+        {mode === "review"
+          ? ` · встречалась тебе ${current.box > 1 ? "уже несколько раз" : "недавно"}`
+          : mode === "mistakes"
+            ? " · здесь была ошибка — попробуй ещё раз"
+            : ""}
       </p>
 
       <ProblemCard
@@ -109,11 +129,13 @@ export default function ReviewFlow({
 
       {showCelebration && (
         <CompletionCelebration
-          subtopicTitle="Повторение пройдено"
+          subtopicTitle={
+            mode === "mistakes" ? "Ошибки исправлены" : mode === "practice" ? "Тренировка пройдена" : "Повторение пройдено"
+          }
           xpEarned={items.length * 10}
           nextHref={backHref}
-          nextLabel="К пути обучения"
-          eyebrow="Память укрепляется 🧠"
+          nextLabel={mode === "review" ? "К пути обучения" : "Вернуться"}
+          eyebrow={mode === "mistakes" ? "Ошибка — это точка роста 💪" : mode === "practice" ? "Ещё на шаг ближе к экзамену 🎯" : "Память укрепляется 🧠"}
         />
       )}
     </div>

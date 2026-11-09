@@ -7,7 +7,14 @@
 const EXAM_TASKS = 20;
 const MASTERED_MIN = 5;
 
-export default function ExamMap({ rows }: { rows: { n: number; total: number; solved: number }[] }) {
+export default function ExamMap({
+  rows,
+  practice = true,
+}: {
+  rows: { n: number; total: number; solved: number }[];
+  /** Клетки — ссылки на тренировку номера (у ученика); у родителя/репетитора — нет. */
+  practice?: boolean;
+}) {
   const byN = new Map(rows.map((r) => [r.n, r]));
   const cells = Array.from({ length: EXAM_TASKS }, (_, i) => {
     const n = i + 1;
@@ -39,17 +46,31 @@ export default function ExamMap({ rows }: { rows: { n: number; total: number; so
         </span>
       </div>
       <ul className="mt-3 grid grid-cols-7 gap-1.5 sm:grid-cols-10">
-        {cells.map((c) => (
-          <li
-            key={c.n}
-            title={`№${c.n}: ${label[c.status]}${c.r ? ` · решено ${c.r.solved} из ${c.r.total}` : ""}`}
-            aria-label={`Задание ${c.n}: ${label[c.status]}`}
-            className={`flex h-9 items-center justify-center rounded-[10px] text-[13px] font-black ${cls[c.status]}`}
-          >
-            {c.n}
-          </li>
-        ))}
+        {cells.map((c) => {
+          const tip = `№${c.n}: ${label[c.status]}${c.r ? ` · решено ${c.r.solved} из ${c.r.total}` : ""}`;
+          const box = `flex h-9 items-center justify-center rounded-[10px] text-[13px] font-black ${cls[c.status]}`;
+          return (
+            <li key={c.n}>
+              {/* Клетка ведёт в тренировку этого номера (app/student/practice/[n]). */}
+              {c.status === "soon" || !practice ? (
+                <span title={tip} aria-label={`Задание ${c.n}: ${label[c.status]}`} className={box}>
+                  {c.n}
+                </span>
+              ) : (
+                <a
+                  href={`/student/practice/${c.n}`}
+                  title={`${tip} — нажми, чтобы потренироваться`}
+                  aria-label={`Задание ${c.n}: ${label[c.status]}. Тренировка`}
+                  className={`${box} transition hover:ring-2 hover:ring-pine active:scale-95`}
+                >
+                  {c.n}
+                </a>
+              )}
+            </li>
+          );
+        })}
       </ul>
+      {practice && <p className="mt-2 text-[12px] font-semibold text-ink-soft">Нажми на номер — откроется тренировка по нему.</p>}
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-bold text-ink-soft">
         {(["mastered", "progress", "todo", "soon"] as const).map((k) => (
           <span key={k} className="flex items-center gap-1.5">

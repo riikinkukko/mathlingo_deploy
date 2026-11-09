@@ -94,7 +94,7 @@ function mapSkill(row: typeof schema.skills.$inferSelect): Skill {
   };
 }
 
-function mapProblem(row: typeof schema.problems.$inferSelect): Problem {
+export function mapProblem(row: typeof schema.problems.$inferSelect): Problem {
   return {
     id: row.id,
     skillId: row.skillId ?? undefined,
@@ -593,15 +593,25 @@ export async function getMistakesForStudent(studentId: string): Promise<MistakeE
   const attempts = (
     await db.select().from(schema.attempts).where(eq(schema.attempts.studentId, studentId))
   ).map(mapAttempt);
-  const problems = (await db.select().from(schema.problems)).map(mapProblem);
-  const skillRows = await db.select().from(schema.skills);
-  const chapterRows = await db.select().from(schema.subtopics);
 
   const byProblem = new Map<string, Attempt[]>();
   for (const a of attempts) {
     if (!byProblem.has(a.problemId)) byProblem.set(a.problemId, []);
     byProblem.get(a.problemId)!.push(a);
   }
+  // Читаем только задачи с ошибками и их навыки, а не всю программу: функцию
+  // зовёт StudentShell на каждой странице ученика (счётчик «Ошибки»).
+  const wrongIds = [...byProblem]
+    .filter(([, list]) => list.some((a) => !a.isCorrect && !a.reviewStatus))
+    .map(([id]) => id);
+  if (wrongIds.length === 0) return [];
+  const problems = (await db.select().from(schema.problems).where(inArray(schema.problems.id, wrongIds))).map(mapProblem);
+  const skillIds = [...new Set(problems.map((p) => p.skillId).filter((x): x is string => !!x))];
+  const skillRows = skillIds.length ? await db.select().from(schema.skills).where(inArray(schema.skills.id, skillIds)) : [];
+  const chapterIds = [...new Set(skillRows.map((s) => s.subtopicId))];
+  const chapterRows = chapterIds.length
+    ? await db.select().from(schema.subtopics).where(inArray(schema.subtopics.id, chapterIds))
+    : [];
 
   const entries: MistakeEntry[] = [];
   for (const [problemId, problemAttempts] of byProblem) {

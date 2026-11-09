@@ -3,12 +3,16 @@ import { getMistakesForStudent } from "@/lib/queries";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCheck, IconClose } from "@/components/icons";
+import { MISTAKE_PRACTICE_SIZE } from "@/lib/practice";
+import { pluralRu } from "@/lib/pluralize";
 
 export default async function MistakesPage() {
   const user = (await getSessionUser())!;
   const mistakes = await getMistakesForStudent(user.id);
   const unresolved = mistakes.filter((m) => !m.resolved);
   const resolved = mistakes.filter((m) => m.resolved);
+  // Сколько можно перерешать в «Работе над ошибками» (краткий ответ, есть навык).
+  const practiceable = unresolved.filter((m) => m.problem.skillId && m.problem.answerType !== "DETAILED").length;
 
   return (
     <StudentShell active="mistakes" title="Мои ошибки">
@@ -18,6 +22,27 @@ export default async function MistakesPage() {
           <p className="mt-1.5 text-sm text-ink-soft">
             Задачи, где хотя бы раз ответил неверно — удобно вернуться и закрепить.
           </p>
+
+          {/* Главное действие: перерешать ошибки подряд, не выходя в уроки
+              (раньше ссылки вели в урок, где задачи из ДЗ или пробника могло не быть). */}
+          {practiceable > 0 && (
+            <a
+              href="/student/mistakes/practice"
+              className="mt-5 flex items-center gap-3 rounded-[20px] bg-pine-dark p-4 text-white transition hover:brightness-110"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/15 text-xl" aria-hidden>
+                💪
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-display text-[16px] font-black">Работа над ошибками</span>
+                <span className="block text-[13px] font-semibold text-white/80">
+                  Перерешай подряд {Math.min(practiceable, MISTAKE_PRACTICE_SIZE)}{" "}
+                  {pluralRu(Math.min(practiceable, MISTAKE_PRACTICE_SIZE), ["задачу", "задачи", "задач"])} с ошибкой и закрой их
+                </span>
+              </span>
+              <span aria-hidden className="text-xl font-black">→</span>
+            </a>
+          )}
 
           {mistakes.length === 0 ? (
             <div className="card mt-6 p-8 text-center">
