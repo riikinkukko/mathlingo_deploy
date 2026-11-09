@@ -65,6 +65,7 @@ async function main() {
   const { sendTrialReminders } = await import("../lib/trial-reminders");
   const { sendComebackEmails } = await import("../lib/comeback-reminders");
   const { reportError } = await import("../lib/alerts");
+  const { runJobs } = await import("../lib/scheduler");
   const alert = (where: string, e: unknown) => {
     const err = e instanceof Error ? e : new Error(String(e));
     void reportError({ source: "bot", message: `${where}: ${err.message}`, stack: err.stack });
@@ -82,24 +83,23 @@ async function main() {
         console.error("[telegram-poller] Ошибка напоминаний о занятиях:", e);
         alert("Напоминания о занятиях", e);
       }
-      // Репетитору: «занятие прошло — было или не было?» и утренняя сводка.
-      try {
-        const p = await sendLessonStatusPrompts();
-        if (p > 0) console.log(`[telegram-poller] Вопросов «было ли занятие» отправлено: ${p}`);
-        const d = await sendTeacherDigests();
-        if (d > 0) console.log(`[telegram-poller] Утренних сводок отправлено: ${d}`);
-        const w = await sendParentWeeklyReports();
-        if (w > 0) console.log(`[telegram-poller] Недельных отчётов родителям: ${w}`);
-        const e = await sendStudentEveningReminders();
-        if (e > 0) console.log(`[telegram-poller] Вечерних напоминаний ученикам: ${e}`);
-        const t = await sendTrialReminders();
-        if (t > 0) console.log(`[telegram-poller] Напоминаний об окончании пробного: ${t}`);
-        const cb = await sendComebackEmails();
-        if (cb > 0) console.log(`[telegram-poller] Писем «возвращайся» ученикам: ${cb}`);
-      } catch (e) {
-        console.error("[telegram-poller] Ошибка уведомлений репетитору:", e);
-        alert("Сводки и напоминания", e);
-      }
+      // Остальные задачи — каждая отдельно (lib/scheduler.ts): ошибка одной
+      // не отменяет другие на этом круге.
+      await runJobs(
+        [
+          { name: "Вопросы «было ли занятие»", run: () => sendLessonStatusPrompts() },
+          { name: "Утренние сводки репетиторам", run: () => sendTeacherDigests() },
+          { name: "Недельные отчёты родителям", run: () => sendParentWeeklyReports() },
+          { name: "Вечерние напоминания ученикам", run: () => sendStudentEveningReminders() },
+          { name: "Напоминания об окончании пробного", run: () => sendTrialReminders() },
+          { name: "Письма «возвращайся»", run: () => sendComebackEmails() },
+        ],
+        (name, e) => {
+          console.error(`[telegram-poller] Ошибка: ${name}:`, e);
+          alert(name, e);
+        },
+        (m) => console.log(`[telegram-poller] ${m}`)
+      );
       await sleep(REMINDER_INTERVAL_MS);
     }
   })();

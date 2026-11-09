@@ -25,7 +25,7 @@ export default function ParentWeeklyToggle({ enabled }: { enabled: boolean }) {
             {state?.ok && <span className="ml-2 text-pine-dark">✓</span>}
           </span>
           <span className="block text-xs text-ink-soft">
-            Дни занятий, задачи и точность, домашка, занятия с репетитором, пробник и оплата — одним сообщением в 19:00.
+            Дни занятий, задачи и точность, темы занятий, домашка, пробник и оплата — в воскресенье вечером, в Telegram или на почту.
           </span>
         </span>
       </label>
