@@ -502,7 +502,7 @@ export default async function StudentDetailPage(
         <div>
         <CollapsibleSection
           title="Прогресс по навыкам"
-          summary={`${stats.solvedProblems}/${stats.totalProblems} задач`}
+          summary={`решено ${stats.solvedProblems} ${pluralRu(stats.solvedProblems, ["задача", "задачи", "задач"])}`}
         >
           <SkillsProgressSummary curriculum={curriculum} progress={progress} />
         </CollapsibleSection>

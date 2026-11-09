@@ -9,6 +9,8 @@ import TeacherPlanPicker from "@/components/TeacherPlanPicker";
 import { TEACHER_FREE_LIMIT, TEACHER_TIERS, teacherPlanState } from "@/lib/teacher-plan";
 import { pluralRu } from "@/lib/pluralize";
 import { cookies } from "next/headers";
+import { FROM_APP_COOKIE, isFromAppCookie } from "@/lib/app-context";
+import FromAppPlanNotice from "@/components/FromAppPlanNotice";
 import PromoBox from "@/components/PromoBox";
 import ReferralCard from "@/components/ReferralCard";
 import { checkPromo, ensureReferralCode, getReferralStats, promoLabel, PROMO_COOKIE, REFERRAL_BONUS_DAYS } from "@/lib/promo";
@@ -33,6 +35,20 @@ export default async function TeacherUpgradePage(
   const user = (await getSessionUser())!;
   if (user.role !== "TEACHER") redirect("/login");
 
+  if (isFromAppCookie((await cookies()).get(FROM_APP_COOKIE)?.value)) {
+    const st = teacherPlanState(user);
+    return (
+      <TeacherShell active="upgrade" title="Тариф">
+        <FromAppPlanNotice
+          planLine={
+            st.tier === "free"
+              ? `Бесплатный (до ${TEACHER_FREE_LIMIT} учеников)`
+              : `${TEACHER_TIERS[st.tier].name}${st.source === "trial" ? " — пробный период" : ""}`
+          }
+        />
+      </TeacherShell>
+    );
+  }
   const students = await getStudentsOfTeacher(user.id);
   const isPro = isTeacherEffectivelyPro(user);
   const isOwner = !!user.isPlatformOwner;

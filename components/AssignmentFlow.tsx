@@ -87,7 +87,7 @@ export default function AssignmentFlow({
       )}
 
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center">
           {items.map((it, i) => {
             const st = states[it.problem.id]?.status;
             return (
@@ -97,8 +97,9 @@ export default function AssignmentFlow({
                   if (i > index && currentState.status === "pending") return;
                   setIndex(i);
                 }}
-                // Видимая точка маленькая, но нажимать можно на область 28 px.
-                className="group flex h-7 items-center px-0.5"
+                // Видимая точка маленькая, но нажимать можно на область 36×24+ px
+                // (раньше было 14 px в ширину — пальцем не попасть).
+                className="group flex h-9 min-w-[24px] items-center justify-center px-[7px]"
                 aria-label={`Задача ${i + 1}`}
                 aria-current={i === index ? "step" : undefined}
               >

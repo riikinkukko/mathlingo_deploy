@@ -52,7 +52,7 @@ export default async function StudentDashboardHeader({
             label={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])} подряд`}
             className={streakCls}
             title={`Серия: ${streak} ${pluralRu(streak, ["день", "дня", "дней"])}`}
-            text="Сколько дней подряд ты закрываешь цель дня. Пропустишь день — серия начнётся заново."
+            text="Сколько дней подряд ты решаешь хотя бы одну задачу. Пропустишь день — выручит заморозка ❄️, если она есть, иначе серия начнётся заново."
             href="/student/profile"
             linkLabel="Мой прогресс"
           >

@@ -457,14 +457,22 @@ export type PathState = "done" | "current" | "locked";
 export const DAILY_GOAL_TARGET = 3;
 
 export async function computeDailyGoal(studentId: string): Promise<{ done: number; total: number }> {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // «Сегодня» — по Москве, как у серии (раньше считалось по UTC, и с 0:00 до
+  // 3:00 МСК цель дня показывала вчерашние задачи). Берём только последние
+  // сутки с запасом, а не все ответы ученика за всё время.
+  const todayStr = mskDayKey(new Date());
+  const since = new Date(Date.now() - 26 * 3600_000);
   const rows = await db
     .select({ problemId: schema.attempts.problemId, createdAt: schema.attempts.createdAt })
     .from(schema.attempts)
-    .where(and(eq(schema.attempts.studentId, studentId), eq(schema.attempts.isCorrect, true)));
-  const solvedToday = new Set(
-    rows.filter((r) => r.createdAt.toISOString().slice(0, 10) === todayStr).map((r) => r.problemId)
-  );
+    .where(
+      and(
+        eq(schema.attempts.studentId, studentId),
+        eq(schema.attempts.isCorrect, true),
+        gte(schema.attempts.createdAt, since)
+      )
+    );
+  const solvedToday = new Set(rows.filter((r) => mskDayKey(r.createdAt) === todayStr).map((r) => r.problemId));
   return { done: Math.min(DAILY_GOAL_TARGET, solvedToday.size), total: DAILY_GOAL_TARGET };
 }
 

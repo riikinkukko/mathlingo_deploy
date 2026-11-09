@@ -57,6 +57,25 @@ body {
   @apply w-full rounded-2xl border-2 border-line bg-white px-3.5 py-2.5 text-ink placeholder:text-ink-soft/60 focus:border-pine focus:outline-none;
 }
 
+/* Выпадающие списки: единый вид во всех браузерах (на iPhone системный
+   select был серым и с обрезанным текстом под стрелкой). Сам список вариантов
+   остаётся системным — он удобнее всего листается пальцем. */
+select.input {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 2.5rem;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5l5 5 5-5' stroke='%235B6B63' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  background-size: 1.1rem;
+  cursor: pointer;
+}
+select.input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .label {
   @apply mb-1.5 block text-xs font-bold uppercase tracking-wide text-ink-soft;
 }
@@ -385,4 +404,13 @@ html:not(.lp-js) .lp-underline path {
  * веер телефонов и галочки отыгрывали бы невидимыми. */
 .lp-js [data-reveal]:not(.lp-in) :is(.lp-panel-in, .lp-fan-l, .lp-fan-r, .lp-fan-c, .lp-check path) {
   animation-play-state: paused;
+}
+
+/* Сайт открыт из мобильного приложения (lib/app-context.ts): по правилам
+   Google Play прячем все ссылки, ведущие к оплате. */
+html[data-from-app] a[href^="/student/upgrade"],
+html[data-from-app] a[href^="/tariffs"],
+html[data-from-app] a[href^="/teacher/upgrade"],
+html[data-from-app] [data-pay] {
+  display: none !important;
 }

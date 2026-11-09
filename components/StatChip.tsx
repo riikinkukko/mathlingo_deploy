@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Чип статистики в шапке ученика (серия / опыт / энергия). По нажатию —
@@ -30,7 +30,25 @@ export default function StatChip({
   size?: "md" | "sm";
 }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  // Подсказка прижата к правому краю чипа. У левых чипов на телефоне она
+  // уезжала за левый край экрана — сдвигаем, чтобы целиком влезала.
+  useLayoutEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const el = popRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    const vw = document.documentElement.clientWidth;
+    if (r.left < margin) setShift(margin - r.left);
+    else if (r.right > vw - margin) setShift(vw - margin - r.right);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -64,8 +82,10 @@ export default function StatChip({
       </button>
       {open && (
         <div
+          ref={popRef}
           role="dialog"
           aria-label={title}
+          style={shift ? { right: -shift } : undefined}
           className="absolute right-0 top-full z-50 mt-2 w-60 animate-slide-up-fade rounded-2xl border border-line bg-white p-3.5 text-left shadow-soft"
         >
           <p className="font-display text-[14px] font-black text-ink">{title}</p>

@@ -54,7 +54,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <head>
         {/* До первой отрисовки: подставляем отступы под системные панели,
             сохранённые с прошлого запуска приложения (CapacitorBootstrap).
@@ -63,7 +63,7 @@ export default function RootLayout({
             28px, точное значение плагин пришлёт следом. В браузере — ничего. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var r=document.documentElement.style,t=localStorage.getItem("pm-sat"),b=localStorage.getItem("pm-sab");if(t)r.setProperty("--safe-area-inset-top",t);else if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())r.setProperty("--safe-area-inset-top","28px");if(b)r.setProperty("--safe-area-inset-bottom",b)}catch(e){}`,
+            __html: `try{if(/(?:^|; )pm_app=1(?:;|$)/.test(document.cookie))document.documentElement.setAttribute("data-from-app","")}catch(e){}try{var r=document.documentElement.style,t=localStorage.getItem("pm-sat"),b=localStorage.getItem("pm-sab");if(t)r.setProperty("--safe-area-inset-top",t);else if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())r.setProperty("--safe-area-inset-top","28px");if(b)r.setProperty("--safe-area-inset-bottom",b)}catch(e){}`,
           }}
         />
       </head>

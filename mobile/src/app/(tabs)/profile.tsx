@@ -66,7 +66,9 @@ export default function Profile() {
       {!user.emailVerified ? (
         <Card style={{ backgroundColor: C.amberLight, borderColor: C.amberLight }}>
           <T w="bold" color={C.amberText}>
-            Подтверди почту — ссылка в письме от Планиметрики. Без этого энергия не восстанавливается.
+            {user.standalone && !user.isPro
+              ? "Подтверди почту — ссылка в письме от Планиметрики. Без этого энергия не восстанавливается."
+              : "Подтверди почту — ссылка в письме от Планиметрики. Так ты точно не потеряешь доступ к аккаунту."}
           </T>
         </Card>
       ) : null}

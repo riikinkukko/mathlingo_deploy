@@ -69,7 +69,18 @@ export default function Analytics() {
     let changed = false;
     const next = new URLSearchParams(searchParams.toString());
     if (ym) { ymGoal(ym); next.delete("ym"); changed = true; }
-    if (paid === "1") { ymGoal("payment_success"); }
+    // ?paid=1 остаётся в адресе (по нему страница тарифа показывает «оплата
+    // обрабатывается»), поэтому без отметки цель засчитывалась при каждом
+    // обновлении страницы.
+    if (paid === "1") {
+      const key = `pm-paid-goal:${pathname}`;
+      let seen = false;
+      try {
+        seen = Date.now() - Number(sessionStorage.getItem(key) || 0) < 3600_000;
+        if (!seen) sessionStorage.setItem(key, String(Date.now()));
+      } catch {}
+      if (!seen) ymGoal("payment_success");
+    }
     if (changed) {
       const qs = next.toString();
       router.replace(pathname + (qs ? `?${qs}` : ""), { scroll: false });

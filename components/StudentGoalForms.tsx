@@ -51,7 +51,7 @@ export function TargetScoreForm({ studentId, targetScore }: { studentId: string;
       <div>
         <label className="label" htmlFor="targetScore">Целевой балл</label>
         <input
-          className="input w-32"
+          className="input w-36"
           id="targetScore"
           name="targetScore"
           type="number"
@@ -59,7 +59,7 @@ export function TargetScoreForm({ studentId, targetScore }: { studentId: string;
           min={1}
           max={100}
           defaultValue={targetScore ?? ""}
-          placeholder="например, 80"
+          placeholder="80"
         />
       </div>
       <Submit label="Сохранить цель" />

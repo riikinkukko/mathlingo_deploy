@@ -20,6 +20,8 @@ import TrackGoal from "@/components/TrackGoal";
 import PayButton from "@/components/PayButton";
 import PromoBox from "@/components/PromoBox";
 import { cookies } from "next/headers";
+import { FROM_APP_COOKIE, isFromAppCookie } from "@/lib/app-context";
+import FromAppPlanNotice from "@/components/FromAppPlanNotice";
 import { checkPromo, discountedPrice, promoLabel, PROMO_COOKIE } from "@/lib/promo";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
@@ -38,6 +40,16 @@ export default async function UpgradePage(
   if (!isStandaloneStudent(user)) redirect("/student");
 
   const isPro = isEffectivelyPro(user);
+  if (isFromAppCookie((await cookies()).get(FROM_APP_COOKIE)?.value)) {
+    const until = user.proUntil
+      ? new Date(user.proUntil).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" })
+      : null;
+    return (
+      <StudentShell active="profile" title="Тариф" back={{ href: "/student", label: "Назад" }}>
+        <FromAppPlanNotice planLine={isPro ? (until ? `Pro до ${until}` : "Pro") : "Бесплатный"} />
+      </StudentShell>
+    );
+  }
   const energy = Math.floor(getEffectiveEnergy(user));
   const minutesLeft = minutesUntilNextEnergy(user);
   const rechargeBlocked = isEnergyRechargeBlocked(user);

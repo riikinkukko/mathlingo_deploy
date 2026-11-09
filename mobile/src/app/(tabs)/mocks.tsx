@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
-import { Alert, Modal, Pressable, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorText } from "@/lib/api";
@@ -16,6 +17,7 @@ export default function MocksScreen() {
   const q = useQuery({ queryKey: ["mocks"], queryFn: () => api<MockListPayload>("/api/m/mocks") });
   const [picked, setPicked] = useState<number | null>(null);
   const [mode, setMode] = useState<"full" | "part1" | "free">("full");
+  const insets = useSafeAreaInsets();
   const [starting, setStarting] = useState(false);
 
   if (q.isLoading && !q.data) return <Loading />;
@@ -152,7 +154,10 @@ export default function MocksScreen() {
 
       <Modal visible={picked != null} transparent animationType="slide" onRequestClose={() => setPicked(null)}>
         <Pressable style={{ flex: 1, backgroundColor: "rgba(19,42,32,0.45)" }} onPress={() => setPicked(null)} />
-        <View style={{ backgroundColor: C.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 }}>
+        {/* Лист листается и не уходит под системную панель: на маленьких
+            телефонах кнопка «Начать» раньше пряталась за краем экрана. */}
+        <View style={{ backgroundColor: C.white, borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: "88%" }}>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: insets.bottom + 20, gap: 12 }}>
           <H2>Вариант {picked}</H2>
           <T size={13} color={C.inkSoft}>
             Ответы не проверяются до сдачи — как на экзамене. Можно закрыть приложение и продолжить позже.
@@ -170,7 +175,7 @@ export default function MocksScreen() {
             </Pressable>
           ))}
           <Button title="Начать" onPress={start} loading={starting} />
-          <View style={{ height: 8 }} />
+          </ScrollView>
         </View>
       </Modal>
     </Screen>
