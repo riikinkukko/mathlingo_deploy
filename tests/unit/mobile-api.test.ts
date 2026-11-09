@@ -114,3 +114,74 @@ test("API: ответ на задачу проверяется сервером"
   assert.equal((await send("987654321")).kind, "wrong");
   assert.equal((await send(p.correctAnswer)).kind, "correct");
 });
+
+// ------------------------------------------------- чертежи: подписи и запись
+
+import { splitHalos, diagramSvg } from "../../lib/mobile/diagram-svg";
+import { GET as questionsGET, POST as questionsPOST } from "../../app/api/m/questions/route";
+import { GET as achievementsGET } from "../../app/api/m/achievements/route";
+
+test("подписи с белым ореолом: в приложении — ореол отдельно, буквы поверх (paint-order не нужен)", () => {
+  const out = splitHalos('<svg><text x="1" y="2" fill="#1CAE6B" paint-order="stroke" stroke="#fff" stroke-width="3">9</text></svg>');
+  assert.ok(!out.includes("paint-order"));
+  const texts = out.match(/<text[^>]*>9<\/text>/g)!;
+  assert.equal(texts.length, 2);
+  assert.match(texts[0], /fill="#fff"/);
+  assert.match(texts[1], /fill="#1CAE6B"/);
+  assert.ok(!/stroke=/.test(texts[1]), "верхняя подпись — без обводки");
+});
+
+/** Координаты подписи вершины name в SVG чертежа. */
+function vertex(svg: string, name: string): { x: number; y: number } {
+  const m = new RegExp(`<text x="([\\d.-]+)" y="([\\d.-]+)"[^>]*>${name}</text>`).exec(svg);
+  assert.ok(m, `нет вершины ${name}`);
+  return { x: Number(m![1]), y: Number(m![2]) };
+}
+
+test("четырёхугольники в школьной записи: AD снизу, BC сверху (A — левый нижний, B — левый верхний)", () => {
+  for (const spec of [
+    { kind: "parallelogram" },
+    { kind: "parallelogram", ab: 5, ad: 8, angle: 60 },
+    { kind: "trapezoid", top: "4", bottom: "10" },
+    { kind: "rectangle", a: "3", b: "5" },
+  ]) {
+    const svg = diagramSvg(spec as never)!;
+    const [A, B, C, D] = ["A", "B", "C", "D"].map((n) => vertex(svg, n));
+    assert.ok(A.y > B.y && D.y > C.y, `${spec.kind}: A и D снизу`);
+    assert.ok(A.x < D.x && B.x < C.x, `${spec.kind}: A слева от D, B слева от C`);
+    assert.ok(Math.abs(A.y - D.y) < 1 && Math.abs(B.y - C.y) < 1, `${spec.kind}: AD и BC горизонтальны`);
+  }
+  // Параллелепипед и пирамида: AD — переднее (нижнее) ребро основания, B и C — сзади.
+  for (const spec of [{ kind: "box" }, { kind: "pyramid" }]) {
+    const svg = diagramSvg(spec as never)!;
+    const [A, B, C, D] = ["A", "B", "C", "D"].map((n) => vertex(svg, n));
+    assert.ok(A.y > B.y && D.y > C.y && A.x < D.x, `${spec.kind}: AD спереди`);
+  }
+});
+
+test("пропорции параллелограмма: ab — левая сторона AB, ad — нижняя AD", () => {
+  const svg = diagramSvg({ kind: "parallelogram", ab: 5, ad: 10, angle: 60 } as never)!;
+  const [A, B, D] = ["A", "B", "D"].map((n) => vertex(svg, n));
+  const AB = Math.hypot(A.x - B.x, A.y - B.y);
+  const AD = Math.hypot(A.x - D.x, A.y - D.y);
+  assert.ok(AD > AB * 1.6, `AD (${AD.toFixed(0)}) должна быть вдвое длиннее AB (${AB.toFixed(0)})`);
+});
+
+test("API: вопрос репетитору из приложения и список вопросов", async () => {
+  const noTeacher = await makeUser();
+  const [p] = await problems(1);
+  const r0 = await questionsPOST(
+    new Request("http://x/api/m/questions", { method: "POST", headers: { ...(await bearer(noTeacher)), "content-type": "application/json" }, body: JSON.stringify({ problemId: p.id, message: "?" }) })
+  );
+  assert.equal(r0.status, 400, "без репетитора спросить некого");
+  const u = await makeUser({ teacherId: "u_1" });
+  const r1 = await questionsPOST(
+    new Request("http://x/api/m/questions", { method: "POST", headers: { ...(await bearer(u)), "content-type": "application/json" }, body: JSON.stringify({ problemId: p.id, message: "Почему так?", answer: "5" }) })
+  );
+  assert.equal(r1.status, 200);
+  const list = await (await questionsGET(new Request("http://x/api/m/questions", { headers: await bearer(u) }))).json();
+  assert.equal(list.questions.length, 1);
+  assert.equal(list.questions[0].message, "Почему так?");
+  const ach = await (await achievementsGET(new Request("http://x/api/m/achievements", { headers: await bearer(u) }))).json();
+  assert.ok(ach.items.length > 0 && "progressPct" in ach.items[0]);
+});

@@ -61,6 +61,9 @@ export function routeForLink(link: string, role: string): { app: string } | { we
     if (path.startsWith("/student/review")) return { app: "/review" };
     if (path.startsWith("/student/mistakes")) return { app: "/mistakes" };
     if (path.startsWith("/student/mock")) return { app: "/mocks" };
+    if (path.startsWith("/student/questions")) return { app: "/questions" };
+    if (path.startsWith("/student/achievements")) return { app: "/achievements" };
+    if (path.startsWith("/student/profile")) return { app: "/profile" };
     if (path === "/student" || path === "") return { app: "/" };
   }
   return { web: link || `/${role.toLowerCase()}` };

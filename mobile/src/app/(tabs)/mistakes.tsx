@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Animated, { LinearTransition } from "react-native-reanimated";
+import { enter } from "@/components/motion";
 import { Pressable, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { api, errorText } from "@/lib/api";
@@ -55,9 +57,17 @@ export default function MistakesScreen() {
       ) : (
         <>
           {unresolved.length ? <H2 style={{ color: C.coralText }}>Ещё не решено верно · {unresolved.length}</H2> : null}
-          {unresolved.map(row)}
+          {unresolved.map((m, i) => (
+            <Animated.View key={m.problem.id} entering={enter(i)} layout={LinearTransition}>
+              {row(m)}
+            </Animated.View>
+          ))}
           {resolved.length ? <H2 style={{ color: C.pineStrong, marginTop: 8 }}>Исправлено · {resolved.length}</H2> : null}
-          {resolved.map(row)}
+          {resolved.map((m, i) => (
+            <Animated.View key={m.problem.id} entering={enter(i + unresolved.length)} layout={LinearTransition}>
+              {row(m)}
+            </Animated.View>
+          ))}
         </>
       )}
     </Screen>

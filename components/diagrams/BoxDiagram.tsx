@@ -1,11 +1,12 @@
 import { D, fitPoints, halo, isUnknown, givenStyle, unknownStyle, Pt } from "./shared";
 
 // Косоугольная (кавалерная) проекция, как рисуют параллелепипед в ЕГЭ:
-// основание ABCD лежит горизонтально (A — передняя левая, B — передняя
-// правая, C — задняя правая, D — задняя левая вершина), рёбра AA₁, BB₁…
-// вертикальны. Глубина (AD) уходит вверх-вправо под углом DEPTH_ANGLE со
+// основание ABCD лежит горизонтально в школьной записи — AD спереди
+// (снизу на рисунке), BC сзади: A — передняя левая, B — задняя левая,
+// C — задняя правая, D — передняя правая вершина; рёбра AA₁, BB₁…
+// вертикальны. Глубина (AB) уходит вверх-вправо под углом DEPTH_ANGLE со
 // сжатием DEPTH_SCALE. Смотрим сверху-спереди-справа, поэтому невидимы
-// ровно три ребра, выходящие из задней нижней левой вершины D: AD, DC, DD₁.
+// ровно три ребра, выходящие из задней нижней левой вершины B: AB, BC, BB₁.
 const DEPTH_ANGLE = 35;
 const DEPTH_SCALE = 0.55;
 
@@ -20,7 +21,7 @@ interface EdgeLabel {
  * в задачах №3/№14.
  * labels — 8 подписей: основание A, B, C, D, затем верх A₁, B₁, C₁, D₁
  * (индексы 0–7 используются в highlightEdges / edgeLabels).
- * size — [AB, AD, AA₁] в любых единицах, чтобы пропорции следовали
+ * size — [AB, AD, AA₁] в любых единицах (AB — вглубь, AD — по фронту), чтобы пропорции следовали
  * условию (каждое измерение не меньше 40% от наибольшего, иначе фигура
  * становится нечитаемой).
  */
@@ -41,7 +42,8 @@ export default function BoxDiagram({
   edgeLabels?: EdgeLabel[];
   size?: [number, number, number];
 }) {
-  let [w, d, h] = size ?? (isCube ? [1, 1, 1] : [1.35, 1.1, 0.95]);
+  // w — по фронту (AD), d — вглубь (AB), h — вверх (AA₁).
+  let [d, w, h] = size ?? (isCube ? [1, 1, 1] : [1.1, 1.35, 0.95]);
   const m = Math.max(w, d, h);
   w = Math.max(w, 0.4 * m);
   d = Math.max(d, 0.4 * m);
@@ -54,22 +56,22 @@ export default function BoxDiagram({
   });
   const raw = [
     proj(0, 0, 0), // A
-    proj(w, 0, 0), // B
+    proj(0, d, 0), // B
     proj(w, d, 0), // C
-    proj(0, d, 0), // D
+    proj(w, 0, 0), // D
     proj(0, 0, h), // A₁
-    proj(w, 0, h), // B₁
+    proj(0, d, h), // B₁
     proj(w, d, h), // C₁
-    proj(0, d, h), // D₁
+    proj(w, 0, h), // D₁
   ];
   const { map } = fitPoints(raw, { x0: 34, y0: 22, x1: 226, y1: 196 });
   const pts = raw.map(map);
   const center = map(proj(w / 2, d / 2, h / 2));
 
-  // Видимые грани: передняя ABB₁A₁, правая BCC₁B₁, верхняя A₁B₁C₁D₁.
+  // Видимые грани: передняя ADD₁A₁, правая DCC₁D₁, верхняя A₁B₁C₁D₁.
   const visibleFaces = [
-    [0, 1, 5, 4],
-    [1, 2, 6, 5],
+    [0, 3, 7, 4],
+    [3, 2, 6, 7],
     [4, 5, 6, 7],
   ];
   const isVisible = (i: number, j: number) => visibleFaces.some((f) => f.includes(i) && f.includes(j));
@@ -95,11 +97,11 @@ export default function BoxDiagram({
     />
   );
 
-  // Подпись вершины — по направлению «от центра тела»; для скрытой D
+  // Подпись вершины — по направлению «от центра тела»; для скрытой B
   // (она проецируется внутрь передней грани) — чуть влево-вверх.
   const labelPos = (i: number): Pt => {
     const p = pts[i];
-    if (i === 3) return { x: p.x - 11, y: p.y - 5 };
+    if (i === 1) return { x: p.x - 11, y: p.y - 5 };
     const dx = p.x - center.x;
     const dy = p.y - center.y;
     const l = Math.hypot(dx, dy) || 1;
@@ -109,13 +111,13 @@ export default function BoxDiagram({
   return (
     <svg viewBox="0 0 260 215" className="h-full w-full">
       <polygon
-        points={[0, 1, 5, 4].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")}
+        points={[0, 3, 7, 4].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")}
         fill={D.pineLight}
         fillOpacity="0.6"
         stroke="none"
       />
       <polygon
-        points={[1, 2, 6, 5].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")}
+        points={[3, 2, 6, 7].map((i) => `${pts[i].x},${pts[i].y}`).join(" ")}
         fill={D.pineLight}
         fillOpacity="0.35"
         stroke="none"

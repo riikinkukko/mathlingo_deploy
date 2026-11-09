@@ -27,11 +27,12 @@ export default function RectangleShape({
   diagonal?: string;
   circumscribed?: boolean;
   radius?: string;
-  labelA?: string; // левый верхний
-  labelB?: string; // правый верхний
-  labelC?: string; // правый нижний
-  labelD?: string; // левый нижний
-  /** Обе диагонали, точка O их пересечения и подпись отрезка O–C (половина диагонали). */
+  // Школьная запись: AD — снизу, BC — сверху.
+  labelA?: string; // левый нижний
+  labelB?: string; // левый верхний
+  labelC?: string; // правый верхний
+  labelD?: string; // правый нижний
+  /** Обе диагонали, точка O их пересечения и подпись отрезка O–D (половина диагонали). */
   halfDiagonal?: string;
 }) {
   // Описанная окружность должна целиком помещаться в viewBox высотой 200 —
@@ -99,7 +100,7 @@ export default function RectangleShape({
       )}
       {circumscribed && radius && (
         <>
-          {/* радиус — в вершину B (на окружность), а не в сторону */}
+          {/* радиус — в вершину C (на окружность), а не в сторону */}
           <line x1={cx} y1={cy} x2={x1} y2={y0} stroke={D.inkSoft} strokeWidth="1.5" />
           <circle cx={cx} cy={cy} r="2.5" fill={D.inkSoft} />
           <text x={(cx + x1) / 2 - 6} y={(cy + y0) / 2 - 4} textAnchor="end" style={{ ...givenStyle, fontSize: 13 }}>
@@ -109,16 +110,16 @@ export default function RectangleShape({
       )}
       <Lbl x={cx} y={y1 + 18} value={b} />
       <Lbl x={small ? x0 + 14 : x0 - 14} y={cy + 5} value={a} />
-      <VertexLabel x={x0} y={y0} dx={-8} dy={-6}>
+      <VertexLabel x={x0} y={y1} dx={-8} dy={14}>
         {labelA}
       </VertexLabel>
-      <VertexLabel x={x1} y={y0} dx={8} dy={-6}>
+      <VertexLabel x={x0} y={y0} dx={-8} dy={-6}>
         {labelB}
       </VertexLabel>
-      <VertexLabel x={x1} y={y1} dx={8} dy={14}>
+      <VertexLabel x={x1} y={y0} dx={8} dy={-6}>
         {labelC}
       </VertexLabel>
-      <VertexLabel x={x0} y={y1} dx={-8} dy={14}>
+      <VertexLabel x={x1} y={y1} dx={8} dy={14}>
         {labelD}
       </VertexLabel>
     </svg>

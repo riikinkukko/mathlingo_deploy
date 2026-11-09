@@ -7,6 +7,8 @@ import { errorText } from "@/lib/api";
 import type { HomePayload, PathState } from "@/lib/types";
 import { Button, Card, ErrorBox, H2, Loading, ProgressBar, Row, Screen, StatBadge, T } from "@/components/ui";
 import { Icon, Mascot } from "@/components/Svg";
+import { Bob, PressScale, PulseRing, Wiggle, enter } from "@/components/motion";
+import Animated from "react-native-reanimated";
 import { C, R, shadow } from "@/theme";
 
 const OFFSETS = [0, 46, 70, 46, 0, -46, -70, -46];
@@ -79,8 +81,8 @@ export default function PathScreen() {
               </T>
             </Row>
           </Pressable>
-          {d.topic.chapters.map((ch) => (
-            <Chapter key={ch.id} chapter={ch} />
+          {d.topic.chapters.map((ch, ci) => (
+            <Chapter key={ch.id} chapter={ch} index={ci} />
           ))}
         </>
       ) : null}
@@ -93,7 +95,9 @@ function TopBar({ d }: { d: HomePayload }) {
   return (
     <Row style={{ justifyContent: "space-between" }}>
       <Row gap={8} style={{ flex: 1 }}>
-        <Mascot mood={d.stats.dailyGoal.done >= d.stats.dailyGoal.total ? "celebrating" : "happy"} size={42} />
+        <Bob amp={3}>
+          <Mascot mood={d.stats.dailyGoal.done >= d.stats.dailyGoal.total ? "celebrating" : "happy"} size={42} />
+        </Bob>
         <View style={{ flex: 1 }}>
           <T w="black" size={18} numberOfLines={1}>
             Привет, {d.user.name.split(" ")[0]}!
@@ -104,7 +108,9 @@ function TopBar({ d }: { d: HomePayload }) {
         </View>
       </Row>
       <Row gap={6}>
-        <StatBadge icon="Flame" value={String(d.stats.streak)} color={C.amber} />
+        <Wiggle trigger={d.stats.streak}>
+          <StatBadge icon="Flame" value={String(d.stats.streak)} color={C.amber} />
+        </Wiggle>
         <StatBadge icon="Bolt" value={energy === null ? "∞" : String(energy)} color={energy === 0 ? C.coral : C.pine} />
         <Pressable onPress={() => router.push("/notifications")} hitSlop={8} accessibilityLabel="Уведомления">
           <Icon name="Bell" size={24} color={C.inkSoft} />
@@ -153,15 +159,18 @@ function TopicProgress({ d }: { d: HomePayload }) {
   );
 }
 
-function Chapter({ chapter }: { chapter: NonNullable<HomePayload["topic"]>["chapters"][number] }) {
+function Chapter({ chapter, index }: { chapter: NonNullable<HomePayload["topic"]>["chapters"][number]; index: number }) {
+  const base = index < 2 ? index * 180 : 0;
   return (
     <View style={{ gap: 10, marginTop: 6 }}>
-      <View style={{ backgroundColor: C.pineLight, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>
+      <Animated.View entering={enter(0, base)} style={{ backgroundColor: C.pineLight, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 10 }}>
         <H2 style={{ color: C.pineDark, fontSize: 16 }}>{chapter.title}</H2>
-      </View>
+      </Animated.View>
       <View style={{ alignItems: "center", gap: 14, paddingVertical: 4 }}>
         {chapter.skills.map((s, i) => (
-          <SkillNode key={s.id} skill={s} offset={OFFSETS[i % OFFSETS.length]} />
+          <Animated.View key={s.id} entering={enter(i + 1, base)}>
+            <SkillNode skill={s} offset={OFFSETS[i % OFFSETS.length]} />
+          </Animated.View>
         ))}
       </View>
     </View>
@@ -194,34 +203,39 @@ function SkillNode({
   return (
     <View style={{ transform: [{ translateX: offset }], alignItems: "center", width: 180 }}>
       {current ? (
-        <View style={{ backgroundColor: C.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6, borderWidth: 1, borderColor: C.line }}>
-          <T w="black" size={12} color={C.pineStrong}>
-            НАЧАТЬ
-          </T>
-        </View>
+        <Bob amp={5} duration={1100}>
+          <View style={{ backgroundColor: C.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6, borderWidth: 1, borderColor: C.line }}>
+            <T w="black" size={12} color={C.pineStrong}>
+              НАЧАТЬ
+            </T>
+          </View>
+        </Bob>
       ) : null}
-      <Pressable
-        onPress={open}
-        accessibilityRole="button"
-        accessibilityLabel={`${skill.title}${done ? ", пройден" : locked ? ", закрыт" : ""}`}
-        style={({ pressed }) => [
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: bg,
-            alignItems: "center",
-            justifyContent: "center",
-            borderBottomWidth: 5,
-            borderBottomColor: done || current ? "rgba(0,0,0,0.18)" : C.line,
-            transform: [{ scale: pressed ? 0.94 : 1 }],
-          },
-          current ? { ...shadow, shadowOpacity: 0.18 } : null,
-          current ? { borderWidth: 4, borderColor: C.pineMint } : null,
-        ]}
-      >
-        <Icon name={done ? "Check" : skill.proOnly ? "Crown" : locked ? "Lock" : "Star"} size={current ? 34 : 28} color={locked ? "#9DB5A8" : C.white} />
-      </Pressable>
+      <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
+        {current ? <PulseRing size={size} color={C.pine} /> : null}
+        <PressScale
+          onPress={open}
+          scaleTo={0.9}
+          accessibilityRole="button"
+          accessibilityLabel={`${skill.title}${done ? ", пройден" : locked ? ", закрыт" : ""}`}
+          style={[
+            {
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: bg,
+              alignItems: "center",
+              justifyContent: "center",
+              borderBottomWidth: 5,
+              borderBottomColor: done || current ? "rgba(0,0,0,0.18)" : C.line,
+            },
+            current ? { ...shadow, shadowOpacity: 0.18 } : null,
+            current ? { borderWidth: 4, borderColor: C.pineMint } : null,
+          ]}
+        >
+          <Icon name={done ? "Check" : skill.proOnly ? "Crown" : locked ? "Lock" : "Star"} size={current ? 34 : 28} color={locked ? "#9DB5A8" : C.white} />
+        </PressScale>
+      </View>
       <T w="bold" size={12} color={locked ? C.inkSoft : C.ink} numberOfLines={2} style={{ textAlign: "center", marginTop: 6 }}>
         {skill.title}
       </T>

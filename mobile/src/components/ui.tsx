@@ -15,7 +15,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { C, F, R, shadow } from "@/theme";
+import Reanimated, { FadeIn, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { Icon, Mascot } from "./Svg";
+import { AnimatedBar, PressScale } from "./motion";
 import type { MascotMood } from "@/assets/svg";
 
 type Weight = keyof typeof F;
@@ -68,38 +70,48 @@ export function Button({
   const bg = { primary: C.pineStrong, secondary: C.white, ghost: "transparent", danger: C.coral, light: C.white }[kind];
   const fg = { primary: C.white, secondary: C.inkSoft, ghost: C.pineStrong, danger: C.white, light: C.pineDark }[kind];
   const border = kind === "secondary" ? C.line : "transparent";
+  const sc = useSharedValue(1);
+  const lift = useAnimatedStyle(() => ({ transform: [{ scale: sc.value }] }));
+  const raised = kind === "primary" && !disabled;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: !!disabled || !!loading }}
       disabled={disabled || loading}
+      onPressIn={() => (sc.value = withSpring(0.96, { damping: 15, stiffness: 420 }))}
+      onPressOut={() => (sc.value = withSpring(1, { damping: 9, stiffness: 260 }))}
       onPress={() => {
         if (kind === "primary") Haptics.selectionAsync().catch(() => {});
         onPress?.();
       }}
-      style={({ pressed }) => [
-        {
-          minHeight: small ? 40 : 52,
-          paddingHorizontal: small ? 14 : 20,
-          borderRadius: R.pill,
-          backgroundColor: bg,
-          borderWidth: 2,
-          borderColor: border,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed ? 0.97 : 1 }],
-        },
-        kind === "primary" && !disabled ? { borderBottomWidth: 4, borderBottomColor: "rgba(0,0,0,0.16)" } : null,
-        style,
-      ]}
+      style={style}
     >
-      {loading ? (
-        <ActivityIndicator color={fg} />
-      ) : (
-        <T w="extrabold" size={small ? 13 : 15} color={fg} style={{ letterSpacing: 0.3, textTransform: "uppercase" }}>
-          {title}
-        </T>
+      {({ pressed }) => (
+        <Reanimated.View
+          style={[
+            {
+              minHeight: small ? 40 : 52,
+              paddingHorizontal: small ? 14 : 20,
+              borderRadius: R.pill,
+              backgroundColor: bg,
+              borderWidth: 2,
+              borderColor: border,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: disabled ? 0.45 : 1,
+            },
+            raised ? { borderBottomWidth: pressed ? 2 : 4, borderBottomColor: "rgba(0,0,0,0.16)", marginTop: pressed ? 2 : 0 } : null,
+            lift,
+          ]}
+        >
+          {loading ? (
+            <ActivityIndicator color={fg} />
+          ) : (
+            <T w="extrabold" size={small ? 13 : 15} color={fg} style={{ letterSpacing: 0.3, textTransform: "uppercase" }}>
+              {title}
+            </T>
+          )}
+        </Reanimated.View>
       )}
     </Pressable>
   );
@@ -109,18 +121,14 @@ export function Card({ children, style, onPress }: { children: ReactNode; style?
   const body = [{ backgroundColor: C.white, borderRadius: R.card, borderWidth: 1, borderColor: C.lineSoft, padding: 16 }, style];
   if (!onPress) return <View style={body}>{children}</View>;
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [body, { opacity: pressed ? 0.85 : 1 }]}>
+    <PressScale onPress={onPress} scaleTo={0.97} style={body}>
       {children}
-    </Pressable>
+    </PressScale>
   );
 }
 
 export function ProgressBar({ pct, color = C.pine, track = C.grid, height = 8 }: { pct: number; color?: string; track?: string; height?: number }) {
-  return (
-    <View style={{ height, borderRadius: height, backgroundColor: track, overflow: "hidden" }}>
-      <View style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", backgroundColor: color, borderRadius: height }} />
-    </View>
-  );
+  return <AnimatedBar pct={pct} color={color} track={track} height={height} />;
 }
 
 export function Pill({ text, bg = C.pineLight, color = C.pineDark, style }: { text: string; bg?: string; color?: string; style?: StyleProp<ViewStyle> }) {
@@ -160,10 +168,14 @@ export function Screen({
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.pine} colors={[C.pine]} /> : undefined}
         >
-          {children}
+          <Reanimated.View entering={FadeIn.duration(260)} style={{ gap: 14 }}>
+            {children}
+          </Reanimated.View>
         </ScrollView>
       ) : (
-        <View style={[{ flex: 1 }, inner]}>{children}</View>
+        <Reanimated.View entering={FadeIn.duration(260)} style={[{ flex: 1 }, inner]}>
+          {children}
+        </Reanimated.View>
       )}
     </View>
   );

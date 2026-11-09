@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import Animated, { FadeInDown, FadeInRight, interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import * as Haptics from "expo-haptics";
+import { Bob, Confetti, Pop, enter, useCountUp } from "@/components/motion";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -107,7 +110,7 @@ function Lesson({ data, onFinished }: { data: Extract<SkillPayload, { status: "o
         <Row gap={4}>
           {data.problems.map((p, i) => (
             <Pressable key={p.id} onPress={() => setIndex(i)} style={{ flex: 1, paddingVertical: 4 }} accessibilityLabel={`Задача ${i + 1}`}>
-              <View style={{ height: 8, borderRadius: 4, backgroundColor: solved.has(p.id) ? C.pine : i === index ? C.pineMint : C.grid }} />
+              <Segment state={solved.has(p.id) ? 2 : i === index ? 1 : 0} />
             </Pressable>
           ))}
         </Row>
@@ -116,6 +119,7 @@ function Lesson({ data, onFinished }: { data: Extract<SkillPayload, { status: "o
         <T w="bold" size={12} color={C.inkSoft} style={{ marginBottom: 8 }}>
           Задача {index + 1} из {data.problems.length}
         </T>
+        <Animated.View key={problem.id} entering={FadeInRight.duration(280)}>
         <ProblemCard
           key={problem.id}
           problem={problem}
@@ -124,11 +128,12 @@ function Lesson({ data, onFinished }: { data: Extract<SkillPayload, { status: "o
           canAskTeacher={data.canAskTeacher}
           onSolved={() => setSolved((s) => new Set(s).add(problem.id))}
         />
+        </Animated.View>
       </ScrollView>
       {isSolved ? (
-        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: insets.bottom + 16, backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.lineSoft }}>
+        <Animated.View entering={FadeInDown.springify().damping(16)} style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: insets.bottom + 16, backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.lineSoft }}>
           <Button title={solved.size === data.problems.length ? "Завершить урок" : "Дальше"} onPress={next} />
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -145,6 +150,7 @@ function Theory({ cards, title, onDone }: { cards: TheoryCardM[]; title: string;
         <T w="bold" size={12} color={C.inkSoft}>
           Карточка {i + 1} из {cards.length}
         </T>
+        <Animated.View key={i} entering={FadeInRight.duration(260)}>
         <Card style={{ gap: 12 }}>
           <H2>{card.title}</H2>
           {card.formula ? (
@@ -159,6 +165,7 @@ function Theory({ cards, title, onDone }: { cards: TheoryCardM[]; title: string;
             {card.body}
           </T>
         </Card>
+        </Animated.View>
       </ScrollView>
       <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: 16, paddingBottom: insets.bottom + 16, flexDirection: "row", gap: 10, backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.lineSoft }}>
         <Button title="Назад" kind="secondary" disabled={i === 0} onPress={() => setI(i - 1)} style={{ flex: 1 }} />
@@ -170,13 +177,40 @@ function Theory({ cards, title, onDone }: { cards: TheoryCardM[]; title: string;
 
 function Done({ data }: { data: Extract<SkillPayload, { status: "ok" }> }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const xp = useMemo(() => data.problems.length * 10, [data.problems.length]);
+  const shown = useCountUp(xp, 900, 450);
+  const [burst, setBurst] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setBurst(1);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, []);
   return (
+    <View style={{ flex: 1, backgroundColor: C.paper }}>
     <ScrollView contentContainerStyle={{ padding: 20, paddingTop: insets.top + 40, gap: 16, alignItems: "center", backgroundColor: C.paper, flexGrow: 1 }}>
-      <Mascot mood="celebrating" size={140} />
-      <H1 style={{ textAlign: "center" }}>Урок пройден!</H1>
+      <Pop>
+        <Bob amp={6}>
+          <Mascot mood="celebrating" size={140} />
+        </Bob>
+      </Pop>
+      <Animated.View entering={enter(1, 150)}>
+        <H1 style={{ textAlign: "center" }}>Урок пройден!</H1>
+      </Animated.View>
+      <Animated.View entering={enter(2, 150)} style={{ flexDirection: "row", gap: 10 }}>
+        <View style={{ backgroundColor: C.amberLight, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, alignItems: "center" }}>
+          <T w="black" size={26} color={C.amberText}>+{shown}</T>
+          <T w="bold" size={12} color={C.amberText}>опыта</T>
+        </View>
+        <View style={{ backgroundColor: C.pineLight, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, alignItems: "center" }}>
+          <T w="black" size={26} color={C.pineDark}>{data.problems.length}</T>
+          <T w="bold" size={12} color={C.pineDark}>задач решено</T>
+        </View>
+      </Animated.View>
       <T color={C.inkSoft} style={{ textAlign: "center" }}>
-        «{data.skill.title}» — все задачи решены. +{xp} опыта.
+        «{data.skill.title}» — все задачи решены.
       </T>
       {data.detailedPreview ? (
         <Card style={{ gap: 8, alignSelf: "stretch" }}>
@@ -193,10 +227,30 @@ function Done({ data }: { data: Extract<SkillPayload, { status: "ok" }> }) {
           </T>
         </Card>
       ) : null}
-      <View style={{ alignSelf: "stretch", gap: 10, marginTop: 8 }}>
+      <Animated.View entering={enter(4, 300)} style={{ alignSelf: "stretch", gap: 10, marginTop: 8 }}>
         {data.next ? <Button title={`Дальше: ${data.next.title}`} onPress={() => router.replace(`/skill/${data.next!.id}`)} /> : null}
         <Button title="К пути обучения" kind="secondary" onPress={() => router.back()} />
-      </View>
+      </Animated.View>
     </ScrollView>
+      <Confetti burst={burst} x={width / 2} y={insets.top + 120} count={40} />
+    </View>
   );
+}
+
+/** Сегмент прогресса урока: плавно заливается при решении задачи. */
+function Segment({ state }: { state: 0 | 1 | 2 }) {
+  const v = useSharedValue(state);
+  const sy = useSharedValue(1);
+  useEffect(() => {
+    v.value = withTiming(state, { duration: 380 });
+    if (state === 2) {
+      sy.value = 1.8;
+      sy.value = withSpring(1, { damping: 7 });
+    }
+  }, [state, v, sy]);
+  const a = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(v.value, [0, 1, 2], [C.grid, C.pineMint, C.pine]),
+    transform: [{ scaleY: sy.value }],
+  }));
+  return <Animated.View style={[{ height: 8, borderRadius: 4 }, a]} />;
 }

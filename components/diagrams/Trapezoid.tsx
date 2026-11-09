@@ -45,10 +45,11 @@ export default function Trapezoid({
   angleLabel?: string;
   showDiagonals?: boolean;
   showMidSegment?: boolean;
+  // Школьная запись: AD — нижнее (большее) основание, BC — верхнее.
   labelA?: string; // нижний левый
-  labelB?: string; // нижний правый
+  labelB?: string; // верхний левый
   labelC?: string; // верхний правый
-  labelD?: string; // верхний левый
+  labelD?: string; // нижний правый
   /** Угол при вершине D (верхней левой) — соседний с углом A по боковой стороне. */
   angleLabel2?: string;
   /** Подпись правой боковой стороны BC. */
@@ -192,13 +193,13 @@ export default function Trapezoid({
       <VertexLabel x={BL.x} y={BL.y} dx={-10} dy={14}>
         {labelA}
       </VertexLabel>
-      <VertexLabel x={BR.x} y={BR.y} dx={10} dy={14}>
+      <VertexLabel x={TL.x} y={TL.y} dx={-10} dy={-8}>
         {labelB}
       </VertexLabel>
       <VertexLabel x={TR.x} y={TR.y} dx={10} dy={-8}>
         {labelC}
       </VertexLabel>
-      <VertexLabel x={TL.x} y={TL.y} dx={-10} dy={-8}>
+      <VertexLabel x={BR.x} y={BR.y} dx={10} dy={14}>
         {labelD}
       </VertexLabel>
     </svg>

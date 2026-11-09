@@ -28,9 +28,9 @@ export const unknownStyle = { ...labelStyle, fill: D.amber };
  * dx/dy — смещение от самой вершины наружу фигуры (чтобы не наезжать на
  * стороны и не путаться со значением угла в той же вершине). */
 export const vertexLabelStyle = {
-  fontSize: 12,
-  fontWeight: 700,
-  fill: D.inkSoft,
+  fontSize: 13,
+  fontWeight: 800,
+  fill: "#3F5E50",
   fontFamily: "inherit",
   fontStyle: "italic" as const,
 };

@@ -8,7 +8,7 @@ function Lbl({ x, y, value, anchor = "middle" }: { x: number; y: number; value: 
   );
 }
 
-// Форма по умолчанию (как была всегда): AB = 140px, AD ≈ 117px, ∠A ≈ 59°.
+// Форма по умолчанию: AD (низ) = 140px, AB (левая сторона) ≈ 117px, ∠A ≈ 59°.
 const DEFAULT = {
   TL: { x: 110, y: 50 },
   TR: { x: 250, y: 50 },
@@ -30,8 +30,9 @@ interface Bisector {
 }
 
 /**
- * Параллелограмм ABCD (A — нижняя левая, B — нижняя правая, C — верхняя
- * правая, D — верхняя левая вершина).
+ * Параллелограмм ABCD в школьной записи: A — нижняя левая, B — верхняя
+ * левая, C — верхняя правая, D — нижняя правая вершина (AD — снизу,
+ * BC — сверху).
  * Форма: по умолчанию фиксированная; ab/ad (числа) и angle (°) задают
  * пропорции; equalSides — ромб (равные стороны, перпендикулярные
  * диагонали; если d1 и d2 — числа, угол ромба следует их отношению).
@@ -56,22 +57,24 @@ export default function Parallelogram({
   ad,
   angle,
 }: {
-  a?: string; // нижняя сторона AB
-  b?: string; // левая сторона AD
+  a?: string; // нижняя сторона AD
+  b?: string; // левая сторона AB
   h?: string;
   angleLabel?: string; // угол A
-  angleLabel2?: string; // соседний угол B
+  angleLabel2?: string; // соседний угол D (нижний правый)
   showDiagonals?: boolean;
-  d1?: string; // диагональ DB (из верхнего левого в нижний правый)
+  d1?: string; // диагональ BD (из верхнего левого в нижний правый)
   d2?: string; // диагональ AC
-  d1Half?: string; // половина диагонали DB: отрезок OB
+  d1Half?: string; // половина диагонали BD: отрезок OD
   equalSides?: boolean;
   labelA?: string; // нижний левый
-  labelB?: string; // нижний правый
+  labelB?: string; // верхний левый
   labelC?: string; // верхний правый
-  labelD?: string; // верхний левый
+  labelD?: string; // нижний правый
   bisector?: Bisector;
+  /** длина левой стороны AB (пропорции) */
   ab?: number;
+  /** длина нижней стороны AD (пропорции) */
   ad?: number;
   angle?: number;
 }) {
@@ -80,36 +83,37 @@ export default function Parallelogram({
   if (!customShape) {
     ({ BL, BR, TR, TL } = DEFAULT);
   } else {
-    let sAB = ab ?? 1.2;
-    let sAD = ad ?? 1;
+    let sAB = ab ?? 1;
+    let sAD = ad ?? 1.2;
     let alpha = angle ?? 60;
     if (equalSides) {
       sAB = 1;
       sAD = 1;
       const n1 = num(d1 ?? "");
       const n2 = num(d2 ?? "");
-      // d1 = DB, d2 = AC; DB/AC = tg(α/2)
+      // d1 = BD, d2 = AC; BD/AC = tg(α/2)
       alpha = n1 && n2 ? (2 * Math.atan(n1 / n2) * 180) / Math.PI : angle ?? 60;
       alpha = Math.min(80, Math.max(40, alpha));
     }
     const ar = (alpha * Math.PI) / 180;
+    // A — начало, AD — по горизонтали вправо, AB — вверх под углом α.
     const raw = [
       { x: 0, y: 0 },
-      { x: sAB, y: 0 },
-      { x: sAB + sAD * Math.cos(ar), y: -sAD * Math.sin(ar) },
-      { x: sAD * Math.cos(ar), y: -sAD * Math.sin(ar) },
+      { x: sAD, y: 0 },
+      { x: sAD + sAB * Math.cos(ar), y: -sAB * Math.sin(ar) },
+      { x: sAB * Math.cos(ar), y: -sAB * Math.sin(ar) },
     ];
     const { map } = fitPoints(raw, { x0: 45, y0: 40, x1: 255, y1: 152 });
     [BL, BR, TR, TL] = raw.map(map);
   }
   const O = { x: (BL.x + TR.x) / 2, y: (BL.y + TR.y) / 2 };
 
-  const vertexPoint = { A: BL, B: BR, C: TR, D: TL };
+  const vertexPoint = { A: BL, B: TL, C: TR, D: BR };
   const sideEnds: Record<Bisector["toSide"], [Pt, Pt]> = {
-    AB: [BL, BR],
-    BC: [BR, TR],
-    CD: [TR, TL],
-    DA: [TL, BL],
+    AB: [BL, TL],
+    BC: [TL, TR],
+    CD: [TR, BR],
+    DA: [BR, BL],
   };
 
   /** Точка, где биссектриса угла при вершине v пересекает отрезок p1–p2 (параметр t), или null. */
@@ -130,9 +134,9 @@ export default function Parallelogram({
   }
 
   const neighbours: Record<Bisector["from"], [Pt, Pt]> = {
-    A: [BR, TL],
+    A: [TL, BR],
     B: [BL, TR],
-    C: [BR, TL],
+    C: [TL, BR],
     D: [TR, BL],
   };
 
@@ -300,13 +304,13 @@ export default function Parallelogram({
       <VertexLabel x={BL.x} y={BL.y} dx={-10} dy={14}>
         {labelA}
       </VertexLabel>
-      <VertexLabel x={BR.x} y={BR.y} dx={10} dy={14}>
+      <VertexLabel x={TL.x} y={TL.y} dx={-10} dy={-8}>
         {labelB}
       </VertexLabel>
       <VertexLabel x={TR.x} y={TR.y} dx={10} dy={-8}>
         {labelC}
       </VertexLabel>
-      <VertexLabel x={TL.x} y={TL.y} dx={-10} dy={-8}>
+      <VertexLabel x={BR.x} y={BR.y} dx={10} dy={14}>
         {labelD}
       </VertexLabel>
     </svg>

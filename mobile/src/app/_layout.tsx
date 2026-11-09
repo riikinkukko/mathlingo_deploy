@@ -110,6 +110,8 @@ function RootNavigator() {
         <Stack.Screen name="homework/index" />
         <Stack.Screen name="homework/[id]" />
         <Stack.Screen name="topics" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+        <Stack.Screen name="achievements" />
+        <Stack.Screen name="questions" />
       </Stack.Protected>
       <Stack.Protected guard={signedIn && role !== "STUDENT"}>
         <Stack.Screen name="staff" />

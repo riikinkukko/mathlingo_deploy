@@ -1970,7 +1970,7 @@ async function main() {
       id: stableId("p"),
       skillId: skParallelogramArea,
       text: "Стороны параллелограмма равны 6 и 10, угол между ними равен 30°. Найдите площадь.",
-      diagram: { kind: "parallelogram", angleLabel: "30°", a: "10", b: "6", ab: 10, ad: 6, angle: 30 },
+      diagram: { kind: "parallelogram", angleLabel: "30°", a: "10", b: "6", ab: 6, ad: 10, angle: 30 },
       answerType: "NUMBER",
       correctAnswer: "30",
       tier: "bank",
@@ -2067,7 +2067,7 @@ async function main() {
       answerType: "NUMBER",
       correctAnswer: "112",
       tier: "bank",
-      diagram: { kind: "parallelogram", showDiagonals: true, d1: "6", d2: "?", a: "7", b: "5", ab: 7, ad: 5, angle: 57 },
+      diagram: { kind: "parallelogram", showDiagonals: true, d1: "6", d2: "?", a: "7", b: "5", ab: 5, ad: 7, angle: 57 },
       keyFormula: "d₁²+d₂²=2(a²+b²)",
       hints: [
         "Сумма квадратов диагоналей параллелограмма равна удвоенной сумме квадратов сторон.",
@@ -2193,7 +2193,7 @@ async function main() {
       text: "Биссектриса угла A параллелограмма ABCD пересекает сторону BC в точке M. Периметр параллелограмма равен 34, сторона AB равна 7. Найдите MC.",
       answerType: "DETAILED",
       correctAnswer: "3",
-      diagram: { kind: "parallelogram", ab: 7, ad: 10, a: "7", bisector: { from: "A", toSide: "BC", t: 0.7, label: "M", seg2: "?" } },
+      diagram: { kind: "parallelogram", ab: 7, ad: 10, b: "7", bisector: { from: "A", toSide: "BC", t: 0.7, label: "M", seg2: "?" } },
       keyFormula: "AB=BM; периметр=2(AB+BC)",
       hints: [
         "Из периметра и известной стороны AB найдите сторону BC: периметр=2(AB+BC).",
@@ -6718,7 +6718,7 @@ async function main() {
       text: "В правильной четырёхугольной пирамиде SABCD с основанием ABCD боковое ребро SC равно 17, сторона основания равна 15√2. Найдите объём пирамиды.",
       answerType: "NUMBER",
       correctAnswer: "1200",
-      diagram: { kind: "pyramid", showCenter: true, segments: [{ from: "S", to: "C", label: "17" }, { from: "A", to: "B", label: "15√2" }] },
+      diagram: { kind: "pyramid", showCenter: true, segments: [{ from: "S", to: "C", label: "17" }, { from: "A", to: "D", label: "15√2" }] },
       hints: [
         "Найдите диагональ квадрата AC через теорему Пифагора для стороны основания, затем половину диагонали AO.",
         "SO найдите через теорему Пифагора в треугольнике AOS (SO⊥AO, гипотенуза SA=SC=17).",

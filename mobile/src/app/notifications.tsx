@@ -1,4 +1,6 @@
 import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { enter } from "@/components/motion";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, errorText } from "@/lib/api";
@@ -43,7 +45,8 @@ export default function Notifications() {
   return (
     <Screen header={header} onRefresh={() => q.refetch()} refreshing={q.isRefetching}>
       {q.data.notifications.length === 0 ? <Empty title="Пока тихо" text="Здесь появятся проверенные решения, новые задания и напоминания." /> : null}
-      {q.data.notifications.map((n) => (
+      {q.data.notifications.map((n, i) => (
+        <Animated.View key={n.id} entering={enter(i)}>
         <Pressable
           key={n.id}
           onPress={() => open(n)}
@@ -71,6 +74,7 @@ export default function Notifications() {
             </T>
           ) : null}
         </Pressable>
+        </Animated.View>
       ))}
     </Screen>
   );

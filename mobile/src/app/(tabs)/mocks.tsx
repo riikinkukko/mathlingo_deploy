@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
 import { Alert, Modal, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -187,7 +188,7 @@ function ScoreBars({ scores, target }: { scores: { score: number; label: string 
           <T w="black" size={12}>
             {s.score}
           </T>
-          <View style={{ width: "70%", height: Math.max(6, (s.score / 100) * 110), backgroundColor: i === last.length - 1 ? C.pine : C.pineMint, borderRadius: 6 }} />
+          <GrowBar h={Math.max(6, (s.score / 100) * 110)} color={i === last.length - 1 ? C.pine : C.pineMint} delay={i * 70} />
           <T size={10} color={C.inkSoft} numberOfLines={1}>
             {s.label}
           </T>
@@ -195,4 +196,14 @@ function ScoreBars({ scores, target }: { scores: { score: number; label: string 
       ))}
     </View>
   );
+}
+
+/** Столбик графика вырастает снизу при открытии экрана. */
+function GrowBar({ h, color, delay }: { h: number; color: string; delay: number }) {
+  const v = useSharedValue(0);
+  useEffect(() => {
+    v.value = withDelay(delay, withSpring(h, { damping: 14, stiffness: 120 }));
+  }, [h, v, delay]);
+  const a = useAnimatedStyle(() => ({ height: v.value }));
+  return <Animated.View style={[{ width: "70%", backgroundColor: color, borderRadius: 6 }, a]} />;
 }

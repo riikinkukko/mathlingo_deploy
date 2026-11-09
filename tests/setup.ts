@@ -13,3 +13,8 @@ delete process.env.TELEGRAM_BOT_TOKEN;
 process.env.PUSH_DISABLED = "1";
 delete process.env.SMTP_HOST;
 delete process.env.YOOKASSA_SHOP_ID;
+
+// Компоненты (чертежи) написаны под автоматический JSX Next.js; tsx в тестах
+// собирает их классическим React.createElement — даём ему глобальный React.
+import * as React from "react";
+(globalThis as { React?: typeof React }).React = React;

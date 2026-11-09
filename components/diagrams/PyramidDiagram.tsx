@@ -13,10 +13,11 @@ interface PyramidSegment {
 
 /**
  * Правильная четырёхугольная пирамида SABCD — квадратное основание в
- * косоугольной проекции (A — передняя левая, B — передняя правая, C —
- * задняя правая, D — задняя левая вершина) + вершина S над центром O.
- * Видимы грани SAB и SBC, поэтому пунктиром рисуются рёбра, выходящие из
- * задней вершины D (AD, DC, SD), высота SO и всё, что лежит в основании.
+ * косоугольной проекции, в школьной записи AD спереди, BC сзади (A —
+ * передняя левая, B — задняя левая, C — задняя правая, D — передняя правая
+ * вершина) + вершина S над центром O.
+ * Видимы грани SAD и SDC, поэтому пунктиром рисуются рёбра, выходящие из
+ * задней вершины B (AB, BC, SB), высота SO и всё, что лежит в основании.
  * segments — дополнительные отрезки/подписи (SO=48, SC=80, BD=? …); их
  * видимость считается автоматически по тем же граням.
  */
@@ -34,18 +35,18 @@ export default function PyramidDiagram({
   segments?: PyramidSegment[];
 }) {
   const A = { x: 50, y: 168 };
-  const B = { x: 190, y: 168 };
+  const Dd = { x: 190, y: 168 };
   const depthDx = 62;
   const depthDy = -40;
-  const C = { x: B.x + depthDx, y: B.y + depthDy };
-  const Dd = { x: A.x + depthDx, y: A.y + depthDy };
+  const C = { x: Dd.x + depthDx, y: Dd.y + depthDy };
+  const B = { x: A.x + depthDx, y: A.y + depthDy };
   const O = { x: (A.x + C.x) / 2, y: (A.y + C.y) / 2 };
   const S = { x: O.x, y: 24 };
   const P: Record<PName, Pt> = { A, B, C, D: Dd, S, O };
 
   const visibleFaces: PName[][] = [
-    ["S", "A", "B"],
-    ["S", "B", "C"],
+    ["S", "A", "D"],
+    ["S", "D", "C"],
   ];
   const isVisible = (a: PName, b: PName) => visibleFaces.some((f) => f.includes(a) && f.includes(b));
   const edges: [PName, PName][] = [
@@ -77,13 +78,13 @@ export default function PyramidDiagram({
   return (
     <svg viewBox="0 0 300 190" className="h-full w-full">
       <polygon
-        points={`${S.x},${S.y} ${A.x},${A.y} ${B.x},${B.y}`}
+        points={`${S.x},${S.y} ${A.x},${A.y} ${Dd.x},${Dd.y}`}
         fill={D.pineLight}
         fillOpacity="0.55"
         stroke="none"
       />
       <polygon
-        points={`${S.x},${S.y} ${B.x},${B.y} ${C.x},${C.y}`}
+        points={`${S.x},${S.y} ${Dd.x},${Dd.y} ${C.x},${C.y}`}
         fill={D.pineLight}
         fillOpacity="0.3"
         stroke="none"
@@ -143,9 +144,9 @@ export default function PyramidDiagram({
         })}
 
       {vtx(A, -12, 10, labels[0])}
-      {vtx(B, 12, 12, labels[1])}
+      {vtx(B, -12, -2, labels[1])}
       {vtx(C, 13, 2, labels[2])}
-      {vtx(Dd, -12, -2, labels[3])}
+      {vtx(Dd, 12, 12, labels[3])}
       {vtx(S, 0, -8, apexLabel)}
       {usesCenter && (
         <text x={O.x - 6} y={O.y + 15} textAnchor="middle" fontSize="12" fontWeight="700" fontStyle="italic" fill={D.inkSoft} style={halo}>
