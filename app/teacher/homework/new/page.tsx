@@ -184,7 +184,7 @@ export default async function NewHomeworkPage(
             </div>
             <div className="sm:col-span-2">
               <label className="label" htmlFor="timeLimitMinutes">
-                Лимит времени на выполнение (мин, необязательно)
+                Лимит времени, мин (для контрольных и пробников)
               </label>
               <input
                 className="input"
@@ -193,7 +193,7 @@ export default async function NewHomeworkPage(
                 type="number"
                 min={1}
                 defaultValue={searchParams.timeLimitMinutes || undefined}
-                placeholder="Например, 45 — актуально для контрольных и пробников"
+                placeholder="Например, 45"
               />
             </div>
           </div>
