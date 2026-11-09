@@ -11,6 +11,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { sendEmail, isEmailConfigured } from "./email";
+import { sendPushToUser } from "./push";
 
 const TZ = "Europe/Moscow";
 const HOUR = 3_600_000;
@@ -106,7 +107,11 @@ function emailHtml(m: ComebackMessage, link: string, base: string): string {
 
 /** Один проход воркера. Возвращает число отправленных писем. */
 export async function sendComebackEmails(now: Date = new Date()): Promise<number> {
-  if (!isEmailConfigured()) return 0;
+  // Письмо — если настроена почта; push в приложение — если ученик его
+  // установил и не выключил напоминания (переключатель в профиле приложения).
+  const emailOk = isEmailConfigured();
+  const pushOk = process.env.PUSH_DISABLED !== "1";
+  if (!emailOk && !pushOk) return 0;
   const minutes = mskMinutes(now);
   if (minutes < SEND_FROM_MIN || minutes >= SEND_TO_MIN) return 0;
 
@@ -122,13 +127,14 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
       chatId: schema.users.telegramChatId,
       tgReminders: schema.users.tgStudentReminders,
       lastAt: sql<Date | null>`(select max(a.created_at) from attempts a where a.student_id = ${schema.users.id})`,
+      hasPush: sql<boolean>`exists(select 1 from push_tokens t where t.user_id = ${schema.users.id})`,
+      emailReminders: schema.users.emailReminders,
     })
     .from(schema.users)
     .where(
       and(
         eq(schema.users.role, "STUDENT"),
         isNull(schema.users.teacherId),
-        eq(schema.users.emailReminders, true),
         isNull(schema.users.deletionRequestedAt)
       )
     );
@@ -136,7 +142,9 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
   const base = appUrl();
   let sent = 0;
   for (const u of rows) {
-    if (!u.email || (u.chatId && u.tgReminders)) continue;
+    const viaEmail = emailOk && !!u.email && u.emailReminders && !(u.chatId && u.tgReminders);
+    const viaPush = pushOk && u.hasPush && u.tgReminders !== false;
+    if (!viaEmail && !viaPush) continue;
     const last = u.lastAt ? new Date(u.lastAt) : null;
     // Ни одной задачи — тоже «перерыв», считаем от регистрации.
     const idleFrom = last ?? new Date(u.createdAt);
@@ -171,7 +179,8 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
         started: !!last,
       });
       const link = stage === 3 ? "/student/subjects" : lastSkill[0] ? `/student/skill/${lastSkill[0].skillId}` : "/student";
-      await sendEmail({ to: u.email, subject: m.subject, html: emailHtml(m, link, base) });
+      if (viaEmail) await sendEmail({ to: u.email, subject: m.subject, html: emailHtml(m, link, base) });
+      if (viaPush) await sendPushToUser(u.id, { title: m.subject, body: m.body, link });
       sent++;
     } catch (e) {
       console.error("[comeback] письмо не ушло", u.id, e);

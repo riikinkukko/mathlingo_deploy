@@ -2,12 +2,15 @@ import Mascot from "./Mascot";
 import { LevelInfo, WeakSkillEntry } from "@/lib/queries";
 
 export default function StudentRightColumn({
+  quests,
   level,
   nextLevelTitle,
   weekActivity,
   weakSkills,
   tip,
 }: {
+  /** Карточка «Задания дня» (DailyQuestsCard) — первой в колонке. */
+  quests?: React.ReactNode;
   level: LevelInfo;
   nextLevelTitle: string | null;
   weekActivity: { label: string; done: boolean; frozen?: boolean; isToday: boolean }[];
@@ -18,6 +21,7 @@ export default function StudentRightColumn({
 
   return (
     <aside className="hidden w-[300px] shrink-0 space-y-4 lg:block">
+      {quests}
       <div className="card p-4">
         <p className="text-[11px] font-black uppercase tracking-wide text-ink-soft">Звание</p>
         <p className="mt-1 font-display text-lg font-black text-ink">{level.title}</p>

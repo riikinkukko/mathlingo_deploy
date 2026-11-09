@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "quest_reward_on" text;

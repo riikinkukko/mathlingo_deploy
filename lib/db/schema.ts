@@ -197,6 +197,8 @@ export const users = pgTable("users", {
   // freezeAwardedOn — день (МСК), когда выдали последнюю, чтобы не выдать дважды.
   streakFreezes: integer("streak_freezes").notNull().default(1),
   freezeAwardedOn: text("freeze_awarded_on"),
+  // День (МСК), когда выдали награду за все ежедневные задания (lib/daily-quests.ts).
+  questRewardOn: text("quest_reward_on"),
   // У УЧЕНИКА: когда репетитор последний раз нажал «Напомнить» (не чаще раза в сутки).
   nudgedAt: timestamp("nudged_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

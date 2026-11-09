@@ -137,6 +137,8 @@ export default function ProblemCard({
   const [noEnergy, setNoEnergy] = useState(false);
   const [noEnergyUnverified, setNoEnergyUnverified] = useState(false);
   const [selfChecked, setSelfChecked] = useState(false);
+  // Задания дня, закрытые этим ответом (lib/daily-quests.ts) — маленький момент успеха.
+  const [questsDone, setQuestsDone] = useState<{ titles: string[]; all: boolean } | null>(null);
   const [reviewOffer, setReviewOffer] = useState<{ attemptId: string; priceRub: number } | null>(null);
   // Отказ сервера (задача в идущей контрольной, время вышло и т. п.) — раньше
   // молча игнорировался, и кнопка «Проверить» просто ничего не делала.
@@ -210,6 +212,9 @@ export default function ProblemCard({
       if (res.kind === "correct") {
         setCorrectResult({ explanation: res.explanation, correctAnswer: res.correctAnswer });
         setWrongState(null);
+        if ("questsDone" in res && res.questsDone?.length) {
+          setQuestsDone({ titles: res.questsDone, all: !!res.allQuestsDone });
+        }
         if ("selfChecked" in res && res.selfChecked) {
           setSelfChecked(true);
           if ("paidReviewPrice" in res && res.paidReviewPrice && res.attemptId) {
@@ -688,6 +693,13 @@ export default function ProblemCard({
               <p className="relative text-ink-soft">{correctResult.explanation}</p>
             )}
             {selfChecked && reviewOffer && <PaidReviewOffer attemptId={reviewOffer.attemptId} priceRub={reviewOffer.priceRub} />}
+            {questsDone && (
+              <p role="status" className="relative mt-2 rounded-xl bg-amber-light px-3 py-2 text-[13px] font-extrabold text-amber-text">
+                {questsDone.all
+                  ? "🏆 Все задания дня выполнены! Загляни на главную — там награда."
+                  : `🎯 Задание дня выполнено: ${questsDone.titles.map((t) => t[0].toLowerCase() + t.slice(1)).join(", ")}`}
+              </p>
+            )}
           </div>
         </div>
       )}

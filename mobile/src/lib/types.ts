@@ -35,6 +35,13 @@ export interface HomePayload {
     examDaysLeft: number;
   };
   counts: { dueReview: number; mistakes: number; homework: number };
+  /** Задания дня; в старых ответах сервера поля нет. */
+  quests?: {
+    items: { kind: string; title: string; target: number; progress: number; done: boolean }[];
+    allDone: boolean;
+    justRewarded: boolean;
+    freezeGiven: boolean;
+  };
   topics: { id: string; title: string; icon: string; done: number; total: number }[];
   topic: {
     id: string;
@@ -99,7 +106,16 @@ export type SkillPayload =
     };
 
 export type AttemptResult =
-  | { kind: "correct"; explanation: string; correctAnswer: string; selfChecked?: boolean; attemptId?: string }
+  | {
+      kind: "correct";
+      explanation: string;
+      correctAnswer: string;
+      selfChecked?: boolean;
+      attemptId?: string;
+      /** Задания дня, закрытые этим ответом. */
+      questsDone?: string[];
+      allQuestsDone?: boolean;
+    }
   | { kind: "wrong"; hint: string; wrongCount: number; canRevealSolution: boolean }
   | { kind: "pending" }
   | { kind: "no_energy"; emailUnverified?: boolean };

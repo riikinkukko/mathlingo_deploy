@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { convertRemainingDays } from "./teacher-plan";
 import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
-import { settleStreak, loadStreakDays, mskDayKey, addDays } from "./streak";
+import { settleStreak, loadStreakDays, mskDayKey, addDays, computeBestStreak } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
 import { secureToken, secureCode } from "./secure-random";
 import {
@@ -1822,7 +1822,10 @@ export async function getAchievementStats(studentId: string): Promise<{
   const correct = attempts.filter((a) => a.isCorrect);
   const problemsCount = new Set(correct.map((a) => a.problemId)).size;
 
-  const streak = await computeStreak(studentId);
+  // «Дней подряд» — рекорд серии, а не текущая: иначе после перерыва
+  // достижение «откатывалось» назад, хотя описано как самая длинная серия.
+  const [current, best] = await Promise.all([computeStreak(studentId), computeBestStreak(studentId)]);
+  const streak = Math.max(current, best);
 
   const skillRows = await db.select().from(schema.skills);
   const chapterRows = await db.select().from(schema.subtopics);

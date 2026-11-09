@@ -20,7 +20,7 @@ import Scratchpad, { SketchSheet, type ViewRef } from "./Scratchpad";
 type Source = "lesson" | "assignment" | "review";
 
 type Feedback =
-  | { kind: "correct"; explanation: string; correctAnswer: string; offline?: boolean; selfChecked?: boolean }
+  | { kind: "correct"; explanation: string; correctAnswer: string; offline?: boolean; selfChecked?: boolean; questsDone?: string[]; allQuestsDone?: boolean }
   | { kind: "wrong"; hint: string; wrongCount: number; canReveal: boolean; offline?: boolean }
   | { kind: "pending" }
   | { kind: "no_energy"; emailUnverified?: boolean }
@@ -104,7 +104,15 @@ export default function ProblemCard({
       onSubmitted?.(r);
       if (r.kind === "correct") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        setFeedback({ kind: "correct", explanation: r.explanation, correctAnswer: r.correctAnswer, offline: r.offline, selfChecked: r.selfChecked });
+        setFeedback({
+          kind: "correct",
+          explanation: r.explanation,
+          correctAnswer: r.correctAnswer,
+          offline: r.offline,
+          selfChecked: r.selfChecked,
+          questsDone: "questsDone" in r ? r.questsDone : undefined,
+          allQuestsDone: "allQuestsDone" in r ? r.allQuestsDone : undefined,
+        });
         if (!r.selfChecked) setBurst((b) => b + 1);
         onSolved?.();
         return "correct";
@@ -511,6 +519,15 @@ function FeedbackPanel({ feedback, onReveal, busy }: { feedback: Feedback; onRev
             </T>
           </View>
         </Row>
+        {feedback.questsDone?.length ? (
+          <View style={{ backgroundColor: C.amberLight, borderRadius: 14, padding: 10 }}>
+            <T w="extrabold" size={13} color={C.amberText}>
+              {feedback.allQuestsDone
+                ? "🏆 Все задания дня выполнены! На главной — награда."
+                : `🎯 Задание дня выполнено: ${feedback.questsDone.map((t) => t[0].toLowerCase() + t.slice(1)).join(", ")}`}
+            </T>
+          </View>
+        ) : null}
         {feedback.explanation ? (
           <View style={{ backgroundColor: C.white, borderRadius: 14, padding: 12 }}>
             <T w="extrabold" size={12} color={C.pineStrong} style={{ marginBottom: 4 }}>

@@ -1,3 +1,4 @@
+import { getDailyQuests } from "@/lib/daily-quests";
 import {
   computeDailyGoal,
   computeStreak,
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
   if (user instanceof Response) return user;
   const topicParam = new URL(req.url).searchParams.get("topic");
 
-  const [curriculumRaw, progress, xp, streak, dailyGoal, dueReview, mistakes, homeworks, activeMock, teacher] =
+  const [curriculumRaw, progress, xp, streak, dailyGoal, dueReview, mistakes, homeworks, activeMock, teacher, quests] =
     await Promise.all([
       getCurriculum(),
       computeStudentProgress(user.id),
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
       getHomeworksForStudent(user.id),
       getActiveMock(user.id),
       user.teacherId ? getUserById(user.teacherId) : Promise.resolve(undefined),
+      getDailyQuests(user.id),
     ]);
   const curriculum = gateCurriculumForUser(user, curriculumRaw);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, user.id)));
@@ -85,6 +87,13 @@ export async function GET(req: Request) {
       energy: energyLimited ? Math.floor(getEffectiveEnergy(user)) : null,
       energyMax: energyLimited ? FREE_MAX_ENERGY : null,
       examDaysLeft: daysLeft,
+    },
+    // Задания дня (lib/daily-quests.ts); награда выдаётся при этом же запросе.
+    quests: {
+      items: quests.quests.map((q) => ({ kind: q.kind, title: q.title, target: q.target, progress: q.progress, done: q.done })),
+      allDone: quests.allDone,
+      justRewarded: quests.justRewarded,
+      freezeGiven: quests.freezeGiven,
     },
     counts: {
       dueReview,

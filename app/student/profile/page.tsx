@@ -23,7 +23,7 @@ import { computeStudentProgress } from "@/lib/queries";
 import { disconnectTelegramAction } from "@/app/actions-telegram";
 import StudentRemindersToggle from "@/components/StudentRemindersToggle";
 import EmailRemindersToggle from "@/components/EmailRemindersToggle";
-import { MAX_FREEZES, FREEZE_EVERY_DAYS } from "@/lib/streak";
+import { MAX_FREEZES, FREEZE_EVERY_DAYS, computeBestStreak } from "@/lib/streak";
 import { logoutAction, logoutEverywhereAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
@@ -41,6 +41,7 @@ export default async function ProfilePage(
   const hasChecks = (await getStudentChecks(user.id)).length > 0;
   const xp = await computeXp(user.id);
   const { streak, freezes } = await settleStreak(user.id);
+  const bestStreak = Math.max(streak, await computeBestStreak(user.id));
   const level = getLevelInfo(xp);
   const stats = await computeOverallStats(user.id);
   const achievementStats = await getAchievementStats(user.id);
@@ -156,6 +157,7 @@ export default async function ProfilePage(
             <h2 className="font-display text-[16px] font-black text-ink">Эта неделя</h2>
             <span className="text-[12px] font-bold text-ink-soft">
               {weekDays} из 7 дней · серия {streak}
+              {bestStreak > streak ? ` · рекорд ${bestStreak}` : bestStreak >= 3 ? " · это рекорд!" : ""}
             </span>
           </div>
           <ul className="mt-3 grid grid-cols-7 gap-1.5">

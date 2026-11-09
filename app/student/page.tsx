@@ -35,6 +35,8 @@ import { pluralRu } from "@/lib/pluralize";
 import StudentDashboardHeader, { DailyGoalBar } from "@/components/StudentDashboardHeader";
 import StudentSidebar from "@/components/StudentSidebar";
 import StudentRightColumn from "@/components/StudentRightColumn";
+import DailyQuestsCard from "@/components/DailyQuestsCard";
+import { getDailyQuests } from "@/lib/daily-quests";
 import BottomTabBar from "@/components/BottomTabBar";
 import { MOCK_VARIANT_COUNT } from "@/lib/mock-exam";
 import { targetScoreRecommendation } from "@/lib/curriculum-recommendations";
@@ -80,6 +82,7 @@ export default async function StudentDashboard(
     dueReviewCount,
     upcomingLessons,
     teacher,
+    quests,
   ] = await Promise.all([
     getCurriculum(),
     computeStudentProgress(user.id),
@@ -96,6 +99,7 @@ export default async function StudentDashboard(
     // Занятия есть только у учеников репетитора.
     user.teacherId ? getUpcomingLessonsForStudent(user.id) : Promise.resolve([]),
     user.teacherId ? getUserById(user.teacherId) : Promise.resolve(undefined),
+    getDailyQuests(user.id),
   ]);
   const nextLessons = upcomingLessons.slice(0, 3);
 
@@ -295,6 +299,8 @@ export default async function StudentDashboard(
           })()}
           {heroCard}
           <div className="flex gap-2.5">{tiles}</div>
+          {/* Под главной кнопкой «Продолжить», чтобы не отодвигать её вниз. */}
+          <DailyQuestsCard data={quests} compact />
           {currentChapter && !chapterLockedByPlan && (
             <div>
               <div className="mb-3 flex items-center justify-between px-1">
@@ -418,6 +424,7 @@ export default async function StudentDashboard(
           </main>
 
           <StudentRightColumn
+            quests={<DailyQuestsCard data={quests} compact />}
             level={level}
             nextLevelTitle={nextLevelTitle}
             weekActivity={weekActivity}

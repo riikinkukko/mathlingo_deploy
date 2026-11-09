@@ -1,13 +1,13 @@
 import { Alert, Pressable, View } from "react-native";
 import { router } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useHome, useSelectedTopic, plural } from "@/lib/hooks";
 import { errorText } from "@/lib/api";
 import type { HomePayload, PathState } from "@/lib/types";
 import { Button, Card, ErrorBox, H2, Loading, ProgressBar, Row, Screen, StatBadge, T } from "@/components/ui";
 import { Icon, Mascot } from "@/components/Svg";
-import { Bob, PressScale, PulseRing, Wiggle, enter } from "@/components/motion";
+import { Bob, Pop, PressScale, PulseRing, Wiggle, enter } from "@/components/motion";
 import Animated from "react-native-reanimated";
 import { C, R, shadow } from "@/theme";
 
@@ -31,6 +31,7 @@ export default function PathScreen() {
     <Screen onRefresh={() => home.refetch()} refreshing={home.isRefetching}>
       <TopBar d={d} />
       <TodayCard d={d} />
+      <QuestsCard d={d} />
       {d.activeMock ? (
         <Card onPress={() => router.push(`/mock/${d.activeMock!.id}`)} style={{ backgroundColor: C.pineDark, borderColor: C.pineDark }}>
           <Row>
@@ -142,6 +143,81 @@ function TodayCard({ d }: { d: HomePayload }) {
       {d.counts.dueReview > 0 ? (
         <Button title={`Повторить ${d.counts.dueReview} ${plural(d.counts.dueReview, ["задачу", "задачи", "задач"])}`} kind="secondary" small onPress={() => router.push("/review")} />
       ) : null}
+    </Card>
+  );
+}
+
+const QUEST_ICON: Record<string, string> = { solve: "🎯", combo: "🔥", new: "✨", fix: "💪", review: "🧠" };
+
+/** «Задания дня» (сервер: lib/daily-quests.ts). За все три — заморозка серии. */
+function QuestsCard({ d }: { d: HomePayload }) {
+  const q = d.quests;
+  // Свёрнута в одну строку, чтобы не отодвигать путь вниз; раскрывается нажатием
+  // (и сама — в момент награды).
+  const [open, setOpen] = useState(false);
+  if (!q || q.items.length === 0) return null;
+  const done = q.items.filter((x) => x.done).length;
+  const expanded = open || q.justRewarded;
+  if (!expanded) {
+    return (
+      <Card onPress={() => setOpen(true)} style={{ paddingVertical: 12, backgroundColor: q.allDone ? C.amberLight : C.white, borderColor: q.allDone ? C.amberLight : C.lineSoft }}>
+        <Row>
+          <T size={20}>{q.allDone ? "🏆" : "🎯"}</T>
+          <T w="black" size={15} style={{ flex: 1 }}>
+            Задания дня
+          </T>
+          <Row gap={4}>
+            {q.items.map((x) => (
+              <View key={x.kind} style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: x.done ? C.pine : C.grid }} />
+            ))}
+          </Row>
+          <T w="extrabold" size={13} color={C.inkSoft}>
+            {done} из {q.items.length} ›
+          </T>
+        </Row>
+      </Card>
+    );
+  }
+  return (
+    <Card onPress={() => setOpen(false)} style={{ gap: 10, backgroundColor: q.allDone ? C.amberLight : C.white, borderColor: q.allDone ? C.amberLight : C.lineSoft }}>
+      {q.justRewarded ? (
+        <Pop>
+          <T w="black" size={14} color={C.amberText} style={{ textAlign: "center" }}>
+            🎉 Все задания дня выполнены!
+          </T>
+        </Pop>
+      ) : null}
+      <Row style={{ justifyContent: "space-between" }}>
+        <T w="black" size={16}>
+          Задания дня
+        </T>
+        <T w="extrabold" size={13} color={C.inkSoft}>
+          {q.allDone ? "все выполнены 🏆" : `${done} из ${q.items.length}`}
+        </T>
+      </Row>
+      {q.items.map((x) => (
+        <Row key={x.kind} style={{ alignItems: "center" }}>
+          <T size={20}>{x.done ? "✅" : QUEST_ICON[x.kind] ?? "⭐"}</T>
+          <View style={{ flex: 1, gap: 4 }}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <T w="extrabold" size={14} color={x.done ? C.inkSoft : C.ink} style={{ flex: 1 }} numberOfLines={1}>
+                {x.title}
+              </T>
+              <T w="bold" size={12} color={C.inkSoft}>
+                {x.progress}/{x.target}
+              </T>
+            </Row>
+            <ProgressBar pct={(x.progress / x.target) * 100} color={x.done ? C.pine : C.amber} height={7} />
+          </View>
+        </Row>
+      ))}
+      <T size={12} color={C.inkSoft}>
+        {q.allDone
+          ? q.justRewarded && !q.freezeGiven
+            ? "Готово! Запас заморозок полный — завтра будут новые задания."
+            : "Готово! За все три задания — заморозка серии ❄️. Завтра будут новые."
+          : "Выполни все три — получишь заморозку серии ❄️"}
+      </T>
     </Card>
   );
 }

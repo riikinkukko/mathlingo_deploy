@@ -309,6 +309,13 @@
       "when": 1794235984757,
       "tag": "0043_quad_vertex_convention",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794250543155,
+      "tag": "0044_daily_quests",
+      "breakpoints": true
     }
   ]
 }

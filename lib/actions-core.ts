@@ -1,3 +1,4 @@
+import { questsJustCompleted } from "./daily-quests";
 import { db } from "./db/client";
 import { getPaidReviewPrice, isPaidReviewEnabled } from "./paid-review";
 import { isYooKassaConfigured } from "./yookassa";
@@ -284,10 +285,15 @@ export async function performSubmitAttempt(
   }
 
   if (isCorrect) {
+    // Закрыл ли этот ответ задание дня — для плашки прямо в задаче.
+    // Не должно ломать отправку ответа, поэтому ошибки глушим.
+    const quests = await questsJustCompleted(user.id).catch(() => ({ titles: [] as string[], allDone: false }));
     return {
       kind: "correct" as const,
       explanation: problem.explanation,
       correctAnswer: problem.correctAnswer,
+      questsDone: quests.titles,
+      allQuestsDone: quests.allDone,
     };
   }
 

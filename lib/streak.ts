@@ -183,3 +183,23 @@ export async function settleStreak(studentId: string, now: Date = new Date()): P
 
   return { streak, freezes, activeToday, frozenDays: frozen };
 }
+
+/** Самая длинная серия за всё время (дни с задачами + дни, спасённые заморозкой). */
+export function longestStreakFromDays(days: Set<string>): number {
+  const sorted = [...days].sort();
+  let best = 0,
+    run = 0;
+  let prev: string | null = null;
+  for (const d of sorted) {
+    run = prev && addDays(prev, 1) === d ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  return best;
+}
+
+/** Рекорд серии ученика. Только чтение — заморозки не трогает. */
+export async function computeBestStreak(studentId: string): Promise<number> {
+  const { active, frozen } = await loadStreakDays(studentId);
+  return longestStreakFromDays(new Set([...active, ...frozen]));
+}
