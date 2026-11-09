@@ -509,6 +509,23 @@ export const homeworks = pgTable("homeworks", {
   byBatch: index("homeworks_batch_idx").on(t.batchId),
 }));
 
+// Шаблоны заданий репетитора (lib/templates.ts): сохранённая подборка задач с
+// типом и настройками — выдаётся любому ученику или группе в два клика.
+export const assignmentTemplates = pgTable("assignment_templates", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  kind: assignmentKindEnum("kind").notNull(),
+  allowHints: boolean("allow_hints").notNull(),
+  timeLimitMinutes: integer("time_limit_minutes"),
+  problemIds: jsonb("problem_ids").notNull().$type<string[]>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byTeacher: index("assignment_templates_teacher_idx").on(t.teacherId),
+}));
+
 export const assignmentSessions = pgTable("assignment_sessions", {
   id: text("id").primaryKey(),
   homeworkId: text("homework_id")

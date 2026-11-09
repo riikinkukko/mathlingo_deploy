@@ -1,5 +1,6 @@
 "use server";
 
+import { getTemplate, saveTemplate } from "@/lib/templates";
 import { onAttemptReviewed } from "@/lib/mock-queries";
 
 import { redirect } from "next/navigation";
@@ -585,8 +586,15 @@ export async function createHomeworkAction(formData: FormData) {
     // некорректный JSON от клиента — просто игнорируем свои задачи, банк не трогаем
   }
 
-  const problemIds = [...bankProblemIds, ...drafts.map(() => genId("p"))];
-  const customProblemIds = problemIds.slice(bankProblemIds.length);
+  // Выдача по шаблону (lib/templates.ts): задачи берём из шаблона этого же
+  // репетитора — там могут быть и его авторские задачи без навыка.
+  const templateId = String(formData.get("templateId") || "");
+  const template = templateId ? await getTemplate(templateId, teacher.id) : null;
+  if (templateId && !template) redirect(errBack("access"));
+  if (template) drafts = [];
+
+  const problemIds = template ? template.problemIds : [...bankProblemIds, ...drafts.map(() => genId("p"))];
+  const customProblemIds = template ? [] : problemIds.slice(bankProblemIds.length);
 
   // Дата из <input type="date"> — срок до конца этого дня по Москве.
   // new Date("YYYY-MM-DD") — это полночь UTC (03:00 МСК), задание «просрочилось» бы утром.
@@ -642,6 +650,11 @@ export async function createHomeworkAction(formData: FormData) {
       });
     }
   });
+
+  // «Сохранить как шаблон» — чтобы потом выдать то же задание другим в два клика.
+  if (!template && formData.get("saveAsTemplate") === "on") {
+    await saveTemplate(teacher.id, { title, kind, allowHints, timeLimitMinutes: timeLimitMinutes ?? null, problemIds });
+  }
 
   for (const sid of targetIds) revalidatePath(`/teacher/student/${sid}`);
   if (group) {

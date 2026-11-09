@@ -1,3 +1,4 @@
+import SaveTemplateButton from "@/components/SaveTemplateButton";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
@@ -562,7 +563,10 @@ export default async function StudentDetailPage(
                       {st.overdue && <span className="ml-2 text-coral">просрочено</span>}
                     </p>
                   </div>
-                  <GradeBadge solved={st.done} total={st.total} size="sm" showFraction />
+                  <div className="flex shrink-0 items-center gap-1">
+                    <SaveTemplateButton homeworkId={hw.id} />
+                    <GradeBadge solved={st.done} total={st.total} size="sm" showFraction />
+                  </div>
                 </div>
               );
             })}

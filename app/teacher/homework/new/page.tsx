@@ -1,3 +1,5 @@
+import TemplateList from "./TemplateList";
+import { listTemplates } from "@/lib/templates";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getCurriculum, getProblemsForSkill, getUserById, getStudentsOfTeacher } from "@/lib/queries";
@@ -90,10 +92,11 @@ export default async function NewHomeworkPage(
     notFound();
   }
 
-  const [curriculum, weak, examNumbers] = await Promise.all([
+  const [curriculum, weak, examNumbers, templates] = await Promise.all([
     getCurriculum(),
     group ? Promise.resolve(null) : weakSpotsSummary(student!.id),
     availableExamNumbers(),
+    listTemplates(teacher.id),
   ]);
   const quickNotice =
     searchParams.quick === "empty"
@@ -139,6 +142,8 @@ export default async function NewHomeworkPage(
             {errorText}
           </ScrollIntoViewOnMount>
         )}
+
+        <TemplateList templates={templates} studentId={student?.id} groupId={group?.id} defaultDue={defaultDueStr} />
 
         <QuickHomework
           studentId={student?.id}
@@ -270,6 +275,14 @@ export default async function NewHomeworkPage(
           </div>
 
           <CustomProblemBuilder />
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-2xl bg-pine-light/40 p-3">
+            <input type="checkbox" name="saveAsTemplate" className="mt-0.5 h-5 w-5 shrink-0 accent-pine" />
+            <span>
+              <span className="block text-sm font-bold text-ink">Сохранить как шаблон</span>
+              <span className="block text-xs text-ink-soft">Потом это задание можно будет выдать другим ученикам или группе в два клика.</span>
+            </span>
+          </label>
 
           <SelectedSubmitBar />
             </div>
