@@ -5,7 +5,12 @@ import { getStudentExamPass, getStudentProPrice, STUDENT_FREE_FEATURES, STUDENT_
 import TeacherPlanPicker from "@/components/TeacherPlanPicker";
 import { TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
-export const metadata = { title: "Тарифы — Планиметрика" };
+export const metadata = {
+  title: "Тарифы — Планиметрика",
+  description:
+    "Сколько стоит Планиметрика: бесплатный тариф и Pro для учеников, тарифы для репетиторов (до 3 учеников бесплатно, пробный период «Профи»). Условия автопродления и отмены.",
+  alternates: { canonical: "/tariffs" },
+};
 // Цены берутся из переменных окружения на сервере — страница не должна
 // запекаться при сборке со значениями по умолчанию.
 export const dynamic = "force-dynamic";

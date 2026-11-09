@@ -8,6 +8,9 @@ import AudienceSwitcher from "./AudienceSwitcher";
 import LandingMotion from "./LandingMotion";
 import { AUDIENCE_HASH, type Audience } from "./audience";
 import { getStudentProPrice } from "@/lib/tariffs";
+import { TEACHER_FREE_LIMIT, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
+
+const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
 import { getCurriculum } from "@/lib/queries";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
@@ -66,7 +69,8 @@ const faq = (topics: string[]): [string, string][] => [
   ],
   [
     "Сколько стоит репетитору?",
-    "До 3 учеников — бесплатно. «Репетитор» — 690 ₽ в месяц до 15 учеников, «Профи» — 1 290 ₽ без лимита, при оплате за год два месяца в подарок. Первые 14 дней после регистрации — «Профи» бесплатно, карта не нужна.",
+    // Цены — из lib/teacher-plan.ts, чтобы при смене тарифа лендинг не врал.
+    `До ${TEACHER_FREE_LIMIT} учеников — бесплатно. «${TEACHER_TIERS.standard.name}» — ${rub(TEACHER_TIERS.standard.month)} в месяц до ${TEACHER_TIERS.standard.limit} учеников, «${TEACHER_TIERS.pro.name}» — ${rub(TEACHER_TIERS.pro.month)} без лимита, при оплате за год два месяца в подарок. Первые ${TEACHER_TRIAL_DAYS} дней после регистрации — «${TEACHER_TIERS.pro.name}» бесплатно, карта не нужна.`,
   ],
 ];
 
@@ -101,6 +105,9 @@ export default async function Landing({ initial = "tutor" }: { initial?: Audienc
             <span className="text-[19px] font-black text-ink">Планиметрика</span>
           </a>
           <nav className="ml-auto flex items-center gap-1">
+            <a href="/ege" className="hidden h-10 items-center rounded-xl px-3 text-[15px] font-bold text-ink-soft hover:text-ink sm:inline-flex">
+              Задания ЕГЭ
+            </a>
             <a href="/tariffs" className="hidden h-10 items-center rounded-xl px-3 text-[15px] font-bold text-ink-soft hover:text-ink sm:inline-flex">
               Тарифы
             </a>
@@ -208,6 +215,12 @@ export default async function Landing({ initial = "tutor" }: { initial?: Audienc
                 </details>
               ))}
             </div>
+            <a
+              href="/ege"
+              className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-pine-light px-4 py-3 text-[15px] font-extrabold text-pine-dark hover:bg-pine-mint"
+            >
+              Разбор всех 20 заданий ЕГЭ по номерам →
+            </a>
           </div>
         </section>
 
