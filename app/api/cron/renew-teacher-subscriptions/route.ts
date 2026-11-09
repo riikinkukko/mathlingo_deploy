@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
-import { getTeachersDueForRenewal, createPendingPayment } from "@/lib/queries";
+import { getTeachersDueForRenewal, markPaymentCanceled, markPaymentSucceeded } from "@/lib/queries";
+import { onRenewalFailed, recordRenewalPayment, renewalMetadata } from "@/lib/renewal";
 import { createRecurringYooKassaPayment, isYooKassaConfigured } from "@/lib/yookassa";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,9 @@ export async function GET(req: Request) {
   }
 
   const teachers = await getTeachersDueForRenewal();
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  // Ключ идемпотентности — по московскому дню: повторный запуск cron в тот же
+  // день вернёт уже созданный платёж, а не спишет второй раз.
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date());
 
   const results = await Promise.allSettled(
     teachers.map(async (teacher) => {
@@ -47,28 +50,25 @@ export async function GET(req: Request) {
       const period = teacher.teacherBillingPeriod ?? "month";
       const amountRub = tierPrice(tier, period);
       const days = periodDays(period);
+      const info = { userId: teacher.id, periodDays: days, tier, billingPeriod: period } as const;
       const payment = await createRecurringYooKassaPayment({
         amountRub,
         description: `Планиметрика для репетитора — автопродление тарифа «${TEACHER_TIERS[tier].name}», ${period === "year" ? "год" : "месяц"}`,
         paymentMethodId: teacher.yookassaPaymentMethodId!,
         idempotenceKey,
-        metadata: { userId: teacher.id, type: "teacher_pro_renewal" },
+        // По этим данным вебхук восстановит запись, если придёт раньше нас.
+        metadata: renewalMetadata(info),
       });
-      await createPendingPayment({
-        userId: teacher.id,
-        yookassaPaymentId: payment.id,
-        amountRub,
-        periodDays: days,
-        paymentType: "teacher_pro",
-        tier,
-        billingPeriod: period,
-        // isRecurringSetup здесь НЕ true — это не первичная настройка
-        // автосписания (она уже есть), просто очередной платёж по уже
-        // сохранённому способу оплаты.
-      });
-      // Итоговое продление teacherProUntil произойдёт позже, когда придёт
-      // вебхук payment.succeeded — та же логика, что и для обычных
-      // платежей (см. markPaymentSucceeded), здесь только инициируем.
+      // Запись платежа: повтор (вебхук успел первым, или cron запущен дважды) — без ошибки.
+      await recordRenewalPayment({ ...info, yookassaPaymentId: payment.id, amountRub });
+      // Автоплатёж часто завершается сразу. Тогда засчитываем здесь же, не
+      // дожидаясь вебхука (оба пути идемпотентны — продление будет одно).
+      if (payment.status === "succeeded") {
+        await markPaymentSucceeded(payment.id);
+      } else if (payment.status === "canceled") {
+        const canceled = await markPaymentCanceled(payment.id);
+        if (canceled) await onRenewalFailed(teacher.id);
+      }
       return { teacherId: teacher.id, paymentId: payment.id, status: payment.status };
     })
   );
@@ -76,9 +76,10 @@ export async function GET(req: Request) {
   const succeeded = results.filter((r) => r.status === "fulfilled").length;
   const failed = results.filter((r) => r.status === "rejected");
   if (failed.length > 0) {
+    // Error как первый аргумент — чтобы alerts.ts переслал владельцу в Telegram.
     console.error(
-      "Ошибки автопродления тарифа репетитора:",
-      failed.map((r) => (r as PromiseRejectedResult).reason)
+      new Error(`Ошибки автопродления тарифа репетитора: ${failed.length}`),
+      failed.map((r) => String((r as PromiseRejectedResult).reason))
     );
   }
 

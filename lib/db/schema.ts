@@ -140,6 +140,10 @@ export const users = pgTable("users", {
   // первого платежа с save_payment_method:true). NULL — автосписание не
   // настроено (ещё не платил, либо отменил автоплатёж).
   yookassaPaymentMethodId: text("yookassa_payment_method_id"),
+  // Неудачные автопродления подряд (lib/renewal.ts): после RENEWAL_MAX_ATTEMPTS
+  // перестаём списывать; сбрасывается при успешной оплате тарифа.
+  renewalFailures: integer("renewal_failures").notNull().default(0),
+  renewalFailedAt: timestamp("renewal_failed_at", { withTimezone: true }),
   // Показываем пользователю, ЧТО именно отвязывается при отмене (как
   // "VISA •••• 4567") — требование ЮKassa при согласовании автоплатежей:
   // должен быть самостоятельный интерфейс отмены, не просто факт наличия
@@ -628,7 +632,7 @@ export const mockScores = pgTable("mock_scores", {
 // а заметки ему показывать нельзя.
 export const studentNotes = pgTable("student_notes", {
   studentId: text("student_id")
-    .primaryKey()
+    .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   teacherId: text("teacher_id")
     .notNull()
@@ -636,6 +640,9 @@ export const studentNotes = pgTable("student_notes", {
   notes: text("notes").notNull().default(""),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
+  // У каждого репетитора свои заметки: раньше ключом был только ученик, и
+  // после смены репетитора новый читал и перезаписывал заметки прежнего.
+  pk: primaryKey({ columns: [t.studentId, t.teacherId] }),
   byStudent: index("student_notes_student_idx").on(t.studentId),
 }));
 

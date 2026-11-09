@@ -3,7 +3,7 @@ import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
 import { randomBytes } from "crypto";
 import { convertRemainingDays } from "./teacher-plan";
-import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lt, lte, gte } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays, computeBestStreak } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
@@ -22,6 +22,7 @@ import {
   Payment,
 } from "./types";
 import { EXAM_ACCESS_UNTIL } from "./exam-plan";
+import { RENEWAL_MAX_ATTEMPTS } from "./renewal-rules";
 import { maxPointsForTask } from "./ege-points";
 import { markReviewOrderPaid, notifyReviewers } from "./paid-review";
 import { LOGIN_WINDOW_MIN, loginBlockReason, loginFailureKeys } from "./login-limits";
@@ -692,11 +693,17 @@ export async function getWeakSkillsForStudent(studentId: string, limit = 2): Pro
 
 // ---------- Журнал занятий ----------
 
-export async function getLessonLogsForStudent(studentId: string) {
+/** teacherId — только записи этого репетитора (после смены репетитора
+ * новый не должен видеть журнал прежнего). Без него — вся история (родитель). */
+export async function getLessonLogsForStudent(studentId: string, teacherId?: string) {
   const rows = await db
     .select()
     .from(schema.lessonLogs)
-    .where(eq(schema.lessonLogs.studentId, studentId))
+    .where(
+      teacherId
+        ? and(eq(schema.lessonLogs.studentId, studentId), eq(schema.lessonLogs.teacherId, teacherId))
+        : eq(schema.lessonLogs.studentId, studentId)
+    )
     .orderBy(desc(schema.lessonLogs.date));
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
 }
@@ -839,7 +846,9 @@ export async function getLessonsForStudent(
 
 /** Предстоящие занятия ученика (planned, в будущем) — для панели ученика/родителя. */
 export async function getUpcomingLessonsForStudent(
-  studentId: string
+  studentId: string,
+  /** Только занятия этого репетитора (карточка ученика у репетитора). */
+  teacherId?: string
 ): Promise<(import("./types").ScheduledLesson & { groupName: string | null })[]> {
   const rows = await db
     .select({ lesson: schema.scheduledLessons, groupName: schema.studentGroups.name })
@@ -849,7 +858,8 @@ export async function getUpcomingLessonsForStudent(
       and(
         eq(schema.scheduledLessons.studentId, studentId),
         eq(schema.scheduledLessons.status, "planned"),
-        gte(schema.scheduledLessons.startsAt, new Date())
+        gte(schema.scheduledLessons.startsAt, new Date()),
+        teacherId ? eq(schema.scheduledLessons.teacherId, teacherId) : undefined
       )
     )
     .orderBy(asc(schema.scheduledLessons.startsAt));
@@ -886,13 +896,15 @@ function mapStudentPayment(
 }
 
 /** История оплат ученика — новые сверху. */
+/** Оплаты ученика ЭТОМУ репетитору — чужие оплаты прежнему репетитору не показываем. */
 export async function getStudentPayments(
-  studentId: string
+  studentId: string,
+  teacherId: string
 ): Promise<import("./types").StudentPayment[]> {
   const rows = await db
     .select()
     .from(schema.studentPayments)
-    .where(eq(schema.studentPayments.studentId, studentId))
+    .where(and(eq(schema.studentPayments.studentId, studentId), eq(schema.studentPayments.teacherId, teacherId)))
     .orderBy(desc(schema.studentPayments.paidAt), desc(schema.studentPayments.createdAt));
   return rows.map(mapStudentPayment);
 }
@@ -1036,11 +1048,16 @@ function mapMockScore(r: typeof schema.mockScores.$inferSelect): import("./types
 }
 
 /** Пробники ученика — новые сверху. */
-export async function getMockScores(studentId: string): Promise<import("./types").MockScore[]> {
+/** teacherId — только пробники, записанные этим репетитором (с его комментариями). */
+export async function getMockScores(studentId: string, teacherId?: string): Promise<import("./types").MockScore[]> {
   const rows = await db
     .select()
     .from(schema.mockScores)
-    .where(eq(schema.mockScores.studentId, studentId))
+    .where(
+      teacherId
+        ? and(eq(schema.mockScores.studentId, studentId), eq(schema.mockScores.teacherId, teacherId))
+        : eq(schema.mockScores.studentId, studentId)
+    )
     .orderBy(desc(schema.mockScores.takenAt), desc(schema.mockScores.createdAt));
   return rows.map(mapMockScore);
 }
@@ -1068,11 +1085,12 @@ export async function getLatestMockScoresForTeacher(teacherId: string): Promise<
 }
 
 /** Заметки репетитора об ученике (пустая строка, если ещё не писали). */
-export async function getStudentNotes(studentId: string): Promise<{ notes: string; updatedAt: string | null }> {
+/** Заметки репетитора об ученике — у каждого репетитора свои (PK ученик+репетитор). */
+export async function getStudentNotes(studentId: string, teacherId: string): Promise<{ notes: string; updatedAt: string | null }> {
   const rows = await db
     .select()
     .from(schema.studentNotes)
-    .where(eq(schema.studentNotes.studentId, studentId))
+    .where(and(eq(schema.studentNotes.studentId, studentId), eq(schema.studentNotes.teacherId, teacherId)))
     .limit(1);
   return rows[0]
     ? { notes: rows[0].notes, updatedAt: rows[0].updatedAt.toISOString() }
@@ -1497,7 +1515,16 @@ export async function getTeachersDueForRenewal(): Promise<User[]> {
         eq(schema.users.role, "TEACHER"),
         eq(schema.users.teacherPlan, "pro"),
         lte(schema.users.teacherProUntil, new Date()),
-        isNotNull(schema.users.yookassaPaymentMethodId)
+        isNotNull(schema.users.yookassaPaymentMethodId),
+        // Отклонённое продление повторяем не каждый день бесконечно, а
+        // RENEWAL_MAX_ATTEMPTS раз: после 1-й неудачи через день, после 2-й — через 2.
+        lt(schema.users.renewalFailures, RENEWAL_MAX_ATTEMPTS),
+        sql`(${schema.users.renewalFailedAt} is null
+             or ${schema.users.renewalFailedAt} <= now() - make_interval(days => ${schema.users.renewalFailures}))`,
+        // Предыдущее списание ещё не завершилось — не создаём второе.
+        sql`not exists (select 1 from payments p
+             where p.user_id = ${schema.users.id} and p.payment_type = 'teacher_pro'
+               and p.status = 'pending' and p.created_at > now() - interval '3 days')`
       )
     );
   return rows.map(mapUser);
@@ -2109,6 +2136,8 @@ export async function markPaymentSucceeded(
           teacherProUntil,
           teacherTier: tier,
           teacherBillingPeriod: period,
+          renewalFailures: 0,
+          renewalFailedAt: null,
           ...(savedMethod && payment.isRecurringSetup
             ? {
                 yookassaPaymentMethodId: savedMethod.id,
@@ -2150,12 +2179,30 @@ export async function markPaymentSucceeded(
   return true;
 }
 
-export async function markPaymentCanceled(yookassaPaymentId: string) {
-  await db
+/**
+ * Отмена платежа. Возвращает платёж, если его статус сменился именно сейчас
+ * (повторное уведомление ЮKassa вернёт null) — чтобы неудачу автопродления
+ * засчитать ровно один раз.
+ */
+export async function markPaymentCanceled(
+  yookassaPaymentId: string
+): Promise<{ userId: string; paymentType: string; isRecurringSetup: boolean } | null> {
+  const rows = await db
     .update(schema.payments)
     .set({ status: "canceled" })
-    // Уже оплаченный платёж отменой не перезаписываем.
-    .where(and(eq(schema.payments.yookassaPaymentId, yookassaPaymentId), sql`${schema.payments.status} <> 'succeeded'`));
+    // Уже оплаченный (и уже отменённый) платёж не перезаписываем.
+    .where(
+      and(
+        eq(schema.payments.yookassaPaymentId, yookassaPaymentId),
+        sql`${schema.payments.status} not in ('succeeded', 'canceled')`
+      )
+    )
+    .returning({
+      userId: schema.payments.userId,
+      paymentType: schema.payments.paymentType,
+      isRecurringSetup: schema.payments.isRecurringSetup,
+    });
+  return rows[0] ?? null;
 }
 
 // ---------- SRS (интервальное повторение, коробки Лейтнера) ----------

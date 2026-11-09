@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isYooKassaIp, getYooKassaPayment } from "@/lib/yookassa";
 import { markPaymentSucceeded, markPaymentCanceled, getPaymentAmountRub } from "@/lib/queries";
+import { onRenewalFailed, recoverRenewalFromMetadata } from "@/lib/renewal";
 
 export const dynamic = "force-dynamic";
 
@@ -57,11 +58,17 @@ export async function POST(req: Request) {
 
   try {
     if (info.status === "succeeded" && info.paid) {
-      const expected = await getPaymentAmountRub(paymentId);
+      let expected = await getPaymentAmountRub(paymentId);
+      // Автопродление: ЮKassa может прислать уведомление раньше, чем cron
+      // записал платёж. Восстанавливаем запись по метаданным платежа —
+      // иначе деньги списаны, а тариф не продлён.
+      if (expected === null && (await recoverRenewalFromMetadata(info))) {
+        expected = await getPaymentAmountRub(paymentId);
+      }
       if (expected === null) {
-        console.warn("Вебхук ЮKassa: платёж не найден в нашей БД:", paymentId);
+        console.error(new Error(`Вебхук ЮKassa: оплаченный платёж ${paymentId} не найден в нашей БД`));
       } else if (Math.abs(expected - info.amountRub) > 0.001) {
-        console.error("Вебхук ЮKassa: сумма не совпадает с ожидаемой", { paymentId, expected, got: info.amountRub });
+        console.error(new Error(`Вебхук ЮKassa: сумма не совпадает (${paymentId}: ждали ${expected}, пришло ${info.amountRub})`));
       } else {
         // payment_method.saved:true — способ оплаты реально сохранён на
         // стороне ЮKassa (ЮKassa может отказать в сохранении для некоторых карт).
@@ -74,7 +81,13 @@ export async function POST(req: Request) {
         await markPaymentSucceeded(paymentId, savedMethod, paidCard);
       }
     } else if (info.status === "canceled") {
-      await markPaymentCanceled(paymentId);
+      if ((await getPaymentAmountRub(paymentId)) === null) await recoverRenewalFromMetadata(info);
+      const canceled = await markPaymentCanceled(paymentId);
+      // Отклонено автопродление (не первая оплата) — считаем попытку и
+      // предупреждаем репетитора; повторы ограничены (lib/renewal-rules.ts).
+      if (canceled && canceled.paymentType === "teacher_pro" && !canceled.isRecurringSetup) {
+        await onRenewalFailed(canceled.userId);
+      }
     }
   } catch (e) {
     console.error("Ошибка обработки вебхука ЮKassa:", e);

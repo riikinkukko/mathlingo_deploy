@@ -91,6 +91,8 @@ export interface YooKassaPaymentInfo {
   paid: boolean;
   amountRub: number;
   paymentMethod?: { id?: string; saved?: boolean; card?: { last4?: string; card_type?: string } };
+  /** Метаданные, которые мы сами передали при создании платежа. */
+  metadata?: Record<string, string>;
 }
 
 /**
@@ -116,6 +118,7 @@ export async function getYooKassaPayment(paymentId: string): Promise<YooKassaPay
       paid: !!data.paid,
       amountRub: Number(data.amount?.value),
       paymentMethod: data.payment_method,
+      metadata: data.metadata && typeof data.metadata === "object" ? data.metadata : undefined,
     };
   } finally {
     clearTimeout(timeout);
