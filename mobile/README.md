@@ -34,10 +34,10 @@ npm run typecheck
 npm install -g eas-cli
 eas login                  # аккаунт expo.dev (бесплатный)
 cd mobile
-eas init                   # создаст проект и пропишет extra.eas.projectId в app.json — закоммитить
 ```
 
-Без `projectId` пуш-уведомления не регистрируются (Expo Push выдаёт токен только с ним).
+Проект на expo.dev уже создан (`riikinkukko/mathapp`, `extra.eas.projectId` в `app.json`) —
+`eas init` повторять не нужно. Все команды `eas` запускать **из папки `mobile`**, не из корня репозитория.
 
 **Ключ подписи.** Приложение уже есть в Google Play, поэтому новая сборка должна быть
 подписана тем же ключом загрузки, что и сборки Capacitor:

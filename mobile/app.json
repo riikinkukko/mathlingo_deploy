@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Планиметрика",
-    "slug": "planimetrika",
+    "slug": "mathapp",
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -69,7 +69,11 @@
       "typedRoutes": false
     },
     "extra": {
-      "apiUrl": "https://planimetrika.online"
-    }
+      "apiUrl": "https://planimetrika.online",
+      "eas": {
+        "projectId": "a39f91a1-2f3e-449f-bda4-0b6bda52fff1"
+      }
+    },
+    "owner": "riikinkukko"
   }
 }
