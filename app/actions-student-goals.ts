@@ -126,8 +126,8 @@ export async function saveStudentNotesAction(
     .insert(schema.studentNotes)
     .values({ studentId, teacherId: ctx.teacher.id, notes, updatedAt: new Date() })
     .onConflictDoUpdate({
-      target: schema.studentNotes.studentId,
-      set: { notes, teacherId: ctx.teacher.id, updatedAt: new Date() },
+      target: [schema.studentNotes.studentId, schema.studentNotes.teacherId],
+      set: { notes, updatedAt: new Date() },
     });
   revalidatePath(`/teacher/student/${studentId}`);
   return { ok: true, at: Date.now() };

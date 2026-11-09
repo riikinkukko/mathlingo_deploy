@@ -129,7 +129,7 @@ export default async function StudentDetailPage(
     curriculum,
     progress,
     stats,
-    homeworks,
+    homeworksAll,
     mistakesRaw,
     lessonLogs,
     pendingReviewsRaw,
@@ -148,14 +148,14 @@ export default async function StudentDetailPage(
       computeOverallStats(student.id),
       getHomeworksForStudent(student.id),
       getMistakesForStudent(student.id),
-      getLessonLogsForStudent(student.id),
+      getLessonLogsForStudent(student.id, teacher.id),
       getPendingReviewsForTeacher(teacher.id),
       getParentsOfStudent(student.id),
-      getUpcomingLessonsForStudent(student.id),
+      getUpcomingLessonsForStudent(student.id, teacher.id),
       getStudentBalance(teacher.id, student.id),
-      getStudentPayments(student.id),
-      getMockScores(student.id),
-      getStudentNotes(student.id),
+      getStudentPayments(student.id, teacher.id),
+      getMockScores(student.id, teacher.id),
+      getStudentNotes(student.id, teacher.id),
       getWeeklyStats(student.id, 12),
       getUnmarkedPastLessons(teacher.id, student.id),
       getRecentReviewedForStudent(student.id, 5),
@@ -173,6 +173,9 @@ export default async function StudentDetailPage(
       })
     : null;
   const notesPreview = notesData.notes.trim().split("\n")[0]?.slice(0, 60);
+  // Только задания этого репетитора: после смены репетитора задания прежнего
+  // (и общие пробники платформы) в его кабинете не показываем.
+  const homeworks = homeworksAll.filter((h) => h.teacherId === teacher.id);
   const hwStatuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, student.id)));
   const mistakes = mistakesRaw.slice(0, 8);
   const pendingReviews = pendingReviewsRaw.filter((r) => r.student.id === student.id);
