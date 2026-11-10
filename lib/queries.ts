@@ -1903,8 +1903,21 @@ export async function getAchievementStats(studentId: string): Promise<{
 
 // ---------- Привязка Telegram для уведомлений ----------
 
-function randomCode(): string {
-  return secureCode(16);
+/** Срок жизни кода привязки Telegram. */
+export const TELEGRAM_CODE_TTL_MS = 24 * 3600_000;
+
+/** Код привязки: случайная часть + время выдачи (base36) — по нему код истекает.
+ * Telegram пропускает в ?start= только [A-Za-z0-9_-], до 64 символов. */
+function randomCode(now = Date.now()): string {
+  return `${secureCode(16)}_${now.toString(36)}`;
+}
+
+/** Код ещё действует? Коды без времени выдачи (старого формата) — нет. */
+export function isTelegramCodeFresh(code: string, now = Date.now()): boolean {
+  const m = /_([0-9a-z]+)$/.exec(code);
+  if (!m) return false;
+  const issued = parseInt(m[1], 36);
+  return Number.isFinite(issued) && issued <= now + 60_000 && now - issued < TELEGRAM_CODE_TTL_MS;
 }
 
 /** Генерирует одноразовый код привязки и сохраняет на пользователе — вызов
@@ -1919,6 +1932,8 @@ export async function generateTelegramLinkCode(userId: string): Promise<string> 
  * пользователя по коду, привязывает chatId, код обнуляет (одноразовый).
  * Возвращает true, если код найден и привязка прошла. */
 export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
+  // Код живёт сутки: старая ссылка из переписки или скриншота не привяжет чужой чат.
+  if (typeof code !== "string" || !isTelegramCodeFresh(code)) return false;
   const rows = await db.select().from(schema.users).where(eq(schema.users.telegramLinkCode, code)).limit(1);
   const user = rows[0];
   if (!user) return false;

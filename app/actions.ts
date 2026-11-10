@@ -165,6 +165,12 @@ export async function reviewAttemptAction(
   if (!studentIds.has(attempt.studentId) && !paidOrder) return { error: "Доступ запрещён" };
 
   const problem = await getProblem(attempt.problemId);
+  // Проверять можно только развёрнутое решение, отправленное на проверку (или
+  // уже проверенное — оценку можно поменять). Автоматически проверенный ответ
+  // (числовой, выбор) раньше тоже можно было «перепроверить» и сменить верно/неверно.
+  if (!attempt.reviewStatus || problem?.answerType !== "DETAILED") {
+    return { error: "Это решение проверяется автоматически" };
+  }
   const skill = problem?.skillId ? await getSkill(problem.skillId) : undefined;
 
   // Баллы: 0..макс. для номера ЕГЭ; полный балл всегда означает «одобрено».

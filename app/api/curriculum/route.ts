@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurriculum, gateCurriculumForUser } from "@/lib/queries";
-import { getSessionUser } from "@/lib/auth";
+import { getSessionUserOrNull } from "@/lib/auth";
 import { getBearerUser } from "@/lib/api-auth";
 
 // Явно запрещаем статическую предгенерацию — иначе Next.js на билде
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 /** Только для вошедших пользователей (cookie сайта или Bearer-токен). Раньше
  * отдавал всю программу с платной теорией любому без входа. */
 export async function GET(req: Request) {
-  const user = (await getSessionUser()) ?? (await getBearerUser(req));
+  const user = (await getSessionUserOrNull()) ?? (await getBearerUser(req));
   if (!user) return NextResponse.json({ error: "Требуется вход" }, { status: 401 });
   const curriculum = await getCurriculum();
   return NextResponse.json({ curriculum: gateCurriculumForUser(user, curriculum) });

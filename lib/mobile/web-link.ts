@@ -1,7 +1,7 @@
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
-import { genId } from "@/lib/queries";
+import { secureToken } from "@/lib/secure-random";
 
 const TTL_MS = 2 * 60_000;
 
@@ -13,7 +13,8 @@ export function safeNext(raw: unknown): string {
 }
 
 export async function createWebLink(userId: string, next: string): Promise<string> {
-  const id = genId("al");
+  // Токен входа без пароля — криптостойкий (192 бита), а не genId (~48 бит).
+  const id = `al_${secureToken(24)}`;
   await db.insert(schema.appLoginTokens).values({ id, userId, next: safeNext(next), expiresAt: new Date(Date.now() + TTL_MS) });
   return id;
 }

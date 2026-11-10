@@ -63,6 +63,20 @@ export async function getSessionUser(): Promise<User | null> {
   return user;
 }
 
+/**
+ * Как getSessionUser, но без перехода на /login — для API-адресов: там нужен
+ * ответ 401 (или попытка входа по токену приложения), а не редирект.
+ */
+export async function getSessionUserOrNull(): Promise<User | null> {
+  const token = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!token) return null;
+  const session = await verifySessionToken(token);
+  if (!session) return null;
+  const user = await getUserById(session.userId);
+  if (!user || isSessionRevoked(user, session.issuedAt)) return null;
+  return user;
+}
+
 /** Сессия выдана до последней смены/сброса пароля или до «Выйти на всех
  * устройствах» — недействительна. Так сброс пароля выкидывает все ранее
  * открытые сессии (в т.ч. у того, кто, возможно, узнал старый пароль), а
