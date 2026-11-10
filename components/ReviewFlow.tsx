@@ -132,7 +132,7 @@ export default function ReviewFlow({
           subtopicTitle={
             mode === "mistakes" ? "Ошибки исправлены" : mode === "practice" ? "Тренировка пройдена" : "Повторение пройдено"
           }
-          xpEarned={items.length * 10}
+          xpEarned={solvedIds.size * 10}
           nextHref={backHref}
           nextLabel={mode === "review" ? "К пути обучения" : "Вернуться"}
           eyebrow={mode === "mistakes" ? "Ошибка — это точка роста 💪" : mode === "practice" ? "Ещё на шаг ближе к экзамену 🎯" : "Память укрепляется 🧠"}

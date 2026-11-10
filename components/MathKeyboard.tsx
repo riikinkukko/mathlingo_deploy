@@ -4,13 +4,15 @@
 // их нет, а ответы бывают отрицательными и дробями. Вставляем обычный дефис —
 // его понимает проверка ответа. «°» убран: проверка всё равно отбрасывает
 // градусы в конце ответа («60°» = «60»), а седьмая кнопка не влезала в ряд.
+//
+// Кнопок «√ ² π sin» больше нет: ответ в части 1 — всегда число или дробь
+// (в базе нет ни одного ответа с корнем или π), а проверка такие выражения не
+// вычисляет — «√3» засчитывалось бы неверным. Подсказка ниже говорит, как
+// записывать ответ.
 const KEYS = [
   { symbol: "-", label: "−", aria: "Минус" },
+  { symbol: ",", label: ",", aria: "Запятая" },
   { symbol: "/", label: "/", aria: "Дробь" },
-  { symbol: "√", label: "√" },
-  { symbol: "²", label: "²" },
-  { symbol: "π", label: "π" },
-  { symbol: "sin", label: "sin" },
 ] as { symbol: string; label: string; aria?: string }[];
 
 export default function MathKeyboard({
@@ -49,6 +51,9 @@ export default function MathKeyboard({
           {k.label}
         </button>
       ))}
+      <span className="self-center pl-1 text-[12px] font-semibold leading-tight text-ink-soft">
+        Ответ — число: целое, десятичная дробь или a/b
+      </span>
     </div>
   );
 }

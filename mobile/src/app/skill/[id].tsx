@@ -89,6 +89,8 @@ function Lesson({
   const [solved, setSolved] = useState<Set<string>>(
     () => new Set(data.problems.filter((p) => ["solved", "pending"].includes(data.states[p.id]?.status ?? "")).map((p) => p.id))
   );
+  // Сколько задач было решено до этого захода — опыт за них уже начислен.
+  const [initialSolved] = useState(() => solved.size);
   const problem = data.problems[index];
   const isSolved = problem ? solved.has(problem.id) : false;
 
@@ -98,7 +100,7 @@ function Lesson({
   }, [phase]);
 
   if (phase === "theory") return <Theory cards={data.skill.theory} title={data.skill.title} onDone={() => setPhase(allSolved ? "done" : "problems")} />;
-  if (phase === "done" || !problem) return <Done data={data} />;
+  if (phase === "done" || !problem) return <Done data={data} earned={Math.max(0, solved.size - initialSolved)} />;
 
   function next() {
     const rest = data.problems.findIndex((p, i) => i > index && !solved.has(p.id));
@@ -199,10 +201,11 @@ function Theory({ cards, title, onDone }: { cards: TheoryCardM[]; title: string;
   );
 }
 
-function Done({ data }: { data: Extract<SkillPayload, { status: "ok" }> }) {
+function Done({ data, earned }: { data: Extract<SkillPayload, { status: "ok" }>; earned: number }) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const xp = useMemo(() => data.problems.length * 10, [data.problems.length]);
+  // Как на сервере: 10 опыта за задачу, решённую в этом заходе (а не за весь урок).
+  const xp = useMemo(() => earned * 10, [earned]);
   const shown = useCountUp(xp, 900, 450);
   const [burst, setBurst] = useState(0);
   useEffect(() => {
@@ -224,10 +227,12 @@ function Done({ data }: { data: Extract<SkillPayload, { status: "ok" }> }) {
         <H1 style={{ textAlign: "center" }}>Урок пройден!</H1>
       </Animated.View>
       <Animated.View entering={enter(2, 150)} style={{ flexDirection: "row", gap: 10 }}>
-        <View style={{ backgroundColor: C.amberLight, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, alignItems: "center" }}>
-          <T w="black" size={26} color={C.amberText}>+{shown}</T>
-          <T w="bold" size={12} color={C.amberText}>опыта</T>
-        </View>
+        {xp > 0 ? (
+          <View style={{ backgroundColor: C.amberLight, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, alignItems: "center" }}>
+            <T w="black" size={26} color={C.amberText}>+{shown}</T>
+            <T w="bold" size={12} color={C.amberText}>опыта</T>
+          </View>
+        ) : null}
         <View style={{ backgroundColor: C.pineLight, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 10, alignItems: "center" }}>
           <T w="black" size={26} color={C.pineDark}>{data.problems.length}</T>
           <T w="bold" size={12} color={C.pineDark}>задач решено</T>

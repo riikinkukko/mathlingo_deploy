@@ -65,6 +65,11 @@ export default function LessonFlow({
   // Для итога урока: когда начали и в каких задачах ошибались.
   const [startedAt] = useState(() => Date.now());
   const [mistakeIds, setMistakeIds] = useState<Set<string>>(new Set());
+  // Опыт на экране «Урок пройден» — как на сервере (computeXp): 10 за верно
+  // решённую в этом заходе задачу; отправленное репетитору — после проверки.
+  // Раньше показывали «задач в уроке × 10», даже если часть решена раньше.
+  const [earnedIds, setEarnedIds] = useState<Set<string>>(new Set());
+  const startedFresh = !problems.some((p) => isDone(initialStates[p.id]?.status));
 
   const solvedCount = problems.filter((p) => isDone(states[p.id]?.status)).length;
 
@@ -78,6 +83,7 @@ export default function LessonFlow({
       kind === "submitted" ? { ...states[problemId], status: "pending" } : { status: "solved" };
     const wasDone = isDone(states[problemId]?.status);
     setStates((prev) => ({ ...prev, [problemId]: nextState }));
+    if (!wasDone && kind !== "submitted") setEarnedIds((prev) => new Set(prev).add(problemId));
     if (!wasDone) setCombo((c) => c + 1);
     const newSolvedCount = problems.filter((p) =>
       p.id === problemId ? true : isDone(states[p.id]?.status)
@@ -229,8 +235,10 @@ export default function LessonFlow({
       {showCelebration && (
         <CompletionCelebration
           subtopicTitle={skillTitle}
-          xpEarned={problems.length * 10}
-          bonusXp={!hadMistake ? 30 : 0}
+          xpEarned={earnedIds.size * 10}
+          // Бонус «без ошибок» сервер даёт за навык, решённый без единой ошибки;
+          // точно знаем это, только если урок пройден с нуля в этом заходе.
+          bonusXp={!hadMistake && startedFresh ? 30 : 0}
           nextHref={nextHref}
           nextLabel={nextLabel}
           isLastSubtopic={isLastSkill}
