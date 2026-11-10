@@ -11,6 +11,7 @@ import type { SkillPayload, TheoryCardM } from "@/lib/types";
 import { Button, Card, ErrorBox, H1, H2, Loading, Row, Screen, T, Header } from "@/components/ui";
 import { Diagram, Mascot } from "@/components/Svg";
 import ProblemCard from "@/components/ProblemCard";
+import { markProblemSolvedLocally, markSkillDoneLocally, prefetchNextSkill } from "@/lib/offline-progress";
 import { C } from "@/theme";
 
 type Phase = "theory" | "problems" | "done";
@@ -50,8 +51,15 @@ export default function LessonScreen() {
   }
   return (
     <Lesson
+      // Свой экземпляр на каждый урок: иначе при переходе «Дальше» состояние
+      // (фаза «пройден», решённые задачи) переезжало в следующий урок.
+      key={id}
       data={q.data}
+      onSolved={(problemId) => markProblemSolvedLocally(qc, id, problemId)}
       onFinished={() => {
+        // Без сети сервер не знает о прогрессе — отмечаем сами (offline-progress.ts);
+        // при связи ответ сервера всё равно заменит эти отметки.
+        markSkillDoneLocally(qc, id);
         qc.invalidateQueries({ queryKey: ["home"] });
         qc.invalidateQueries({ queryKey: ["skill", id] });
       }}
@@ -59,8 +67,21 @@ export default function LessonScreen() {
   );
 }
 
-function Lesson({ data, onFinished }: { data: Extract<SkillPayload, { status: "ok" }>; onFinished: () => void }) {
+function Lesson({
+  data,
+  onFinished,
+  onSolved,
+}: {
+  data: Extract<SkillPayload, { status: "ok" }>;
+  onFinished: () => void;
+  onSolved: (problemId: string) => void;
+}) {
   const insets = useSafeAreaInsets();
+  const qc = useQueryClient();
+  // Следующий урок — заранее, чтобы после этого его можно было пройти без сети.
+  useEffect(() => {
+    prefetchNextSkill(qc, data.next?.id);
+  }, [qc, data.next?.id]);
   const firstUnsolved = data.problems.findIndex((p) => data.states[p.id]?.status !== "solved" && data.states[p.id]?.status !== "pending");
   const allSolved = data.problems.length > 0 && firstUnsolved === -1;
   const [phase, setPhase] = useState<Phase>(data.forceTheoryFirst && data.skill.theory.length ? "theory" : allSolved ? "done" : "problems");
@@ -126,7 +147,10 @@ function Lesson({ data, onFinished }: { data: Extract<SkillPayload, { status: "o
           state={data.states[problem.id]}
           source="lesson"
           canAskTeacher={data.canAskTeacher}
-          onSolved={() => setSolved((s) => new Set(s).add(problem.id))}
+          onSolved={() => {
+            setSolved((s) => new Set(s).add(problem.id));
+            onSolved(problem.id);
+          }}
         />
         </Animated.View>
       </ScrollView>

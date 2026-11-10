@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api, ApiError } from "./api";
 import { answerFingerprint } from "./answer-key";
 import { queryClient } from "./query";
-import type { AttemptResult, MobileProblem } from "./types";
+import type { AttemptResult, HomePayload, MobileProblem } from "./types";
 
 /**
  * Ответы без сети. Если связи нет, ответ проверяется по отпечатку
@@ -51,6 +51,15 @@ export async function submitAnswer(
   } catch (e) {
     if (!(e instanceof ApiError && e.offline) || !problem.check || image) throw e;
     const q = await readQueue();
+    // Энергия (бесплатный тариф без репетитора) без сети тратится так же, как с
+    // сетью: первая попытка по задаче — минус одна. Кончилась — честно говорим
+    // об этом, а не принимаем ответ, который сервер потом отклонит.
+    const firstTry = !q.some((x) => x.problemId === problem.id);
+    if (firstTry) {
+      const energy = cachedEnergy();
+      if (energy !== null && energy <= 0) return { kind: "no_energy" };
+      if (energy !== null) spendCachedEnergy();
+    }
     q.push({ problemId: problem.id, answer, source, at: Date.now() });
     await writeQueue(q);
     if (answerFingerprint(problem.id, answer) === problem.check) {
@@ -63,6 +72,20 @@ export async function submitAnswer(
   }
 }
 
+/** Энергия из сохранённой главной; null — без ограничения (Pro, есть репетитор). */
+function cachedEnergy(): number | null {
+  for (const [, d] of queryClient.getQueriesData<HomePayload>({ queryKey: ["home"] })) {
+    if (d?.stats) return d.stats.energy;
+  }
+  return null;
+}
+
+function spendCachedEnergy() {
+  queryClient.setQueriesData<HomePayload>({ queryKey: ["home"] }, (d) =>
+    d?.stats && d.stats.energy !== null ? { ...d, stats: { ...d.stats, energy: Math.max(0, d.stats.energy - 1) } } : d
+  );
+}
+
 /** Отправить накопленные ответы. Вызывается при запуске и при появлении сети. */
 export async function flushQueue(): Promise<number> {
   if (flushing) return 0;
@@ -73,7 +96,12 @@ export async function flushQueue(): Promise<number> {
     while (q.length) {
       const item = q[0];
       try {
-        await api("/api/m/attempts", { body: { problemId: item.problemId, answer: item.answer, source: item.source } });
+        const r = await api<AttemptResult>("/api/m/attempts", {
+          body: { problemId: item.problemId, answer: item.answer, source: item.source },
+        });
+        // Сервер не принял из-за энергии — ответ не выбрасываем: оставляем в
+        // очереди и пробуем позже, когда энергия восстановится.
+        if (r.kind === "no_energy") break;
       } catch (e) {
         if (e instanceof ApiError && e.offline) break;
         // Ошибка проверки (например, задача стала недоступна) — попытку выбрасываем.

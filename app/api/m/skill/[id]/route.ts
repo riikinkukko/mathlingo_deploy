@@ -8,7 +8,9 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
   const user = await requireStudent(req);
   if (user instanceof Response) return user;
   const { id } = await props.params;
-  const data = await getLessonData(user, id);
+  // ?ahead=1 — заранее для работы без сети (см. getLessonData).
+  const ahead = new URL(req.url).searchParams.get("ahead") === "1";
+  const data = await getLessonData(user, id, { ahead });
   if (data.status === "notfound") return fail("Урок не найден", 404);
   if (data.status === "upgrade") return json({ status: "upgrade" });
   if (data.status === "locked") return json({ status: "locked", topicId: data.topicId });

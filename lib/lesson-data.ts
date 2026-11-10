@@ -35,7 +35,13 @@ export type LessonData =
       detailedPreview: { text: string; solution: string; egeTaskNumber: number | null } | null;
     };
 
-export async function getLessonData(user: User, skillId: string): Promise<LessonData> {
+/**
+ * opts.ahead — приложение заранее скачивает СЛЕДУЮЩИЙ урок, чтобы его можно
+ * было пройти без сети. Закрытый по пути урок тогда отдаём, но только если он
+ * идёт сразу за текущим (предыдущий урок — «текущий» или пройден). Тарифные
+ * ограничения (upgrade) это не обходит.
+ */
+export async function getLessonData(user: User, skillId: string, opts: { ahead?: boolean } = {}): Promise<LessonData> {
   const skill = await getSkill(skillId);
   if (!skill) return { status: "notfound" };
 
@@ -66,7 +72,12 @@ export async function getLessonData(user: User, skillId: string): Promise<Lesson
   // «Попробовать 1 навык» следующей главы доступен сразу, не только после всей первой.
   const isFreeTrialSkill =
     isFreeStandalone && !!chapter && chapter.order !== 1 && isSkillAccessibleOnFree(skill, chapter.order, siblingSkills);
-  if (!isFreeTrialSkill && pathStates[skill.id] === "locked") return { status: "locked", topicId };
+  if (!isFreeTrialSkill && pathStates[skill.id] === "locked") {
+    const idx = allSkills.findIndex((s) => s.id === skill.id);
+    const prev = idx > 0 ? allSkills[idx - 1] : undefined;
+    const nextInLine = !!prev && pathStates[prev.id] !== "locked";
+    if (!(opts.ahead && nextInLine)) return { status: "locked", topicId };
+  }
 
   // Развёрнутые задачи на Free прячем, но одну показываем витриной — условие
   // и эталон после урока, чтобы было видно, что откроет Pro.
