@@ -1382,8 +1382,9 @@ export async function pushNotification(
     telegram?: boolean;
   }
 ) {
+  const notificationId = genId("n");
   await tx.insert(schema.notifications).values({
-    id: genId("n"),
+    id: notificationId,
     userId: params.userId,
     type: params.type,
     title: params.title,
@@ -1392,12 +1393,41 @@ export async function pushNotification(
     read: false,
   });
 
-  // Push в мобильное приложение — фоном, не задерживаем транзакцию сетью.
+  // Push и Telegram — только после того, как запись сохранена: раньше они
+  // уходили сразу, и при откате транзакции человек получал уведомление о
+  // том, чего нет. Запись внутри транзакции не видна другим соединениям до
+  // COMMIT — ждём, пока она появится (или поймём, что её откатили).
+  void deliverWhenCommitted(notificationId, params).catch(() => {});
+}
+
+/** Паузы перед проверками «уведомление сохранено?» (мс). */
+const COMMIT_CHECKS_MS = [150, 1000, 4000];
+
+export async function deliverWhenCommitted(
+  notificationId: string,
+  params: { userId: string; title: string; body: string; link: string; telegram?: boolean }
+): Promise<boolean> {
+  let committed = false;
+  for (const wait of COMMIT_CHECKS_MS) {
+    // unref — ожидание не держит открытыми короткие скрипты (seed, тесты).
+    await new Promise((r) => setTimeout(r, wait).unref?.());
+    const rows = await db
+      .select({ id: schema.notifications.id })
+      .from(schema.notifications)
+      .where(eq(schema.notifications.id, notificationId))
+      .limit(1);
+    if (rows.length) {
+      committed = true;
+      break;
+    }
+  }
+  if (!committed) return false;
+
+  // Push в мобильное приложение. Ошибки sendPushToUser глушит сам.
   void sendPushToUser(params.userId, { title: params.title, body: params.body, link: params.link });
 
-  if (params.telegram === false) return;
-
-  const userRows = await tx
+  if (params.telegram === false) return true;
+  const userRows = await db
     .select({ telegramChatId: schema.users.telegramChatId })
     .from(schema.users)
     .where(eq(schema.users.id, params.userId))
@@ -1408,11 +1438,10 @@ export async function pushNotification(
     const text = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${
       appUrl ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""
     }`;
-    // Намеренно не await — не задерживаем транзакцию БД сетевым вызовом к
-    // внешнему API. Ошибка (в т.ч. таймаут) просто логируется внутри
-    // sendTelegramMessage и не всплывает наружу.
-    sendTelegramMessage(chatId, text).catch(() => {});
+    // Ошибка (в т.ч. таймаут) логируется внутри sendTelegramMessage.
+    await sendTelegramMessage(chatId, text).catch(() => {});
   }
+  return true;
 }
 
 function escapeHtml(s: string): string {

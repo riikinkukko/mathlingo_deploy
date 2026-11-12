@@ -20,9 +20,12 @@ function untilLabel(iso: string, now: number) {
 export default function TeacherTodayCard({
   lessons,
   dateLabel,
+  hideEmptyCta = false,
 }: {
   lessons: ScheduledLessonWithStudent[];
   dateLabel: string;
+  /** Кнопка «Запланировать занятие» уже есть в чек-листе настройки — не дублируем. */
+  hideEmptyCta?: boolean;
 }) {
   const now = Date.now();
   const items = collapseGroupLessons(lessons);
@@ -38,12 +41,14 @@ export default function TeacherTodayCard({
       </div>
 
       {items.length === 0 ? (
+        hideEmptyCta ? null : (
         <a
           href="/teacher/schedule"
           className="mt-3 flex min-h-[44px] items-center justify-center rounded-2xl bg-white/10 text-sm font-extrabold text-white"
         >
           Запланировать занятие →
         </a>
+        )
       ) : (
         <ul className="mt-3 space-y-2">
           {items.map((l) => {

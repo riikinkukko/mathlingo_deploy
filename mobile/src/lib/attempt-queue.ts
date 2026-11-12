@@ -97,7 +97,8 @@ export async function flushQueue(): Promise<number> {
       const item = q[0];
       try {
         const r = await api<AttemptResult>("/api/m/attempts", {
-          body: { problemId: item.problemId, answer: item.answer, source: item.source },
+          // Время решения — чтобы ответ попал в тот день, когда решён (серия).
+          body: { problemId: item.problemId, answer: item.answer, source: item.source, answeredAt: item.at },
         });
         // Сервер не принял из-за энергии — ответ не выбрасываем: оставляем в
         // очереди и пробуем позже, когда энергия восстановится.

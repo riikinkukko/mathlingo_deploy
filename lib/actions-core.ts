@@ -116,6 +116,24 @@ async function assignmentRules(
   return { withholdHints, note };
 }
 
+/** Ответы без сети принимаем с давностью до 3 суток. */
+export const OFFLINE_ANSWER_MAX_AGE_MS = 72 * 3600_000;
+
+/**
+ * Время ответа, решённого без сети (приложение присылает его из очереди).
+ * Раньше попытка получала время отправки: решил вечером без связи, связь
+ * появилась утром — день в серии не засчитывался. Принимаем только для
+ * уроков и повторения (у ДЗ — сроки) и не старше 3 суток, чтобы прошлыми
+ * днями нельзя было «дорисовать» серию. Иначе — null (время сервера).
+ */
+export function offlineAnswerTime(at: Date | undefined, source: string, now = Date.now()): Date | null {
+  if (!at || !(at instanceof Date) || Number.isNaN(at.getTime())) return null;
+  if (source !== "lesson" && source !== "review") return null;
+  const t = at.getTime();
+  if (t > now || now - t > OFFLINE_ANSWER_MAX_AGE_MS) return null;
+  return at;
+}
+
 /**
  * Вся бизнес-логика отправки попытки решения — без ничего специфичного для
  * транспорта (никаких revalidatePath/redirect/NextResponse). Server Action
@@ -128,9 +146,11 @@ export async function performSubmitAttempt(
   problemId: string,
   answer: string,
   source: "lesson" | "assignment" | "review",
-  image?: string | null
+  image?: string | null,
+  opts: { answeredAt?: Date } = {}
 ) {
   if (typeof problemId !== "string" || typeof answer !== "string") return { error: "Введите ответ" as const };
+  const createdAt = offlineAnswerTime(opts.answeredAt, source);
   // Ответ — до 4000 символов: развёрнутое решение влезает, мегабайты — нет.
   answer = answer.slice(0, 4000);
   const problem = await getProblem(problemId);
@@ -238,6 +258,7 @@ export async function performSubmitAttempt(
     answer,
     isCorrect,
     source,
+    ...(createdAt ? { createdAt } : {}),
   });
   await safeNotifyHomework(user, problemId, source);
 

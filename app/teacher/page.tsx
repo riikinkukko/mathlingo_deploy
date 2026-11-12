@@ -192,7 +192,9 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
         </div>
 
         <aside className="lg:order-3 lg:mt-8 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-4 min-[1400px]:col-start-2 min-[1400px]:row-span-2 min-[1400px]:row-start-1 min-[1400px]:mt-0 min-[1400px]:block" aria-label="Сегодня и важное">
-          {students.length > 0 && <TeacherTodayCard lessons={todayLessons} dateLabel={todayLabel} />}
+          {students.length > 0 && (
+            <TeacherTodayCard lessons={todayLessons} dateLabel={todayLabel} hideEmptyCta={setupVisible && setup.lessons === 0} />
+          )}
           {students.length > 0 && !user.telegramChatId && !setupVisible && (
             <a
               href="/teacher/settings#telegram"

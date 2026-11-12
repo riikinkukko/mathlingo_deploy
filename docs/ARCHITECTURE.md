@@ -246,7 +246,8 @@ app/actions-payments.ts: createYooKassaPayment → createPendingPayment → redi
    мгновенно оплаченный платёж, вебхук восстанавливает запись по метаданным; запись идемпотентна.
 8. ~~Отклонённое автопродление повторялось каждый день~~ — теперь 3 попытки (сразу, через день, через 2 дня),
    репетитор получает уведомление (`lib/renewal-rules.ts`, `users.renewal_failures`).
-9. `pushNotification` шлёт push и Telegram до коммита транзакции.
+9. ~~`pushNotification` слал push и Telegram до коммита~~ — теперь `deliverWhenCommitted` ждёт, пока запись
+   уведомления станет видна (до ~5 с), и при откате ничего не шлёт.
 
 **Логика**
 10. Цель дня считается по UTC, а серия — по МСК (с 0 до 3 ночи по Москве цель дня «вчерашняя»).
@@ -255,7 +256,8 @@ app/actions-payments.ts: createYooKassaPayment → createPendingPayment → redi
 13. ~~`MathKeyboard` вставлял `√ π sin`~~ — остались «−», «,», «/»: ответ части 1 всегда число или дробь.
 14. Нормализация ответа написана трижды (`actions-core`, `lib/answer-key.ts`, `mobile/src/lib/answer-key.ts`).
 15. `settleStreak` (тратит заморозки, пишет уведомления) вызывается из простого чтения серии.
-16. Офлайн-попытки из приложения получают время синхронизации, а не решения.
+16. ~~Офлайн-попытки получали время синхронизации~~ — приложение шлёт `answeredAt`, сервер принимает его
+    для урока/повторения не старше 3 суток (`actions-core.ts:offlineAnswerTime`).
 
 **Производительность**
 17. `computeXp`, `getAchievementStats`, `getMistakesForStudent`, `computeStudentProgress` читают всю таблицу
