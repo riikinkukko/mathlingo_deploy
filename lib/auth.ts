@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
@@ -49,7 +50,22 @@ export async function clearSessionCookie() {
   (await cookies()).set(COOKIE_NAME, "", { path: "/", maxAge: 0 });
 }
 
+/**
+ * «Действовать от имени пользователя», вошедшего в приложение по токену.
+ * Мост /api/m/teacher/action вызывает те же server actions, что и сайт: они
+ * берут пользователя через getSessionUser(), а здесь он подставляется вместо
+ * cookie. Права и проверки остаются общими для сайта и приложения.
+ * Хранится только id — пользователь каждый раз перечитывается из базы.
+ */
+const actor = new AsyncLocalStorage<{ userId: string }>();
+
+export function runAsUser<T>(user: Pick<User, "id">, fn: () => Promise<T>): Promise<T> {
+  return actor.run({ userId: user.id }, fn);
+}
+
 export async function getSessionUser(): Promise<User | null> {
+  const forced = actor.getStore();
+  if (forced) return (await getUserById(forced.userId)) ?? null;
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);
@@ -68,6 +84,8 @@ export async function getSessionUser(): Promise<User | null> {
  * ответ 401 (или попытка входа по токену приложения), а не редирект.
  */
 export async function getSessionUserOrNull(): Promise<User | null> {
+  const forced = actor.getStore();
+  if (forced) return (await getUserById(forced.userId)) ?? null;
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   const session = await verifySessionToken(token);

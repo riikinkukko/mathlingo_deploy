@@ -18,3 +18,9 @@ delete process.env.YOOKASSA_SHOP_ID;
 // собирает их классическим React.createElement — даём ему глобальный React.
 import * as React from "react";
 (globalThis as { React?: typeof React }).React = React;
+
+// Сервер Next кладёт AsyncLocalStorage в globalThis до запуска кода
+// приложения; без этого его хранилища (revalidatePath в server actions,
+// которые вызывает мост приложения) в тестах не работают.
+import { AsyncLocalStorage } from "node:async_hooks";
+(globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage }).AsyncLocalStorage ??= AsyncLocalStorage;
