@@ -8,7 +8,7 @@
  *  • высота строки всегда 56 px (h-14), что бы ни лежало слева и справа;
  *  • отступ сверху — var(--app-sat) (globals.css), а сохранённое с прошлого
  *    запуска значение подставляется скриптом в <head> ещё до первой
- *    отрисовки (app/layout.tsx + CapacitorBootstrap) — прыжка нет;
+ *    отрисовки (env(safe-area-*) в app/globals.css) — прыжка нет;
  *  • шапка закреплена (sticky) на всех экранах одинаково.
  */
 export default function MobileAppBar({

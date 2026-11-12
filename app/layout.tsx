@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
-import CapacitorBootstrap from "@/components/CapacitorBootstrap";
 import Analytics from "@/components/Analytics";
 
 export const metadata: Metadata = {
@@ -30,7 +29,7 @@ export const viewport: Viewport = {
   themeColor: "#1CAE6B",
   width: "device-width",
   initialScale: 1,
-  // viewport-fit=cover — обязательно для мобильного приложения (Capacitor):
+  // viewport-fit=cover — для телефонов с вырезом и сайта, открытого из приложения:
   // без него контент на iPhone с "чёлкой"/Dynamic Island либо обрезается
   // белой полосой сверху/снизу, либо (в других браузерах) наезжает на
   // системные элементы. С этим флагом страница простирается под них, а
@@ -56,20 +55,17 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
-        {/* До первой отрисовки: подставляем отступы под системные панели,
-            сохранённые с прошлого запуска приложения (CapacitorBootstrap).
-            Без этого плагин safe-area присылает их уже после загрузки, и
-            шапка дёргается вниз. Самый первый запуск в приложении — типичные
-            28px, точное значение плагин пришлёт следом. В браузере — ничего. */}
+        {/* До первой отрисовки: метка «открыто из приложения» (прячет оплату,
+            lib/app-context.ts). Заодно стираем отступы, сохранённые старой
+            обёрткой Capacitor, — теперь работает env(safe-area-*). */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(/(?:^|; )pm_app=1(?:;|$)/.test(document.cookie))document.documentElement.setAttribute("data-from-app","")}catch(e){}try{var r=document.documentElement.style,t=localStorage.getItem("pm-sat"),b=localStorage.getItem("pm-sab");if(t)r.setProperty("--safe-area-inset-top",t);else if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())r.setProperty("--safe-area-inset-top","28px");if(b)r.setProperty("--safe-area-inset-bottom",b)}catch(e){}`,
+            __html: `try{if(/(?:^|; )pm_app=1(?:;|$)/.test(document.cookie))document.documentElement.setAttribute("data-from-app","")}catch(e){}try{localStorage.removeItem("pm-sat");localStorage.removeItem("pm-sab")}catch(e){}`,
           }}
         />
       </head>
       <body className="font-sans bg-paper text-ink antialiased">
         <ServiceWorkerRegister />
-        <CapacitorBootstrap />
         {/* useSearchParams в Analytics требует Suspense-границы в App Router */}
         <Suspense fallback={null}>
           <Analytics />

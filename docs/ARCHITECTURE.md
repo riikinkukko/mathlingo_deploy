@@ -207,8 +207,8 @@ app/actions-payments.ts: createYooKassaPayment → createPendingPayment → redi
   менять оба, их сверяет тест) и отправляет при появлении сети.
 - **Push:** `mobile/src/lib/push.ts` → `/api/m/push-token`; нажатие → `routeForLink`.
 - **Оплаты в приложении нет.** Pro только упоминается.
-- Старая обёртка Capacitor (`capacitor.config.ts`, `android/`, `ios/`, `components/CapacitorBootstrap.tsx`)
-  больше не используется, но код остался.
+- Старая обёртка Capacitor и старые `/api/{attempts,dashboard,notifications,curriculum,auth}` удалены
+  (ноябрь 2026): приложение ходит только в `/api/m/*`.
 - Веб-сборка для проверки: `cd mobile && npx expo export --platform web` → `mobile/dist`. У `/api/m/*` нет CORS —
   веб-сборка работает только с того же адреса, что и API.
 

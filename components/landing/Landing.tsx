@@ -75,8 +75,7 @@ const faq = (topics: string[]): [string, string][] => [
 ];
 
 /**
- * Публичная главная для гостей: воронка для трёх аудиторий. Внутри
- * приложения (Capacitor) лендинг не нужен — скрипт ниже сразу уводит на вход.
+ * Публичная главная для гостей: воронка для трёх аудиторий.
  */
 export default async function Landing({ initial = "tutor" }: { initial?: Audience }) {
   const studentPrice = getStudentProPrice().priceRub;
@@ -88,7 +87,7 @@ export default async function Landing({ initial = "tutor" }: { initial?: Audienc
     <div className="lp-root min-h-screen bg-paper pt-[var(--app-sat)]">
       <script
         dangerouslySetInnerHTML={{
-          __html: `try{if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){document.documentElement.style.visibility="hidden";location.replace("/login")}else{document.documentElement.classList.add("lp-js")}}catch(e){}`,
+          __html: `try{document.documentElement.classList.add("lp-js")}catch(e){}`,
         }}
       />
       <LandingMotion />

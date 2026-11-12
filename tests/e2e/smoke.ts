@@ -97,7 +97,7 @@ async function main() {
     else fail(`${email} открыл чужую страницу ${path}`);
     await ctx.close();
   }
-  for (const api of ["/api/dashboard", "/api/notifications", "/api/curriculum"]) {
+  for (const api of ["/api/m/home", "/api/m/notifications", "/api/m/practice"]) {
     const r = await fetch(BASE + api);
     if (r.status === 401) console.log(`ok   аноним не получает ${api}`);
     else fail(`аноним получил ${api}: ${r.status}`);
