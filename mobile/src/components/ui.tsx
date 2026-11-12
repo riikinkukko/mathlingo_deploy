@@ -149,6 +149,7 @@ export function Screen({
   header,
   contentStyle,
   scroll = true,
+  scrollEnabled = true,
 }: {
   children: ReactNode;
   onRefresh?: () => void;
@@ -156,6 +157,8 @@ export function Screen({
   header?: ReactNode;
   contentStyle?: StyleProp<ViewStyle>;
   scroll?: boolean;
+  /** false — прокрутка временно выключена (например, пока рисуют по фото) */
+  scrollEnabled?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const inner = [{ padding: 16, paddingBottom: 32, gap: 14 }, contentStyle];
@@ -165,6 +168,7 @@ export function Screen({
       {scroll ? (
         <ScrollView
           contentContainerStyle={inner}
+          scrollEnabled={scrollEnabled}
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.pine} colors={[C.pine]} /> : undefined}
         >

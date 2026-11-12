@@ -46,7 +46,7 @@ export async function unregisterPush(): Promise<void> {
 
 /**
  * Куда вести по уведомлению: ссылки сайта → экраны приложения. То, чего в
- * приложении нет (кабинет репетитора, оплаты), открывается на сайте.
+ * приложении нет (кабинет родителя, контент программы), открывается на сайте.
  */
 export function routeForLink(link: string, role: string): { app: string } | { web: string } {
   const path = link.split("?")[0];
@@ -65,6 +65,20 @@ export function routeForLink(link: string, role: string): { app: string } | { we
     if (path.startsWith("/student/achievements")) return { app: "/achievements" };
     if (path.startsWith("/student/profile")) return { app: "/profile" };
     if (path === "/student" || path === "") return { app: "/" };
+  }
+  if (role === "TEACHER") {
+    const query = link.includes("?") ? link.slice(link.indexOf("?")) : "";
+    const st = /^\/teacher\/student\/([\w-]+)$/.exec(path);
+    if (st) return { app: `/teacher/student/${st[1]}${query}` };
+    const gr = /^\/teacher\/groups\/([\w-]+)$/.exec(path);
+    if (gr) return { app: `/teacher/group/${gr[1]}` };
+    if (path === "/teacher/groups") return { app: "/teacher/groups" };
+    if (path.startsWith("/teacher/reviews")) return { app: "/teacher/reviews" };
+    if (path.startsWith("/teacher/schedule")) return { app: "/teacher/schedule" };
+    if (path.startsWith("/teacher/payments")) return { app: "/teacher/payments" };
+    if (path.startsWith("/teacher/questions")) return { app: "/teacher/questions" };
+    if (path.startsWith("/teacher/settings")) return { app: "/teacher/settings" };
+    if (path === "/teacher" || path === "") return { app: "/teacher" };
   }
   return { web: link || `/${role.toLowerCase()}` };
 }

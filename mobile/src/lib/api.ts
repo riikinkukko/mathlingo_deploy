@@ -18,6 +18,11 @@ export function setApiToken(t: string | null) {
   token = t;
 }
 
+/** Картинка с сервера, доступная только вошедшему (фото решения и т.п.). */
+export function authedImage(path: string): { uri: string; headers?: Record<string, string> } {
+  return { uri: `${API_URL}${path}`, headers: token ? { Authorization: `Bearer ${token}` } : undefined };
+}
+
 export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
