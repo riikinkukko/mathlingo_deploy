@@ -409,7 +409,7 @@ export async function teacherBuilder(user: User, target: { studentId?: string | 
     weak,
     examNumbers: numbers,
     defaultDue: addDaysKey(mskDayKey(new Date()), 7),
-    templates: templates.map((t) => ({ id: t.id, title: t.title, kind: t.kind, count: t.problemIds.length, allowHints: t.allowHints })),
+    templates: templates.map((t) => ({ id: t.id, title: t.title, kind: t.kind, count: t.problemIds.length, allowHints: t.allowHints, timeLimitMinutes: t.timeLimitMinutes })),
     topics: curriculum.map((t) => ({
       id: t.topic.id,
       title: t.topic.title,

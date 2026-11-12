@@ -142,6 +142,10 @@ function errorFromUrl(url: string): string | null {
   for (const [k, v] of u.searchParams) {
     if (/error/i.test(k) && v) return ERROR_TEXT[v] ?? "Не получилось. Проверьте поля и попробуйте ещё раз.";
   }
+  // Быстрое ДЗ сообщает «нечего задать» своим параметром.
+  const quick = u.searchParams.get("quick");
+  if (quick === "empty") return "Подходящих нерешённых задач не нашлось — соберите задание вручную.";
+  if (quick === "nonumbers") return "Отметьте хотя бы один номер ЕГЭ.";
   return null;
 }
 
