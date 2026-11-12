@@ -68,8 +68,10 @@ export default function TeacherSidebar({
     (i) => (i.key !== "content" || canEditContent) && (i.key !== "checks" || isReviewer)
   );
 
+  // z-40: меню — отдельный слой (fixed); без приоритета панель уведомлений
+  // внутри него оказывалась под содержимым страницы (поиском, таблицами).
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-[236px] flex-col bg-pine-dark px-4 py-5 lg:flex">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[236px] flex-col bg-pine-dark px-4 py-5 lg:flex">
       <div className="mb-6 flex items-center justify-between px-1">
         <a href="/teacher" className="flex items-center gap-2.5">
           <Mascot mood="happy" size={36} float={false} />
