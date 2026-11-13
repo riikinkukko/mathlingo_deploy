@@ -200,8 +200,14 @@ app/actions-payments.ts: createYooKassaPayment → createPendingPayment → redi
 
 - Expo SDK 58, expo-router, React Query с офлайн-кэшем (AsyncStorage). Версия `2.1.0`, `versionCode` 21 (`app.json`).
 - Роуты: `(auth)` login/register; `(tabs)` Путь, Повтор, Пробники, Ошибки, Профиль; `skill/[id]`, `mock/[id]`,
-  `homework/*`, `topics`, `achievements`, `questions`, `notifications`; `staff` — для репетитора/родителя
-  (ссылки на сайт).
+  `homework/*`, `topics`, `achievements`, `questions`, `notifications`.
+- **Репетитор** — `teacher/*` (вкладки Ученики, Расписание, Проверка, Оплаты, Ещё + экраны ученика, занятия,
+  оплаты, группы, задания, вопросы, настройки). Данные — `GET /api/m/teacher/data?view=…`
+  (`lib/mobile/teacher-data.ts`), действия — `POST /api/m/teacher/action {name, fields}`
+  (`lib/mobile/teacher-actions.ts`): вызывает ТЕ ЖЕ server actions сайта от имени владельца токена
+  (`lib/auth.ts:runAsUser`), ошибки-редиректы `?error=код` переводятся в текст. Новое действие репетитора
+  в приложении = строка в белом списке `TEACHER_ACTIONS`.
+- **Родитель** — `parent/*`, данные `GET /api/m/parent` (`lib/mobile/parent-data.ts`), недельный отчёт — `POST`.
 - API — `mobile/src/lib/api.ts` (Bearer, тайм-аут 20 с); токен в SecureStore.
 - **Офлайн-ответы:** `attempt-queue.ts` проверяет ответ по отпечатку `answerFingerprint` (копия `lib/answer-key.ts` —
   менять оба, их сверяет тест) и отправляет при появлении сети.
