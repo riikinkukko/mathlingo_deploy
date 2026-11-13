@@ -34,6 +34,8 @@ export interface DayPanelData {
   unmarkedLessons: number;
   /** вопросы учеников «Не понял» без ответа */
   openQuestions?: number;
+  /** проведённые за 2 недели занятия без отчёта (самое свежее — первым) */
+  unreported?: { lessonId: string; studentId: string; name: string }[];
 }
 
 // Нейтрально по роду: «Полина … не заходил» резало глаз.
@@ -91,6 +93,16 @@ export default function TeacherDayPanel({ data }: { data: DayPanelData }) {
       tone: "bg-amber-light text-amber-dark",
       title: unmarkedLessons === 1 ? "Отметить прошлое занятие" : `Отметить прошлые занятия`,
       sub: "От «Было» зависит баланс оплат",
+    });
+  const unreported = data.unreported ?? [];
+  if (unreported.length > 0)
+    rows.push({
+      key: "unreported",
+      href: `/teacher/student/${unreported[0].studentId}?tab=lessons&log=${encodeURIComponent(unreported[0].lessonId)}#journal`,
+      badge: String(unreported.length),
+      tone: "bg-pine-light text-pine-dark",
+      title: unreported.length === 1 ? "Записать отчёт о занятии" : "Занятия без отчёта",
+      sub: `Ученик и родители ждут: ${names(unreported)}`,
     });
   if (debts.length > 0)
     rows.push({

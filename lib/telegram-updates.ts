@@ -1,6 +1,7 @@
 import { sendTelegramMessage } from "./telegram";
 import { linkTelegramAccountByCode } from "./queries";
 import { handleCallbackQuery, replyToday } from "./teacher-telegram";
+import { handleTelegramReportText } from "./lesson-report";
 
 /**
  * Общая обработка одного апдейта от Telegram. Используется в двух местах:
@@ -34,6 +35,8 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
   if (!text || !chatId) return;
   // Привязка и /today — только в личном чате с ботом.
   if (message?.chat?.type !== "private") return;
+  // Бот ждёт отчёт о занятии (кнопка «Написать отчёт») — это сообщение и есть отчёт.
+  if (!text.startsWith("/start") && (await handleTelegramReportText(chatId, text))) return;
   if (/^\/today(@\w+)?$/.test(text.trim())) {
     await replyToday(chatId);
     return;

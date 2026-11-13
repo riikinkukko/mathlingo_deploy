@@ -29,11 +29,17 @@ function todayMsk(): string {
  */
 export default function LessonLogForm({
   studentId,
+  lessonId,
   defaultDate,
   defaultTopic,
+  defaultReport,
   autoFocus = false,
 }: {
   studentId: string;
+  /** занятие из расписания, о котором отчёт */
+  lessonId?: string;
+  /** черновик: строки шаблона + факты (домашка, практика, следующее занятие) */
+  defaultReport?: string;
   defaultDate?: string;
   defaultTopic?: string;
   autoFocus?: boolean;
@@ -50,6 +56,7 @@ export default function LessonLogForm({
   return (
     <form action={createLessonLogAction} className="card space-y-3 p-4">
       <input type="hidden" name="studentId" value={studentId} />
+      {lessonId && <input type="hidden" name="lessonId" value={lessonId} />}
       <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
         <div>
           <label className="label" htmlFor="date">Дата</label>
@@ -77,13 +84,19 @@ export default function LessonLogForm({
       <div>
         <label className="label" htmlFor="report">Отчёт о занятии</label>
         <textarea
-          className="input min-h-[110px] resize-y"
+          className={`input resize-y ${defaultReport ? "min-h-[190px]" : "min-h-[110px]"}`}
           id="report"
           name="report"
           ref={reportRef}
+          defaultValue={defaultReport}
           placeholder="Что прошли, какие успехи, на что обратить внимание, что задано домой…"
           required
         />
+        {defaultReport && (
+          <p className="mt-1 text-xs text-ink-soft">
+            Допишите строки шаблона — пустые не попадут в отчёт. Факты внизу собраны автоматически, их можно править.
+          </p>
+        )}
       </div>
       <SubmitButton />
     </form>

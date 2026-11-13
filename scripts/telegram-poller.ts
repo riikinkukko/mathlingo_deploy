@@ -60,6 +60,7 @@ async function main() {
   const { handleTelegramUpdate } = await import("../lib/telegram-updates");
   const { sendDueLessonReminders } = await import("../lib/lesson-reminders");
   const { sendLessonStatusPrompts, sendTeacherDigests } = await import("../lib/teacher-telegram");
+  const { sendReportReminders } = await import("../lib/lesson-report");
   const { sendParentWeeklyReports } = await import("../lib/parent-weekly");
   const { sendStudentEveningReminders } = await import("../lib/student-reminders");
   const { sendTrialReminders } = await import("../lib/trial-reminders");
@@ -89,6 +90,7 @@ async function main() {
         [
           { name: "Вопросы «было ли занятие»", run: () => sendLessonStatusPrompts() },
           { name: "Утренние сводки репетиторам", run: () => sendTeacherDigests() },
+          { name: "Вечерние напоминания об отчётах", run: () => sendReportReminders() },
           { name: "Недельные отчёты родителям", run: () => sendParentWeeklyReports() },
           { name: "Вечерние напоминания ученикам", run: () => sendStudentEveningReminders() },
           { name: "Напоминания об окончании пробного", run: () => sendTrialReminders() },

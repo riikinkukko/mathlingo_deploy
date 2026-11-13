@@ -337,6 +337,13 @@
       "when": 1794256345808,
       "tag": "0047_assignment_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794576330554,
+      "tag": "0048_lesson_reports",
+      "breakpoints": true
     }
   ]
 }

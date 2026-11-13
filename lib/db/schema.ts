@@ -10,6 +10,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 
@@ -205,6 +206,12 @@ export const users = pgTable("users", {
   questRewardOn: text("quest_reward_on"),
   // У УЧЕНИКА: когда репетитор последний раз нажал «Напомнить» (не чаще раза в сутки).
   nudgedAt: timestamp("nudged_at", { withTimezone: true }),
+  // У РЕПЕТИТОРА: бот ждёт текст отчёта о занятии (lib/lesson-report.ts) —
+  // следующее сообщение в Telegram станет отчётом. Ожидание истекает через 6 ч.
+  tgReportLessonId: text("tg_report_lesson_id"),
+  tgReportAskedAt: timestamp("tg_report_asked_at", { withTimezone: true }),
+  // День (МСК), когда вечером напомнили о занятиях без отчёта (не чаще раза в день).
+  reportRemindedOn: text("report_reminded_on"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byTeacher: index("users_teacher_idx").on(t.teacherId),
@@ -550,9 +557,12 @@ export const lessonLogs = pgTable("lesson_logs", {
   date: text("date").notNull(), // YYYY-MM-DD, храним как есть, не timestamp
   topic: text("topic").notNull(),
   report: text("report").notNull(),
+  // Занятие из расписания, о котором отчёт (null — запись без занятия, старые записи).
+  lessonId: text("lesson_id").references((): AnyPgColumn => scheduledLessons.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byStudent: index("lesson_logs_student_idx").on(t.studentId, t.createdAt),
+  byLesson: index("lesson_logs_lesson_idx").on(t.lessonId),
   byTeacher: index("lesson_logs_teacher_idx").on(t.teacherId),
 }));
 

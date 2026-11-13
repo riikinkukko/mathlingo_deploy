@@ -30,6 +30,7 @@ import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
 import { debtText, hasDebt } from "./money";
+import { reportButton, startTelegramReport } from "./lesson-report";
 
 const TZ = "Europe/Moscow";
 /** Через сколько после конца занятия спрашиваем «было или не было». */
@@ -343,6 +344,17 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
     return;
   }
 
+  const rp = /^rp:(.+)$/.exec(data);
+  if (rp && chatId) {
+    const teacher = await findTeacherByChat(chatId);
+    if (!teacher) {
+      await answer("Этот Telegram не привязан к кабинету репетитора");
+      return;
+    }
+    await answer(await startTelegramReport(teacher.id, chatId, rp[1]));
+    return;
+  }
+
   const m = /^ls:([dc]):(.+)$/.exec(data);
   if (!m || !chatId) {
     await answer("Кнопка устарела");
@@ -366,7 +378,7 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
   const student = await getUserById(lesson.studentId);
   const mark = finalStatus === "done" ? "✅ Отмечено: было" : finalStatus === "cancelled" ? "✖️ Отмечено: не было" : "";
   const extra =
-    res.ok && status === "done" ? openLink(`/teacher/student/${lesson.studentId}?done=${lesson.id}`, "Записать отчёт о занятии →") : "";
+    res.ok && status === "done" ? openLink(`/teacher/student/${lesson.studentId}?log=${lesson.id}#journal`, "Или записать отчёт в кабинете →") : "";
 
   if (messageId) {
     // Убираем кнопки и пишем итог — чтобы по чату было видно, что уже отмечено.
@@ -378,6 +390,8 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
         `\n\n<b>${mark}</b>${extra}`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
+      // После «Было» — сразу кнопка отчёта: следующее сообщение станет отчётом.
+      ...(res.ok && status === "done" ? { reply_markup: { inline_keyboard: [[reportButton(lesson.id)]] } } : {}),
     });
   }
   await answer(res.ok ? mark : `Уже было отмечено раньше`);

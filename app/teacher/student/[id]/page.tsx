@@ -50,6 +50,7 @@ import { PaymentReminderControls, LessonPriceForm } from "@/components/PaymentRe
 import { getGroupNamesByStudent } from "@/lib/groups";
 import AddParentForm from "./AddParentForm";
 import LessonLogForm from "./LessonLogForm";
+import { buildReportDraft, getUnreportedLessons } from "@/lib/lesson-report";
 import PendingReviewCard from "./PendingReviewCard";
 import { toReviewItem } from "@/lib/review-item";
 import ScrollIntoViewOnMount from "@/components/teacher/ScrollIntoViewOnMount";
@@ -97,17 +98,11 @@ export default async function StudentDetailPage(
     return l && l.teacherId === teacher.id && l.studentId === student.id ? l : undefined;
   };
   const [doneLesson, logLesson] = await Promise.all([ownLesson(searchParams.done), ownLesson(searchParams.log)]);
-  const logPrefill = logLesson
-    ? {
-        date: new Intl.DateTimeFormat("en-CA", {
-          timeZone: "Europe/Moscow",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date(logLesson.startsAt)),
-        topic: logLesson.topic ?? "",
-      }
-    : undefined;
+  // Черновик отчёта: тема занятия, домашка, практика между занятиями, следующее занятие.
+  const [logPrefill, unreported] = await Promise.all([
+    logLesson ? buildReportDraft(teacher.id, student.id, logLesson.id) : undefined,
+    getUnreportedLessons(teacher.id, { studentId: student.id }),
+  ]);
 
   // Вкладки карточки (как в макете): ?tab=. Ссылки из уведомлений и
   // редиректы после действий сами открывают нужную вкладку.
@@ -642,7 +637,9 @@ export default async function StudentDetailPage(
         <div>
         {searchParams.logerror && (
           <ScrollIntoViewOnMount role="alert" className="mb-4 rounded-2xl border-2 border-coral/40 bg-coral-light px-4 py-3 text-sm font-bold text-coral-text">
-            Запись не сохранилась: заполните дату, тему и отчёт о занятии и попробуйте ещё раз.
+            {searchParams.logerror === "exists"
+              ? "Отчёт об этом занятии уже есть в журнале."
+              : "Запись не сохранилась: заполните дату, тему и отчёт о занятии и попробуйте ещё раз."}
           </ScrollIntoViewOnMount>
         )}
         <div id="journal" className="scroll-mt-20">
@@ -668,10 +665,23 @@ export default async function StudentDetailPage(
               ))}
             />
           </div>
+          {!logLesson && unreported.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-light/60 p-3">
+              <span className="text-sm font-bold text-ink">Без отчёта:</span>
+              {unreported.slice(0, 5).map((l) => (
+                <a key={l.id} href={`/teacher/student/${student.id}?tab=lessons&log=${l.id}#journal`} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-pine-dark hover:bg-pine-light">
+                  {new Date(l.startsAt).toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long" })}
+                </a>
+              ))}
+            </div>
+          )}
           <LessonLogForm
+            key={logLesson?.id ?? "new"}
             studentId={student.id}
+            lessonId={logLesson?.id}
             defaultDate={logPrefill?.date}
             defaultTopic={logPrefill?.topic}
+            defaultReport={logPrefill?.report}
             autoFocus={!!logPrefill}
           />
         </CollapsibleSection>

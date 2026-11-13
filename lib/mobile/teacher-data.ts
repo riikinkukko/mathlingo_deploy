@@ -42,6 +42,7 @@ import { addDaysKey, mondayOf, mskDayKey, mskDayStart } from "@/lib/lesson-time"
 import { toReviewItem } from "@/lib/review-item";
 import { maxPointsForTask } from "@/lib/ege-points";
 import { diagramSvg } from "./diagram-svg";
+import { buildReportDraft, getUnreportedLessons } from "@/lib/lesson-report";
 import type { ScheduledLessonWithStudent, StudentBalance, User } from "@/lib/types";
 
 const INACTIVE_DAYS = 3;
@@ -61,9 +62,11 @@ export interface MLesson {
   status: string;
   seriesId: string | null;
   students: { id: string; name: string; lessonId: string; status: string }[];
+  /** проведено, а отчёта нет (только индивидуальные) */
+  needsReport: boolean;
 }
 
-export function collapseLessons(rows: ScheduledLessonWithStudent[]): MLesson[] {
+export function collapseLessons(rows: ScheduledLessonWithStudent[], unreported?: Set<string>): MLesson[] {
   const out: MLesson[] = [];
   const byGroup = new Map<string, MLesson>();
   for (const l of rows) {
@@ -88,6 +91,7 @@ export function collapseLessons(rows: ScheduledLessonWithStudent[]): MLesson[] {
       status: l.status,
       seriesId: l.seriesId,
       students: [st],
+      needsReport: !l.groupLessonId && !!unreported?.has(l.id),
     };
     out.push(item);
     if (l.groupLessonId) byGroup.set(l.groupLessonId, item);
@@ -124,7 +128,7 @@ function planView(user: User, studentsCount: number) {
 
 /** Главная: сегодня, что требует внимания, список учеников. */
 export async function teacherHome(user: User) {
-  const [students, homeStats, pending, balances, mocks, unmarked, today, openQuestions, groups, invites] = await Promise.all([
+  const [students, homeStats, pending, balances, mocks, unmarked, today, openQuestions, groups, invites, unreported] = await Promise.all([
     getStudentsOfTeacher(user.id),
     getTeacherHomeStats(user.id),
     getPendingReviewsForTeacher(user.id),
@@ -135,7 +139,9 @@ export async function teacherHome(user: User) {
     getOpenQuestionsCount(user.id),
     getGroupsOfTeacher(user.id),
     getPendingInvitesForTeacher(user.id),
+    getUnreportedLessons(user.id),
   ]);
+  const unrep = new Set(unreported.map((l) => l.id));
   const reviewsBy = new Map<string, number>();
   for (const r of pending) reviewsBy.set(r.student.id, (reviewsBy.get(r.student.id) ?? 0) + 1);
   const groupsBy = new Map<string, string[]>();
@@ -175,8 +181,9 @@ export async function teacherHome(user: User) {
     emailVerified: !!user.emailVerifiedAt,
     telegram: !!user.telegramChatId,
     plan: planView(user, students.length),
-    today: collapseLessons(today),
+    today: collapseLessons(today, unrep),
     attention: {
+      unreported: unreported.map((l) => ({ lessonId: l.id, studentId: l.studentId, name: l.studentName, startsAt: l.startsAt })),
       reviews: pending.length,
       questions: openQuestions,
       unmarked: collapseLessons(unmarked.filter((l) => !todayIds.has(l.id))),
@@ -200,7 +207,7 @@ export async function teacherHome(user: User) {
 export async function teacherStudent(user: User, studentId: string) {
   const s = await getUserById(studentId);
   if (!s || s.role !== "STUDENT" || s.teacherId !== user.id) return null;
-  const [stats, hwAll, logs, pending, parents, upcoming, unmarked, balance, payments, mocks, notes, weak] = await Promise.all([
+  const [stats, hwAll, logs, pending, parents, upcoming, unmarked, balance, payments, mocks, notes, weak, unreported] = await Promise.all([
     computeOverallStats(s.id),
     getHomeworksForStudent(s.id),
     getLessonLogsForStudent(s.id, user.id),
@@ -213,6 +220,7 @@ export async function teacherStudent(user: User, studentId: string) {
     getMockScores(s.id, user.id),
     getStudentNotes(s.id, user.id),
     weakSpotsSummary(s.id),
+    getUnreportedLessons(user.id, { studentId: s.id }),
   ]);
   const homeworks = hwAll.filter((h) => h.teacherId === user.id);
   const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, s.id)));
@@ -252,6 +260,7 @@ export async function teacherStudent(user: User, studentId: string) {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     lessons: { upcoming: collapseLessons(upcoming.slice(0, 20).map((l) => ({ ...l, studentName: s.name }))), unmarked: collapseLessons(unmarked) },
     logs: logs.slice(0, 30).map((l) => ({ id: l.id, date: l.date, topic: l.topic, report: l.report })),
+    unreported: unreported.map((l) => ({ lessonId: l.id, startsAt: l.startsAt, topic: l.topic })),
     balance: balanceView(balance),
     payments: payments.slice(0, 50).map((p) => ({ id: p.id, amountRub: p.amountRub, lessonsCount: p.lessonsCount, paidAt: p.paidAt, note: p.note })),
     mocks: mocks.map((m) => ({ id: m.id, score: m.score, takenAt: m.takenAt, note: m.note ?? null })),
@@ -272,7 +281,8 @@ export async function teacherSchedule(user: User, week?: string | null) {
     getUnmarkedPastLessons(user.id),
     getUpcomingLessonsForTeacher(user.id, 1),
   ]);
-  const lessons = collapseLessons(rows);
+  const unrep = new Set((await getUnreportedLessons(user.id)).map((l) => l.id));
+  const lessons = collapseLessons(rows, unrep);
   return {
     weekStart: weekKey,
     today: todayKey,
@@ -449,4 +459,11 @@ export function teacherSettings(user: User, studentsCount: number) {
       digest: user.tgDailyDigest !== false,
     },
   };
+}
+
+/** Черновик отчёта о занятии для формы в приложении. */
+export async function teacherReportDraft(user: User, studentId: string, lessonId?: string | null) {
+  const s = await getUserById(studentId);
+  if (!s || s.role !== "STUDENT" || s.teacherId !== user.id) return null;
+  return buildReportDraft(user.id, studentId, lessonId);
 }

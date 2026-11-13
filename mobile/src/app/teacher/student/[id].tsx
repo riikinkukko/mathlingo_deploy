@@ -184,6 +184,16 @@ function Lessons({ d }: { d: TStudent }) {
         </T>
       )}
       <Section title="Журнал занятий" action="+ Отчёт" onAction={() => router.push({ pathname: "/teacher/log-new", params: { studentId: d.student.id } })} />
+      {d.unreported.map((u) => (
+        <Card key={u.lessonId} onPress={() => router.push({ pathname: "/teacher/log-new", params: { studentId: d.student.id, lessonId: u.lessonId } })} style={{ paddingVertical: 12, borderLeftWidth: 5, borderLeftColor: C.pine }}>
+          <T w="bold">Записать отчёт: {dayLabel(mskKey(new Date(u.startsAt)), { day: "numeric", month: "long" })}</T>
+          {u.topic ? (
+            <T size={12} color={C.inkSoft}>
+              {u.topic}
+            </T>
+          ) : null}
+        </Card>
+      ))}
       {d.logs.length ? (
         d.logs.map((l) => (
           <Card key={l.id} style={{ gap: 4 }}>

@@ -39,6 +39,13 @@ function Attention({ a }: { a: THome["attention"] }) {
   if (a.questions) items.push({ key: "q", text: `${a.questions} ${plural(a.questions, ["вопрос", "вопроса", "вопросов"])} от учеников`, color: C.teal, onPress: () => router.push("/teacher/questions") });
   for (const d of a.debts.slice(0, 5)) items.push({ key: `d${d.id}`, text: `${d.name}: долг ${d.label}`, color: C.coral, onPress: () => router.push(`/teacher/student/${d.id}?tab=payments`) });
   for (const o of a.overdue.slice(0, 5)) items.push({ key: `o${o.id}`, text: `${o.name}: просрочено ${o.count} ${plural(o.count, ["задание", "задания", "заданий"])}`, color: C.amber, onPress: () => router.push(`/teacher/student/${o.id}?tab=hw`) });
+  if (a.unreported.length)
+    items.unshift({
+      key: "rep",
+      text: a.unreported.length === 1 ? `Отчёт о занятии: ${a.unreported[0].name}` : `Без отчёта: ${a.unreported.length} ${plural(a.unreported.length, ["занятие", "занятия", "занятий"])}`,
+      color: C.pine,
+      onPress: () => router.push({ pathname: "/teacher/log-new", params: { studentId: a.unreported[0].studentId, lessonId: a.unreported[0].lessonId } }),
+    });
   if (!items.length && !a.unmarked.length && !a.inactive.length) return null;
   return (
     <>

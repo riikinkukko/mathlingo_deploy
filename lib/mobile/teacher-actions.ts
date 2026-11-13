@@ -119,6 +119,7 @@ const ERROR_TEXT: Record<string, string> = {
   name: "Введите название.",
   members: "В группе должно быть хотя бы два ученика.",
   notfound: "Не найдено.",
+  exists: "Отчёт об этом занятии уже есть в журнале.",
 };
 
 /** Поля JSON → FormData. Массивы — повторяющиеся поля (problemIds, studentIds). */

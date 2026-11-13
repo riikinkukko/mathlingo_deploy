@@ -1,6 +1,6 @@
 /** Общие элементы экранов репетитора. */
 import { useState, type ReactNode } from "react";
-import { Modal, Pressable, ScrollView, Switch, View, type StyleProp, type ViewStyle } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, Switch, View, type StyleProp, type ViewStyle } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, Card, Pill, Row, T } from "./ui";
@@ -191,6 +191,11 @@ export function SheetItem({ title, text, onPress, danger }: { title: string; tex
   );
 }
 
+/** Форма отчёта о занятии (черновик соберётся на сервере). */
+export function openReport(lesson: Pick<TLesson, "id" | "students">) {
+  router.push({ pathname: "/teacher/log-new", params: { studentId: lesson.students[0].id, lessonId: lesson.id } });
+}
+
 const STATUS: Record<string, { text: string; bg: string; color: string }> = {
   done: { text: "было", bg: C.pineLight, color: C.pineDark },
   missed: { text: "не пришёл", bg: C.amberLight, color: C.amberText },
@@ -228,7 +233,15 @@ export function LessonCard({ lesson, showDay = false, from = "schedule" }: { les
         { key: status }
       );
       setAttendance(false);
-    } else await run("setLessonStatus", { lessonId: lesson.id, status, from }, { key: status });
+    } else {
+      const ok = await run("setLessonStatus", { lessonId: lesson.id, status, from }, { key: status });
+      // Только что провели — самое время для отчёта (ученик и родители его ждут).
+      if (ok && status === "done")
+        Alert.alert("Занятие отмечено", "Записать короткий отчёт? Его получат ученик и родители.", [
+          { text: "Позже", style: "cancel" },
+          { text: "Записать", onPress: () => openReport(lesson) },
+        ]);
+    }
   };
 
   return (
@@ -258,8 +271,8 @@ export function LessonCard({ lesson, showDay = false, from = "schedule" }: { les
           </Pressable>
         ) : null}
       </Row>
-      {!group && lesson.status === "done" ? (
-        <Button title="Записать отчёт" kind="secondary" small onPress={() => router.push({ pathname: "/teacher/log-new", params: { studentId: lesson.students[0].id, date: mskKey(new Date(lesson.startsAt)), topic: lesson.topic ?? "" } })} />
+      {!group && lesson.needsReport ? (
+        <Button title="Записать отчёт" kind="secondary" small onPress={() => openReport(lesson)} />
       ) : null}
       {planned && past ? (
         group ? (

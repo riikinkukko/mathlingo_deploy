@@ -28,6 +28,8 @@ export interface TLesson {
   status: string;
   seriesId: string | null;
   students: TLessonStudent[];
+  /** проведено, а отчёта нет */
+  needsReport?: boolean;
 }
 export interface TPlan {
   name: string;
@@ -70,6 +72,7 @@ export interface THome {
   plan: TPlan;
   today: TLesson[];
   attention: {
+    unreported: { lessonId: string; studentId: string; name: string; startsAt: string }[];
     reviews: number;
     questions: number;
     unmarked: TLesson[];
@@ -126,6 +129,7 @@ export interface TStudent {
   }[];
   lessons: { upcoming: TLesson[]; unmarked: TLesson[] };
   logs: { id: string; date: string; topic: string; report: string }[];
+  unreported: { lessonId: string; startsAt: string; topic: string | null }[];
   balance: TBalance | null;
   payments: TPayment[];
   mocks: { id: string; score: number; takenAt: string; note: string | null }[];
@@ -218,6 +222,7 @@ type Views = {
   builder: TBuilder;
   problems: { problems: { id: string; text: string; egeTaskNumber: number | null; answerType: string; difficulty: number; diagramSvg: string | null }[] };
   settings: TSettings;
+  reportDraft: { date: string; topic: string; facts: string[]; report: string };
 };
 
 /** Данные экрана репетитора. Все ключи начинаются с "t" — действия сбрасывают их разом. */

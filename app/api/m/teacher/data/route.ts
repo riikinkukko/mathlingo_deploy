@@ -7,6 +7,7 @@ import {
   teacherHome,
   teacherPayments,
   teacherQuestions,
+  teacherReportDraft,
   teacherReviews,
   teacherSchedule,
   teacherSettings,
@@ -55,6 +56,10 @@ export async function GET(req: Request) {
     }
     case "problems":
       return json(await teacherSkillProblems(q.get("skillId") ?? ""));
+    case "reportDraft": {
+      const d = await teacherReportDraft(user, q.get("studentId") ?? "", q.get("lessonId"));
+      return d ? json(d) : notFound();
+    }
     case "settings":
       return json(teacherSettings(user, (await getStudentsOfTeacher(user.id)).length));
     default:

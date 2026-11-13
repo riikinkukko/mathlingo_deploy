@@ -55,6 +55,7 @@ import { ASSIGNMENT_KINDS, AssignmentKind, Role } from "@/lib/types";
 import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
+import { createLessonReport } from "@/lib/lesson-report";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
 import { getCurriculum, FREE_MAX_ENERGY } from "@/lib/queries";
@@ -271,55 +272,21 @@ export async function createLessonLogAction(formData: FormData) {
   if (!teacher || teacher.role !== "TEACHER") {
     redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
   }
-  // Только своему ученику: иначе любой репетитор мог слать домашки и записи
-  // журнала (с уведомлениями ученику и родителям) чужим ученикам.
-  if (!(await isOwnStudent(teacher.id, studentId))) {
-    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
-  }
-
-  const date = String(formData.get("date") || "").slice(0, 10);
-  const topic = String(formData.get("topic") || "").trim().slice(0, 200);
-  const report = String(formData.get("report") || "").trim().slice(0, 5000);
-
-  if (!studentId || !date || !topic || !report) {
-    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=1`);
-  }
-
-  const parentLinks = await db
-    .select()
-    .from(schema.parentLinks)
-    .where(eq(schema.parentLinks.studentId, studentId));
-
-  await db.transaction(async (tx) => {
-    await tx.insert(schema.lessonLogs).values({
-      id: genId("l"),
-      teacherId: teacher.id,
-      studentId,
-      date,
-      topic,
-      report,
-    });
-
-    const bodyShort = report.length > 120 ? report.slice(0, 120) + "…" : report;
-    await pushNotification(tx, {
-      userId: studentId,
-      type: "lesson_log_added",
-      title: `Новая запись о занятии: ${topic}`,
-      body: bodyShort,
-      link: `/student`,
-    });
-    for (const link of parentLinks) {
-      await pushNotification(tx, {
-        userId: link.parentId,
-        type: "lesson_log_added",
-        title: `Новая запись о занятии: ${topic}`,
-        body: bodyShort,
-        link: `/parent/child/${studentId}`,
-      });
-    }
+  // Проверки (свой ученик, своё занятие, заполненность) и уведомления ученику
+  // и родителям — в lib/lesson-report.ts, общие с ботом Telegram.
+  const res = await createLessonReport({
+    teacherId: teacher.id,
+    studentId,
+    date: String(formData.get("date") || ""),
+    topic: String(formData.get("topic") || ""),
+    report: String(formData.get("report") || ""),
+    lessonId: String(formData.get("lessonId") || "") || null,
   });
-
+  if (!res.ok) {
+    redirect(`/teacher/student/${studentId}?tab=lessons&logerror=${res.reason === "exists" ? "exists" : "1"}`);
+  }
   revalidatePath(`/teacher/student/${studentId}`);
+  revalidatePath("/teacher");
   redirect(`/teacher/student/${studentId}?tab=lessons`);
 }
 

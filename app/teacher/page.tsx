@@ -1,3 +1,4 @@
+import { getUnreportedLessons } from "@/lib/lesson-report";
 import { getSessionUser } from "@/lib/auth";
 import { getStudentsOfTeacher, getTeacherHomeStats, getTeacherSetupProgress, isTeacherEffectivelyPro, getPendingReviewsForTeacher, getStudentBalances, getLatestMockScoresForTeacher, getUnmarkedPastLessons, getTodayLessonsForTeacher, getScheduledLessonById, getOpenQuestionsCount } from "@/lib/queries";
 import { pluralRu } from "@/lib/pluralize";
@@ -36,7 +37,7 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
   const paidChecks = isReviewer(user) ? await countPaidChecksWaiting() : 0;
   const atLimit = !isOwner && Number.isFinite(plan.limit) && students.length >= plan.limit;
 
-  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup, groups, invitesRaw] = await Promise.all([
+  const [homeStats, pendingReviews, balances, latestMocks, unmarked, todayLessons, openQuestions, setup, groups, invitesRaw, unreported] = await Promise.all([
     getTeacherHomeStats(user.id),
     getPendingReviewsForTeacher(user.id),
     getStudentBalances(user.id),
@@ -47,6 +48,7 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
     getTeacherSetupProgress(user.id),
     getGroupsOfTeacher(user.id),
     getPendingInvitesForTeacher(user.id),
+    getUnreportedLessons(user.id),
   ]);
   const groupsByStudent = new Map<string, string[]>();
   for (const g of groups) for (const m of g.members) groupsByStudent.set(m.id, [...(groupsByStudent.get(m.id) ?? []), g.name]);
@@ -92,6 +94,7 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
       .map((b) => ({ id: b.studentId, name: b.studentName, lessons: -b.balance, label: debtText(b) })),
     unmarkedLessons: countDistinctLessons(unmarked.filter((l) => !todayIds.has(l.id))),
     openQuestions,
+    unreported: unreported.map((l) => ({ lessonId: l.id, studentId: l.studentId, name: l.studentName })),
   };
 
   // Таблица учеников (десктоп): всё считаем здесь, клиент только сортирует и фильтрует.
