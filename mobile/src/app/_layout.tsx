@@ -58,11 +58,11 @@ function RootNavigator() {
     if (!signedIn) {
       if (first !== "(auth)") router.replace("/login");
     } else if (role === "STUDENT") {
-      if (first === "(auth)" || first === "staff" || first === "teacher") router.replace("/");
+      if (first === "(auth)" || first === "parent" || first === "teacher") router.replace("/");
     } else if (role === "TEACHER") {
       if (first !== "teacher" && first !== "notifications") router.replace("/teacher");
-    } else if (first !== "staff" && first !== "notifications") {
-      router.replace("/staff");
+    } else if (first !== "parent" && first !== "notifications") {
+      router.replace("/parent");
     }
   }, [state.status, signedIn, role, first]);
 
@@ -120,7 +120,7 @@ function RootNavigator() {
         <Stack.Screen name="teacher" />
       </Stack.Protected>
       <Stack.Protected guard={role === "PARENT"}>
-        <Stack.Screen name="staff" />
+        <Stack.Screen name="parent" />
       </Stack.Protected>
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="notifications" />

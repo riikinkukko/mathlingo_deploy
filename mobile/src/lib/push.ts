@@ -46,7 +46,7 @@ export async function unregisterPush(): Promise<void> {
 
 /**
  * Куда вести по уведомлению: ссылки сайта → экраны приложения. То, чего в
- * приложении нет (кабинет родителя, контент программы), открывается на сайте.
+ * приложении нет (контент программы, оформление тарифа), открывается на сайте.
  */
 export function routeForLink(link: string, role: string): { app: string } | { web: string } {
   const path = link.split("?")[0];
@@ -79,6 +79,11 @@ export function routeForLink(link: string, role: string): { app: string } | { we
     if (path.startsWith("/teacher/questions")) return { app: "/teacher/questions" };
     if (path.startsWith("/teacher/settings")) return { app: "/teacher/settings" };
     if (path === "/teacher" || path === "") return { app: "/teacher" };
+  }
+  if (role === "PARENT") {
+    const ch = /^\/parent\/child\/([\w-]+)$/.exec(path);
+    if (ch) return { app: `/parent/child/${ch[1]}` };
+    if (path === "/parent" || path === "") return { app: "/parent" };
   }
   return { web: link || `/${role.toLowerCase()}` };
 }
