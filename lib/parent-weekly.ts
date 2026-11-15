@@ -5,6 +5,7 @@
 // users.weekly_report_sent_on хранит понедельник отправленной недели и
 // ставится атомарно до отправки.
 // Относительные импорты — модуль работает в воркере бота (tsx, вне Next.js).
+import { getParentVisibleBalance } from "./parent-balance";
 import { and, eq, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -183,8 +184,8 @@ export async function buildChildWeekReport(child: User, now: Date = new Date(), 
     lines.push(`Последний пробник: ${lastMock.score}${child.targetScore ? ` из цели ${child.targetScore}` : ""}`);
   }
 
-  if (child.paymentRemindersEnabled && child.teacherId) {
-    const b = await getStudentBalance(child.teacherId, child.id);
+  {
+    const b = await getParentVisibleBalance(child);
     if (b) {
       const n = Math.abs(b.balance);
       lines.push(

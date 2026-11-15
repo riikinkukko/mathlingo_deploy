@@ -3,6 +3,7 @@
  * /parent и /parent/child/[id]: комментарии к пробникам родителю не отдаём,
  * баланс — только если репетитор включил напоминания об оплате.
  */
+import { getParentVisibleBalance } from "../parent-balance";
 import {
   computeOverallStats,
   computeStudentProgress,
@@ -70,8 +71,7 @@ export async function parentChild(parent: User, childId: string) {
   ]);
   const teacher = child.teacherId ? await getUserById(child.teacherId) : undefined;
   const statuses = await Promise.all(homeworks.map((h) => homeworkStatus(h, child.id)));
-  const balance =
-    child.paymentRemindersEnabled && child.teacherId ? await getStudentBalance(child.teacherId, child.id) : undefined;
+  const balance = await getParentVisibleBalance(child);
 
   let balanceView: { title: string; sub: string; debt: boolean } | null = null;
   if (balance) {

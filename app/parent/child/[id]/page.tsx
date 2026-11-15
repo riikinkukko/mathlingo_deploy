@@ -1,3 +1,4 @@
+import { getParentVisibleBalance } from "@/lib/parent-balance";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import {
@@ -70,12 +71,8 @@ export default async function ChildDetailPage(
   // балл и дату. Обнуляем сразу, чтобы текст не попал ни в HTML, ни в данные.
   const mocks = mocksRaw.map((m) => ({ ...m, note: null }));
   const solved12w = weekly.reduce((sum, w) => sum + w.solved, 0);
-  // Баланс оплат показываем родителю, только если репетитор сам включил для
-  // этого ученика напоминания об оплате (значит, ведёт оплаты в приложении).
-  const balance =
-    child.paymentRemindersEnabled && child.teacherId
-      ? await getStudentBalance(child.teacherId, child.id)
-      : undefined;
+  // Баланс оплат — если репетитор ведёт оплаты ученика (lib/parent-balance.ts).
+  const balance = await getParentVisibleBalance(child);
 
   const thisWeek = weekly[weekly.length - 1] ?? { solved: 0, accuracy: null };
   // Занятие с репетитором в ближайшие 7 дней — упоминаем в сводке недели.
@@ -262,7 +259,15 @@ export default async function ChildDetailPage(
                       {st.complete && <span className="ml-2 font-bold text-pine-dark">выполнено</span>}
                     </p>
                   </div>
-                  <GradeBadge solved={st.done} total={st.total} size="sm" />
+                  {/* Не школьная «оценка» (родители путали её с двойкой) — просто сколько решено. */}
+                  <span
+                    title={`Решено ${st.done} из ${st.total}`}
+                    className={`shrink-0 rounded-pill px-2.5 py-1 text-[13px] font-black ${
+                      st.complete ? "bg-pine-light text-pine-dark" : st.overdue ? "bg-coral-light text-coral-text" : "bg-grid text-ink-soft"
+                    }`}
+                  >
+                    {st.done}/{st.total}
+                  </span>
                 </div>
               );
             })}

@@ -296,8 +296,8 @@ export async function performSubmitAttempt(
           await pushNotification(tx, {
             userId: link.parentId,
             type: "skill_completed",
-            title: `${user.name} прошёл(а) навык «${skill?.title ?? ""}»`,
-            body: `Все задачи навыка решены верно.`,
+            title: `${user.name}: пройдена тема «${skill?.title ?? ""}»`,
+            body: `Все задачи темы решены верно.`,
             link: `/parent/child/${user.id}`,
           });
         }
