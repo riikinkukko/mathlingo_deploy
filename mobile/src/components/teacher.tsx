@@ -1,6 +1,7 @@
 /** Общие элементы экранов репетитора. */
 import { useState, type ReactNode } from "react";
-import { Alert, Modal, Pressable, ScrollView, Switch, View, type StyleProp, type ViewStyle } from "react-native";
+import { say } from "@/lib/alert";
+import { Modal, Pressable, ScrollView, Switch, View, type StyleProp, type ViewStyle } from "react-native";
 import { router } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button, Card, Pill, Row, T } from "./ui";
@@ -237,7 +238,7 @@ export function LessonCard({ lesson, showDay = false, from = "schedule" }: { les
       const ok = await run("setLessonStatus", { lessonId: lesson.id, status, from }, { key: status });
       // Только что провели — самое время для отчёта (ученик и родители его ждут).
       if (ok && status === "done")
-        Alert.alert("Занятие отмечено", "Записать короткий отчёт? Его получат ученик и родители.", [
+        say("Занятие отмечено", "Записать короткий отчёт? Его получат ученик и родители.", [
           { text: "Позже", style: "cancel" },
           { text: "Записать", onPress: () => openReport(lesson) },
         ]);

@@ -69,10 +69,15 @@ function Weekly({ weekly }: { weekly: PChild["weekly"] }) {
       <View style={{ flexDirection: "row", alignItems: "flex-end", height: 90, gap: 4 }}>
         {weekly.map((w, i) => (
           <View key={w.week} style={{ flex: 1, alignItems: "center", justifyContent: "flex-end", height: "100%" }}>
+            {w.solved > 0 ? (
+              <T w="black" size={10} color={C.inkSoft}>
+                {w.solved}
+              </T>
+            ) : null}
             <View
               style={{
                 width: "100%",
-                height: Math.max(3, (w.solved / max) * 80),
+                height: Math.max(3, (w.solved / max) * 66),
                 borderRadius: 4,
                 backgroundColor: i === weekly.length - 1 ? C.pineStrong : w.solved ? C.pineMint : C.lineSoft,
               }}
@@ -89,7 +94,7 @@ function Weekly({ weekly }: { weekly: PChild["weekly"] }) {
         </T>
       </Row>
       <T size={12} color={C.inkSoft}>
-        Решённые задачи по неделям за 12 недель.
+        Сколько задач решено за каждую неделю (последние 12 недель). Цифра над столбиком — число задач.
       </T>
     </Card>
   );

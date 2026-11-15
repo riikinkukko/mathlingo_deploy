@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { say } from "@/lib/alert";
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withSpring } from "react-native-reanimated";
-import { Alert, Modal, Pressable, ScrollView, View } from "react-native";
+import { Modal, Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +35,7 @@ export default function MocksScreen() {
       qc.invalidateQueries({ queryKey: ["mocks"] });
       router.push(`/mock/${r.id}`);
     } catch (e) {
-      Alert.alert("Не получилось начать", errorText(e));
+      say("Не получилось начать", errorText(e));
     } finally {
       setStarting(false);
     }
@@ -91,7 +92,13 @@ export default function MocksScreen() {
         {d.variants.map((v) => (
           <Pressable
             key={v.variant}
-            onPress={() => (v.locked ? Alert.alert("Вариант в Pro", "Первый вариант бесплатный, все 20 открываются на тарифе Pro.") : setPicked(v.variant))}
+            onPress={() =>
+              v.locked
+                ? say("Вариант в Pro", "Первый вариант бесплатный, все 20 открываются на тарифе Pro.")
+                : d.active && d.active.variant === v.variant
+                  ? router.push(`/mock/${d.active.id}`) // уже начат — продолжаем, а не «Начать» заново
+                  : setPicked(v.variant)
+            }
             style={{
               width: "23%",
               aspectRatio: 1,
@@ -112,7 +119,7 @@ export default function MocksScreen() {
               <Icon name="Lock" size={14} color={C.inkSoft} />
             ) : (
               <T w="bold" size={11} color={v.best != null ? C.pineDark : C.inkSoft}>
-                {v.best != null ? `${v.best} б.` : v.tries ? "начат" : "вариант"}
+                {d.active && d.active.variant === v.variant ? "идёт →" : v.best != null ? `${v.best} б.` : v.tries ? "начат" : "вариант"}
               </T>
             )}
           </Pressable>

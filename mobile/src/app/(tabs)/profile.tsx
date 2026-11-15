@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Alert, Pressable, Switch, View } from "react-native";
+import { say } from "@/lib/alert";
+import { Pressable, Switch, View } from "react-native";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import { useAuth, useUser } from "@/lib/auth";
@@ -16,6 +17,8 @@ export default function Profile() {
   const user = useUser();
   const { logout, setUser } = useAuth();
   const [reminders, setReminders] = useState(user.reminders !== false);
+  const [mailSent, setMailSent] = useState(false);
+  const [mailBusy, setMailBusy] = useState(false);
   async function toggleReminders(v: boolean) {
     setReminders(v);
     try {
@@ -23,7 +26,7 @@ export default function Profile() {
       setUser(r.user);
     } catch (e) {
       setReminders(!v);
-      Alert.alert("Не сохранилось", errorText(e));
+      say("Не сохранилось", errorText(e));
     }
   }
   const [topic] = useSelectedTopic();
@@ -70,6 +73,29 @@ export default function Profile() {
               ? "Подтверди почту — ссылка в письме от Планиметрики. Без этого энергия не восстанавливается."
               : "Подтверди почту — ссылка в письме от Планиметрики. Так ты точно не потеряешь доступ к аккаунту."}
           </T>
+          {mailSent ? (
+            <T size={13} w="bold" color={C.pineDark}>
+              Письмо отправлено — открой ссылку в нём (проверь и «Спам»).
+            </T>
+          ) : (
+            <Button
+              title="Отправить письмо ещё раз"
+              kind="secondary"
+              small
+              loading={mailBusy}
+              onPress={async () => {
+                setMailBusy(true);
+                try {
+                  await api("/api/m/verify-email", { body: {} });
+                  setMailSent(true);
+                } catch (e) {
+                  say("Не получилось", errorText(e));
+                } finally {
+                  setMailBusy(false);
+                }
+              }}
+            />
+          )}
         </Card>
       ) : null}
 
@@ -102,7 +128,7 @@ export default function Profile() {
         title="Выйти"
         kind="secondary"
         onPress={() =>
-          Alert.alert("Выйти из аккаунта?", "Ответы, решённые без сети, отправятся при следующем входе.", [
+          say("Выйти из аккаунта?", "Ответы, решённые без сети, отправятся при следующем входе.", [
             { text: "Отмена", style: "cancel" },
             { text: "Выйти", style: "destructive", onPress: () => void logout() },
           ])

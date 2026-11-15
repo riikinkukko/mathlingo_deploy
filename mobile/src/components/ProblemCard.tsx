@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Animated, Image, Modal, Pressable, ScrollView, Switch, TextInput, View, useWindowDimensions } from "react-native";
+import { say } from "@/lib/alert";
+import { Animated, Image, Modal, Pressable, ScrollView, Switch, TextInput, View, useWindowDimensions } from "react-native";
 import Reanimated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { captureRef } from "react-native-view-shot";
@@ -141,7 +142,7 @@ export default function ProblemCard({
       const r = await api<{ explanation: string; correctAnswer: string }>("/api/m/reveal", { body: { problemId: problem.id } });
       setFeedback({ kind: "correct", explanation: r.explanation, correctAnswer: r.correctAnswer });
     } catch (e) {
-      Alert.alert("Не получилось", errorText(e));
+      say("Не получилось", errorText(e));
     } finally {
       setBusy(false);
     }
@@ -150,10 +151,10 @@ export default function ProblemCard({
   async function attachPhoto(fromCamera: boolean) {
     try {
       const res = await pickSolutionPhoto(fromCamera);
-      if (res === "denied") Alert.alert("Нет доступа к камере", "Разреши доступ в настройках телефона или выбери фото из галереи.");
+      if (res === "denied") say("Нет доступа к камере", "Разреши доступ в настройках телефона или выбери фото из галереи.");
       else if (res) setPhoto(res);
     } catch {
-      Alert.alert("Фото не подошло", "Попробуй другое фото.");
+      say("Фото не подошло", "Попробуй другое фото.");
     }
   }
 
@@ -447,7 +448,7 @@ function AskTeacher({
       qc.invalidateQueries({ queryKey: ["questions"] });
       onSent();
     } catch (e) {
-      Alert.alert("Не отправилось", errorText(e));
+      say("Не отправилось", errorText(e));
     } finally {
       setSending(false);
     }

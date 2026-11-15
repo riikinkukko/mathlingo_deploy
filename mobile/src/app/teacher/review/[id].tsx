@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { Alert, View, useWindowDimensions } from "react-native";
+import { say } from "@/lib/alert";
+import { View, useWindowDimensions } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { authedImage } from "@/lib/api";
 import { relDay, timeLabel, useT, useTAction } from "@/lib/teacher";
@@ -37,7 +38,7 @@ export default function ReviewOne() {
   const next = all.filter((x) => x.attemptId !== r.attemptId)[0];
   async function decide(decision: "approved" | "needs_revision") {
     if (decision === "needs_revision" && !feedback.trim()) {
-      Alert.alert("Нужен комментарий", "Напишите ученику, что исправить.");
+      say("Нужен комментарий", "Напишите ученику, что исправить.");
       return;
     }
     const m = await markup.current?.capture();

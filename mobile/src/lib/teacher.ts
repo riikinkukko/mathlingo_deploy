@@ -3,7 +3,7 @@
  * действия (/api/m/teacher/action — те же, что на сайте).
  */
 import { useState } from "react";
-import { Alert } from "react-native";
+import { say } from "@/lib/alert";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Haptics from "expo-haptics";
 import { api, errorText } from "./api";
@@ -256,7 +256,7 @@ export function useTAction() {
       await qc.invalidateQueries({ queryKey: ["t"] });
       return r;
     } catch (e) {
-      if (!opts.silent) Alert.alert("Не получилось", errorText(e));
+      if (!opts.silent) say("Не получилось", errorText(e));
       return null;
     } finally {
       setBusy(null);
@@ -267,7 +267,7 @@ export function useTAction() {
 
 /** Подтверждение перед необратимым действием. */
 export function confirm(title: string, text: string, ok: string, onOk: () => void) {
-  Alert.alert(title, text, [
+  say(title, text, [
     { text: "Отмена", style: "cancel" },
     { text: ok, style: "destructive", onPress: onOk },
   ]);

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Alert, Share } from "react-native";
+import { say } from "@/lib/alert";
+import { Share } from "react-native";
 import { router } from "expo-router";
-import { useTAction } from "@/lib/teacher";
+import { useT, useTAction } from "@/lib/teacher";
 import { Button, Card, Header, Screen, T } from "@/components/ui";
 import { Field } from "@/components/Field";
 import { Toggle } from "@/components/teacher";
@@ -12,6 +13,7 @@ type Res = { success?: boolean; invited?: boolean; password?: string; email?: st
 /** Добавить ученика: новый аккаунт или приглашение уже зарегистрированному. */
 export default function StudentNew() {
   const { run, busy } = useTAction();
+  const home = useT("home", {}, false).data;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -24,6 +26,13 @@ export default function StudentNew() {
         <Field label="Пароль" value={password} onChangeText={setPassword} autoCapitalize="none" placeholder="оставьте пустым — придумаем сами" />
         <Toggle label="Согласие получено" text="Ученика (или его представителя) — на обработку персональных данных" value={consent} onChange={setConsent} />
       </Card>
+      {home && !home.emailVerified && home.plan.source !== "owner" ? (
+        <Card style={{ backgroundColor: C.amberLight, borderColor: C.amber }}>
+          <T size={13} w="bold">
+            Пока email не подтверждён, можно добавить 2 учеников. Ссылка для подтверждения — в письме после регистрации.
+          </T>
+        </Card>
+      ) : null}
       <T size={12} color={C.inkSoft}>
         Если ученик уже зарегистрирован сам, ему уйдёт приглашение — он подтвердит его в своём кабинете.
       </T>
@@ -37,10 +46,10 @@ export default function StudentNew() {
           const res = r.result ?? {};
           router.back();
           if (res.invited) {
-            Alert.alert("Приглашение отправлено", `${res.name} увидит его в своём кабинете.`);
+            say("Приглашение отправлено", `${res.name} увидит его в своём кабинете.`);
           } else if (res.password) {
             const msg = `Вход в Планиметрику: planimetrika.online\nEmail: ${res.email}\nПароль: ${res.password}`;
-            Alert.alert("Ученик добавлен", `Передайте ученику данные для входа:\n\n${res.email}\n${res.password}`, [
+            say("Ученик добавлен", `Передайте ученику данные для входа:\n\n${res.email}\n${res.password}`, [
               { text: "Отправить", onPress: () => void Share.share({ message: msg }) },
               { text: "Готово" },
             ]);

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, AppState, Image, Modal, Pressable, ScrollView, TextInput, View } from "react-native";
+import { say } from "@/lib/alert";
+import { AppState, Image, Modal, Pressable, ScrollView, TextInput, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -110,13 +111,13 @@ function Runner({ data, onFinished }: { data: MockRunnerPayload; onFinished: () 
 
   async function photo(problemId: string, fromCamera: boolean) {
     const res = await pickSolutionPhoto(fromCamera).catch(() => null);
-    if (res === "denied") return Alert.alert("Нет доступа к камере", "Разреши доступ в настройках или выбери фото из галереи.");
+    if (res === "denied") return say("Нет доступа к камере", "Разреши доступ в настройках или выбери фото из галереи.");
     if (!res) return;
     try {
       await api(`/api/m/mocks/${data.id}/photo`, { body: { problemId, image: res } });
       setPhotos((p) => ({ ...p, [problemId]: res }));
     } catch (e) {
-      Alert.alert("Фото не сохранилось", errorText(e));
+      say("Фото не сохранилось", errorText(e));
     }
   }
 
@@ -132,7 +133,7 @@ function Runner({ data, onFinished }: { data: MockRunnerPayload; onFinished: () 
       setFinishOpen(false);
       onFinished();
     } catch (e) {
-      Alert.alert("Не удалось сдать", `${errorText(e)} Ответы сохранены — попробуй ещё раз.`);
+      say("Не удалось сдать", `${errorText(e)} Ответы сохранены — попробуй ещё раз.`);
     } finally {
       setFinishing(false);
     }
@@ -624,7 +625,7 @@ function Part2Card({ mockId, p, hasTeacher, onChanged }: { mockId: string; p: Mo
       await api(`/api/m/mocks/${mockId}/self-score`, { body: { problemId: p.problemId, score: points } });
       onChanged();
     } catch (e) {
-      Alert.alert("Не сохранилось", errorText(e));
+      say("Не сохранилось", errorText(e));
     } finally {
       setSaving(null);
     }

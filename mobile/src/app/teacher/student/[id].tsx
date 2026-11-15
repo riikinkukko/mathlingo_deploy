@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Share, View } from "react-native";
+import { say } from "@/lib/alert";
+import { Share, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { errorText } from "@/lib/api";
 import { plural } from "@/lib/hooks";
@@ -151,7 +152,7 @@ function Overview({ d }: { d: TStudent }) {
             setParentOpen(false);
             setParent({ name: "", email: "", consent: false });
             const pw = r.result?.password;
-            Alert.alert(
+            say(
               "Родитель добавлен",
               pw ? `Вход: ${parent.email}\nПароль: ${pw}\n\nПередайте эти данные родителю.` : "Родитель уже был зарегистрирован — ученик привязан к его кабинету.",
               pw ? [{ text: "Отправить", onPress: () => void Share.share({ message: `Вход в Планиметрику: planimetrika.online\nEmail: ${parent.email}\nПароль: ${pw}` }) }, { text: "Готово" }] : undefined
@@ -242,7 +243,7 @@ function Payments({ d }: { d: TStudent }) {
       {b?.debt ? (
         <Button title="Напомнить об оплате" kind="secondary" loading={busy === "sendPaymentReminder"} onPress={async () => {
           const r = await run("sendPaymentReminder", { studentId: s.id });
-          if (r) Alert.alert("Готово", "Напоминание отправлено.");
+          if (r) say("Готово", "Напоминание отправлено.");
         }} />
       ) : null}
 

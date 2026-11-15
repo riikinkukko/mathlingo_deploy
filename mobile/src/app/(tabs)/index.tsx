@@ -1,4 +1,5 @@
-import { Alert, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
+import { say } from "@/lib/alert";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -52,8 +53,8 @@ export default function PathScreen() {
           <Row>
             <Icon name="Clipboard" size={24} color={C.amberText} />
             <T w="extrabold" color={C.amberText} style={{ flex: 1 }}>
-              {d.counts.homework} {plural(d.counts.homework, ["задание ждёт", "задания ждут", "заданий ждут"])} от
-              {d.user.teacherName ? ` ${d.user.teacherName}` : " репетитора"}
+              {d.counts.homework} {plural(d.counts.homework, ["задание ждёт", "задания ждут", "заданий ждут"])}
+              {d.user.teacherName ? ` · репетитор ${d.user.teacherName}` : " от репетитора"}
             </T>
             <T w="black" color={C.amberText}>
               →
@@ -267,11 +268,11 @@ function SkillNode({
   const bg = done ? C.pine : current ? C.pineStrong : C.grid;
   function open() {
     if (skill.proOnly) {
-      Alert.alert("Урок в Pro", "Этот урок открывается на тарифе Pro.");
+      say("Урок в Pro", "Этот урок открывается на тарифе Pro.");
       return;
     }
     if (skill.state === "locked") {
-      Alert.alert("Пока закрыто", "Сначала пройди предыдущие уроки этой темы.");
+      say("Пока закрыто", "Сначала пройди предыдущие уроки этой темы.");
       return;
     }
     router.push(`/skill/${skill.id}`);
@@ -280,11 +281,13 @@ function SkillNode({
     <View style={{ transform: [{ translateX: offset }], alignItems: "center", width: 180 }}>
       {current ? (
         <Bob amp={5} duration={1100}>
-          <View style={{ backgroundColor: C.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6, borderWidth: 1, borderColor: C.line }}>
-            <T w="black" size={12} color={C.pineStrong}>
-              НАЧАТЬ
-            </T>
-          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Начать урок «${skill.title}»`} onPress={open} hitSlop={8}>
+            <View style={{ backgroundColor: C.white, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, marginBottom: 6, borderWidth: 1, borderColor: C.line }}>
+              <T w="black" size={12} color={C.pineStrong}>
+                НАЧАТЬ
+              </T>
+            </View>
+          </Pressable>
         </Bob>
       ) : null}
       <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
