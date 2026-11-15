@@ -107,7 +107,7 @@ export default async function ProfilePage(
         </div>
 
         {!user.emailVerifiedAt && (
-          <div className="mb-4">
+          <div id="email" className="mb-4 scroll-mt-20">
             <VerifyEmailReminder
               compact
               informal

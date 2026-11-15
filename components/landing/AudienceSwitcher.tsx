@@ -58,9 +58,12 @@ function HandNote({ children }: { children: React.ReactNode }) {
 export default function AudienceSwitcher({
   initial = "tutor",
   studentPrice,
+  studentPass = null,
 }: {
   initial?: Audience;
   studentPrice: number;
+  /** разовая оплата «до ЕГЭ», если сейчас продаётся */
+  studentPass?: { price: number; untilLabel: string } | null;
 }) {
   const [aud, setAud] = useState<Audience>(initial);
   // Бегунок под активной вкладкой: ширина и сдвиг меряются по самим кнопкам.
@@ -158,7 +161,7 @@ export default function AudienceSwitcher({
         { src: "/landing/student-review.webp", alt: "Ученик видит пометки репетитора на своём решении" },
       ],
       hand: "цель дня и серия",
-      note: `Бесплатно — первая глава каждой темы и до 15 новых задач за раз (энергия восстанавливается). Pro — ${studentPrice.toLocaleString("ru-RU")} ₽ в месяц: все главы, вторая часть и без ограничений.`,
+      note: `Бесплатно — первая глава каждой темы и до 15 новых задач за раз (энергия восстанавливается). Pro — все главы, вторая часть и без ограничений: ${studentPrice.toLocaleString("ru-RU")} ₽ в месяц${studentPass ? ` или ${studentPass.price.toLocaleString("ru-RU")} ₽ разово до ЕГЭ` : ""}.`,
       cta: (
         <a
           href="/register"

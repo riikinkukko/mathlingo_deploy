@@ -1,3 +1,4 @@
+import VerifyEmailReminder from "@/components/VerifyEmailReminder";
 import { cookies } from "next/headers";
 import { getSessionUser } from "@/lib/auth";
 import RememberTopic from "@/components/RememberTopic";
@@ -14,6 +15,8 @@ import {
   homeworkStatus,
   isStandaloneStudent,
   getEffectiveEnergy,
+  isEnergyRechargeBlocked,
+  minutesUntilNextEnergy,
   getDueReviewCount,
   getLevelInfo,
   LEVELS,
@@ -182,7 +185,36 @@ export default async function StudentDashboard(
   // Совсем новый ученик (ни одного верного ответа) — «Первый урок / Начать»
   // вместо «Продолжить / Решать дальше»: продолжать ещё нечего.
   const isNewbie = xp === 0;
-  const heroCard = currentSkill && !chapterLockedByPlan ? (
+  // Энергия на нуле: не зовём «Решать дальше» в стену — говорим, когда она
+  // вернётся и что можно делать без неё.
+  const energyOut = energy !== null && Number.isFinite(energy) && energy <= 0;
+  const energyNextMin = energyOut ? minutesUntilNextEnergy(user) : 0;
+  const energyBlocked = energyOut && isEnergyRechargeBlocked(user);
+  const heroCard = currentSkill && !chapterLockedByPlan && energyOut ? (
+    <div className="rounded-[22px] bg-pine-dark p-6 text-white">
+      <p className="text-[11px] font-black uppercase tracking-wide text-white/60">Энергия закончилась · {currentSkill.title}</p>
+      <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">
+        {energyBlocked ? "Подтверди email — и энергия начнёт восстанавливаться" : `Новая энергия — через ${energyNextMin} мин`}
+      </h1>
+      <p className="mt-1.5 text-[14px] font-semibold text-white/75">
+        Каждая новая задача тратит 1 энергию, +1 возвращается каждые 30 минут. Повторение и «Мои ошибки» — без энергии.
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        {dueReviewCount > 0 ? (
+          <a href={`/student/review?topic=${selectedTopic?.topic.id ?? ""}`} className="inline-flex h-[52px] items-center rounded-pill bg-pine-strong px-6 text-[15px] font-black text-white">
+            Повторить {dueReviewCount} {pluralRu(dueReviewCount, ["задачу", "задачи", "задач"])} →
+          </a>
+        ) : (
+          <a href="/student/mistakes" className="inline-flex h-[52px] items-center rounded-pill bg-pine-strong px-6 text-[15px] font-black text-white">
+            Мои ошибки →
+          </a>
+        )}
+        <a href={energyBlocked ? "/student/profile#email" : "/student/upgrade"} className="inline-flex h-[52px] items-center rounded-pill border-2 border-white/40 px-6 text-[15px] font-black text-white">
+          {energyBlocked ? "Подтвердить email" : "Pro — без ограничений"}
+        </a>
+      </div>
+    </div>
+  ) : currentSkill && !chapterLockedByPlan ? (
     <a
       href={`/student/skill/${currentSkill.id}`}
       className="block rounded-[22px] bg-pine-dark p-6 text-white transition hover:brightness-105"
@@ -193,7 +225,10 @@ export default async function StudentDashboard(
       <h1 className="mt-1.5 font-display text-2xl font-black leading-tight">{currentSkill.title}</h1>
       <p className="mt-1.5 text-[14px] font-semibold text-white/75">
         Осталось {remaining} {pluralRu(remaining, ["задача", "задачи", "задач"])} · ~{estMinutes} мин
-        {energy !== null && Number.isFinite(energy) && ` · ${remaining} ${pluralRu(remaining, ["энергия", "энергии", "энергии"])}`}
+        {energy !== null && Number.isFinite(energy) &&
+          (energy < remaining
+            ? ` · энергии хватит на ${energy} ${pluralRu(energy, ["задачу", "задачи", "задач"])}`
+            : ` · ${remaining} ${pluralRu(remaining, ["энергия", "энергии", "энергии"])}`)}
       </p>
       <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-pine-strong px-8 text-[15px] font-black text-white shadow-[0_3px_0_0_rgba(0,0,0,0.25)]">
         {isNewbie ? "Начать →" : "Решать дальше →"}
@@ -212,7 +247,7 @@ export default async function StudentDashboard(
         На бесплатном плане доступна только первая глава
       </p>
       <span className="mt-5 inline-flex h-[52px] items-center justify-center rounded-pill bg-white px-8 text-[15px] font-black text-coral">
-        Узнать про Pro →
+        Что даёт Pro →
       </span>
     </a>
   ) : (
@@ -221,6 +256,24 @@ export default async function StudentDashboard(
       <p className="mt-2 font-display text-xl font-black">Вся программа пройдена!</p>
       <p className="mt-1 text-sm text-white/75">Загляни в повторение — там всегда есть чем заняться.</p>
     </div>
+  );
+
+  // Самостоятельному Free-ученику сразу говорим про подтверждение почты —
+  // раньше он узнавал об этом, только когда кончалась энергия.
+  const heroBlock = (
+    <>
+      {isNewbie && (
+        // Значки в шапке без подписей — новичку объясняем один раз, пока он не решил первую задачу.
+        <p className="rounded-2xl bg-white px-4 py-2.5 text-[13px] leading-snug text-ink-soft">
+          Значки сверху: огонёк — серия дней подряд, звезда — опыт за решённые задачи
+          {standalone ? ", батарейка — энергия на новые задачи" : ""}. Нажми на значок, чтобы узнать больше.
+        </p>
+      )}
+      {heroCard}
+      {standalone && !user.emailVerifiedAt && !energyOut && isEnergyRechargeBlocked(user) && (
+        <VerifyEmailReminder compact informal reason="Подтверди email — тогда энергия будет восстанавливаться" />
+      )}
+    </>
   );
 
   const tiles = (
@@ -297,7 +350,7 @@ export default async function StudentDashboard(
               </a>
             );
           })()}
-          {heroCard}
+          {heroBlock}
           <div className="flex gap-2.5">{tiles}</div>
           {/* Под главной кнопкой «Продолжить», чтобы не отодвигать её вниз. */}
           <DailyQuestsCard data={quests} compact />
@@ -397,7 +450,7 @@ export default async function StudentDashboard(
             )}
 
             <NextLessonCard lessons={nextLessons} teacherName={teacher?.name} />
-            {heroCard}
+            {heroBlock}
             <div className="flex gap-3">{tiles}</div>
 
             {currentChapter && !chapterLockedByPlan && (

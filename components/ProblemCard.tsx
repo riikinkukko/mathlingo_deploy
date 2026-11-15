@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from "react";
 import PaidReviewOffer from "./PaidReviewOffer";
-import { submitAttemptAction, revealSolutionAction } from "@/app/actions";
+import { submitAttemptAction, revealSolutionAction, resendVerificationEmailAction } from "@/app/actions";
 import { PublicProblem, SolvedInfo } from "@/lib/types";
 import { IconLightbulb, IconBook, IconCheck, IconClipboard, IconBattery } from "./icons";
 import DiagramRenderer from "./diagrams/DiagramRenderer";
@@ -61,6 +61,7 @@ export default function ProblemCard({
   onOpenTheory,
   canAskTeacher = false,
   stickySubmit = false,
+  outOfEnergy,
 }: {
   problem: PublicProblem;
   status: ProblemCardStatus;
@@ -84,6 +85,9 @@ export default function ProblemCard({
   /** Урок на телефоне: «Проверить» в закреплённой нижней панели — там же,
    * где потом появляется «Дальше» (LessonFlow), чтобы кнопка не прыгала. */
   stickySubmit?: boolean;
+  /** Энергия уже на нуле, а задача новая — говорим сразу, до ввода ответа
+   * (раньше ученик вводил ответ и упирался в «Энергия закончилась»). */
+  outOfEnergy?: { unverified: boolean; nextInMin: number };
 }) {
   const isDetailed = problem.answerType === "DETAILED";
   const [answer, setAnswer] = useState(previousAnswer ?? "");
@@ -249,7 +253,9 @@ export default function ProblemCard({
     });
   }
 
-  const showForm = !solved && !pendingReview && !locked && !noEnergy;
+  const energyOut = noEnergy || !!outOfEnergy;
+  const energyUnverified = noEnergy ? noEnergyUnverified : !!outOfEnergy?.unverified;
+  const showForm = !solved && !pendingReview && !locked && !energyOut;
 
   return (
     <div className={`card p-5 sm:p-6 ${solved ? "border-pine-light bg-pine-light/30" : ""}`}>
@@ -569,41 +575,7 @@ export default function ProblemCard({
         </p>
       )}
 
-      {noEnergy && (
-        <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4">
-          <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber-text">
-            <IconBattery className="h-4 w-4 shrink-0" />
-            Энергия закончилась
-          </p>
-          {noEnergyUnverified ? (
-            <>
-              <p className="mb-3 text-sm text-ink-soft">
-                Чтобы энергия восстанавливалась, подтверди email — ссылка в письме,
-                которое мы отправили при регистрации. Или переходи на Pro — там
-                энергия безлимитна.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <a href="/student/profile" className="btn-primary !text-xs">
-                  Подтвердить email
-                </a>
-                <a href="/student/upgrade" className="btn-secondary !text-xs">
-                  Узнать про Pro
-                </a>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="mb-3 text-sm text-ink-soft">
-                На бесплатном плане ограниченное число новых задач в день. Энергия
-                восстанавливается со временем, или переходи на Pro — там она безлимитна.
-              </p>
-              <a href="/student/upgrade" className="btn-primary !text-xs">
-                Узнать про Pro
-              </a>
-            </>
-          )}
-        </div>
-      )}
+      {energyOut && <NoEnergyCard unverified={energyUnverified} nextInMin={outOfEnergy?.nextInMin ?? 0} />}
 
       {serverError && (
         <p role="alert" className="mt-3 rounded-xl bg-coral-light px-3 py-2.5 text-sm font-bold text-coral-text">
@@ -714,6 +686,60 @@ export default function ProblemCard({
             return renderSketchJpeg(doc, (diagramBoxRef.current?.querySelector("svg") as SVGSVGElement | null) ?? null);
           }}
         />
+      )}
+    </div>
+  );
+}
+
+/** «Энергия закончилась»: почему, когда вернётся и что сделать — одной кнопкой. */
+function NoEnergyCard({ unverified, nextInMin }: { unverified: boolean; nextInMin: number }) {
+  const [sent, setSent] = useState(false);
+  const [pending, startTransition] = useTransition();
+  return (
+    <div className="rounded-2xl border-2 border-amber-light bg-amber-light p-4">
+      <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber-text">
+        <IconBattery className="h-4 w-4 shrink-0" />
+        Энергия закончилась
+      </p>
+      {unverified ? (
+        <>
+          <p className="mb-3 text-sm text-ink-soft">
+            Каждая новая задача тратит 1 энергию. Чтобы она восстанавливалась (+1 каждые 30 минут), подтверди email —
+            или переходи на Pro, там энергия безлимитна. Уже решённые задачи и «Мои ошибки» можно открывать бесплатно.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {sent ? (
+              <p className="text-sm font-bold text-pine-dark">Письмо отправлено — открой ссылку в нём (проверь и «Спам»)</p>
+            ) : (
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    await resendVerificationEmailAction();
+                    setSent(true);
+                  })
+                }
+                className="btn-primary !text-xs"
+              >
+                {pending ? "Отправляем…" : "Отправить письмо для подтверждения"}
+              </button>
+            )}
+            <a href="/student/upgrade" className="btn-secondary !text-xs">
+              Что даёт Pro
+            </a>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-sm text-ink-soft">
+            Каждая новая задача тратит 1 энергию, она восстанавливается: +1 каждые 30 минут
+            {nextInMin > 0 ? ` (следующая — через ${nextInMin} мин)` : ""}. На Pro энергия безлимитна.
+          </p>
+          <a href="/student/upgrade" className="btn-primary !text-xs">
+            Что даёт Pro
+          </a>
+        </>
       )}
     </div>
   );

@@ -22,6 +22,7 @@ export default function LessonFlow({
   canAskTeacher = false,
   detailedPreview = null,
   reminderHref,
+  energy = null,
 }: {
   skillTitle: string;
   theoryCards: TheoryCard[];
@@ -45,6 +46,8 @@ export default function LessonFlow({
   detailedPreview?: { text: string; solution: string; egeTaskNumber: number | null } | null;
   /** Куда вести за напоминанием (Telegram не подключён) — показывается на экране «Урок пройден». */
   reminderHref?: string;
+  /** Энергия Free-ученика; null — безлимит. Новая задача тратит 1, повторная попытка — нет. */
+  energy?: { left: number; unverified: boolean; nextInMin: number } | null;
 }) {
   const allSolvedInitially = problems.every((p) => isDone(initialStates[p.id]?.status));
   // Если карточек теории нет вообще — показывать нечего, сразу к задачам,
@@ -64,7 +67,20 @@ export default function LessonFlow({
   const [holdCelebration, setHoldCelebration] = useState(false);
   // Для итога урока: когда начали и в каких задачах ошибались.
   const [startedAt] = useState(() => Date.now());
-  const [mistakeIds, setMistakeIds] = useState<Set<string>>(new Set());
+  // Задачи, где ошибались раньше и вернулись, — тоже «с ошибкой» в итоге урока.
+  const [mistakeIds, setMistakeIds] = useState<Set<string>>(
+    () => new Set(problems.filter((p) => initialStates[p.id]?.attempted).map((p) => p.id))
+  );
+  // Энергия: сколько осталось и какие задачи уже «оплачены» (были попытки).
+  const [energyLeft, setEnergyLeft] = useState(energy?.left ?? Infinity);
+  const [paidIds, setPaidIds] = useState<Set<string>>(
+    () => new Set(problems.filter((p) => initialStates[p.id]?.attempted || (initialStates[p.id]?.status ?? "unsolved") !== "unsolved").map((p) => p.id))
+  );
+  function payFor(problemId: string) {
+    if (paidIds.has(problemId)) return;
+    setPaidIds((prev) => new Set(prev).add(problemId));
+    setEnergyLeft((e) => Math.max(0, e - 1));
+  }
   // Опыт на экране «Урок пройден» — как на сервере (computeXp): 10 за верно
   // решённую в этом заходе задачу; отправленное репетитору — после проверки.
   // Раньше показывали «задач в уроке × 10», даже если часть решена раньше.
@@ -82,6 +98,7 @@ export default function LessonFlow({
     const nextState: ProblemState =
       kind === "submitted" ? { ...states[problemId], status: "pending" } : { status: "solved" };
     const wasDone = isDone(states[problemId]?.status);
+    payFor(problemId);
     setStates((prev) => ({ ...prev, [problemId]: nextState }));
     if (!wasDone && kind !== "submitted") setEarnedIds((prev) => new Set(prev).add(problemId));
     if (!wasDone) setCombo((c) => c + 1);
@@ -99,6 +116,7 @@ export default function LessonFlow({
   }
 
   function handleWrong(problemId: string) {
+    payFor(problemId);
     setCombo(0);
     setHadMistake(true);
     setMistakeIds((prev) => new Set(prev).add(problemId));
@@ -183,6 +201,11 @@ export default function LessonFlow({
         onOpenTheory={theoryCards.length > 0 ? () => setTheoryOverlay(true) : undefined}
         canAskTeacher={canAskTeacher}
         stickySubmit
+        outOfEnergy={
+          energy && energyLeft <= 0 && !paidIds.has(current.id) && !isDone(currentState.status)
+            ? { unverified: energy.unverified, nextInMin: energy.nextInMin }
+            : undefined
+        }
       />
 
       {/* Одна большая кнопка внизу, под большим пальцем: появляется, когда

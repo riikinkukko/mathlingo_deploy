@@ -7,7 +7,7 @@ import HeroProblem from "./HeroProblem";
 import AudienceSwitcher from "./AudienceSwitcher";
 import LandingMotion from "./LandingMotion";
 import { AUDIENCE_HASH, type Audience } from "./audience";
-import { getStudentProPrice } from "@/lib/tariffs";
+import { getStudentProPrice, getStudentExamPass } from "@/lib/tariffs";
 import { TEACHER_FREE_LIMIT, TEACHER_TIERS, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 
 const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
@@ -79,6 +79,9 @@ const faq = (topics: string[]): [string, string][] => [
  */
 export default async function Landing({ initial = "tutor" }: { initial?: Audience }) {
   const studentPrice = getStudentProPrice().priceRub;
+  // Та же пара вариантов, что на странице оформления: «до ЕГЭ» разово или помесячно.
+  const pass = getStudentExamPass();
+  const studentPass = pass.available ? { price: pass.priceRub, untilLabel: pass.untilLabel } : null;
   const stats = await getStats();
   const problemsRounded = stats.problems >= 100 ? Math.floor(stats.problems / 100) * 100 : stats.problems;
   const FAQ = faq(stats.topics);
@@ -194,7 +197,7 @@ export default async function Landing({ initial = "tutor" }: { initial?: Audienc
             <span key={h} id={h} className="absolute -top-2" aria-hidden />
           ))}
           <div data-reveal>
-            <AudienceSwitcher initial={initial} studentPrice={studentPrice} />
+            <AudienceSwitcher initial={initial} studentPrice={studentPrice} studentPass={studentPass} />
           </div>
         </section>
 

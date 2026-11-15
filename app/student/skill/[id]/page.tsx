@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { toPublicProblem } from "@/lib/queries";
+import { getEffectiveEnergy, isEnergyRechargeBlocked, isUnlimitedEnergy, minutesUntilNextEnergy, toPublicProblem } from "@/lib/queries";
 import { getLessonData } from "@/lib/lesson-data";
 import LessonFlow from "@/components/LessonFlow";
 
@@ -18,6 +18,11 @@ export default async function SkillPage(props: { params: Promise<{ id: string }>
   return (
     <div className="min-h-screen bg-paper px-4 pb-16">
       <LessonFlow
+        energy={
+          isUnlimitedEnergy(user)
+            ? null
+            : { left: getEffectiveEnergy(user), unverified: isEnergyRechargeBlocked(user), nextInMin: minutesUntilNextEnergy(user) }
+        }
         skillTitle={skill.title}
         theoryCards={skill.theoryCards}
         problems={problems.map(toPublicProblem)}

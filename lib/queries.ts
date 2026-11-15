@@ -313,10 +313,13 @@ export async function computeOverallStats(studentId: string) {
   const [{ count: totalProblems }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.problems);
-  const last7 = attempts.filter(
-    (a) => Date.now() - new Date(a.createdAt).getTime() < 7 * 24 * 3600 * 1000
-  );
-  const activeDays = new Set(last7.map((a) => a.createdAt.slice(0, 10))).size;
+  // Дни занятий за последние 7 календарных дней по Москве (сегодня + 6) —
+  // так же считается серия, иначе у ученика «3 дня подряд», а у мамы «2 из 7».
+  const todayKey = mskDayKey();
+  const weekStartKey = addDays(todayKey, -6);
+  const activeDays = new Set(
+    attempts.map((a) => mskDayKey(new Date(a.createdAt))).filter((d) => d >= weekStartKey && d <= todayKey)
+  ).size;
   // Время последней активности ученика — для панели "давно не заходил".
   const lastActiveAt =
     attempts.length > 0
@@ -1280,6 +1283,8 @@ export interface ProblemState {
   feedback?: string;
   previousAnswer?: string;
   review?: ReviewInfo;
+  /** Уже были попытки (в т.ч. неверные): повторная не тратит энергию. */
+  attempted?: boolean;
 }
 
 export async function computeProblemStates(
@@ -1353,7 +1358,7 @@ export async function computeProblemStates(
       const solved = attempts.some((a) => a.isCorrect);
       result[p.id] = solved
         ? { status: "solved", solvedInfo: { explanation: p.explanation, correctAnswer: p.correctAnswer } }
-        : { status: "unsolved" };
+        : { status: "unsolved", attempted: true };
     }
   }
   return result;

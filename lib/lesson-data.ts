@@ -92,7 +92,10 @@ export async function getLessonData(user: User, skillId: string, opts: { ahead?:
   const next = getNextSkill(allSkills, skill.id);
 
   // Теория обязательна, только если в этой теме ещё не решено ни одной задачи.
-  const forceTheoryFirst = !allSkills.some((s) => (progress[s.id]?.solved ?? 0) > 0);
+  // И не повторяем её, если ученик уже пробовал задачи этого урока и вернулся.
+  const forceTheoryFirst =
+    !allSkills.some((s) => (progress[s.id]?.solved ?? 0) > 0) &&
+    !Object.values(states).some((st) => st.status !== "unsolved" || st.attempted);
 
   return { status: "ok", skill, topicId, problems, states, next, forceTheoryFirst, detailedPreview };
 }
