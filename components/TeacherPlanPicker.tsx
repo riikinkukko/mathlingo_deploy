@@ -77,7 +77,8 @@ export default function TeacherPlanPicker({
   /** код-скидка на первую оплату (только в кабинете) */
   promo?: PickerPromo | null;
   /** что действует сейчас (для подсветки) */
-  current?: "free" | TeacherTier;
+  /** null — сейчас пробный период: «Ваш тариф» не ставим, на «Профи» — пометка */
+  current?: "free" | TeacherTier | null;
   realPayments?: boolean;
 }) {
   const [period, setPeriod] = useState<BillingPeriod>("month");
@@ -155,6 +156,9 @@ export default function TeacherPlanPicker({
               <p className="mt-3 text-[15px] font-extrabold text-ink">{c.limit}</p>
               <p className="mt-1 text-[12px] leading-snug text-ink-soft">{COMMON}</p>
               <div className="mt-auto pt-4">
+                {current === null && c.key === "pro" && mode === "buy" && (
+                  <p className="mb-2 text-center text-[12px] font-extrabold text-pine-dark">Сейчас у вас пробный «Профи»</p>
+                )}
                 {isCurrent ? (
                   <p className="rounded-xl bg-pine-light px-3 py-2 text-center text-[13px] font-black text-pine-dark">Ваш тариф</p>
                 ) : selectable ? (

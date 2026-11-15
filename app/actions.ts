@@ -62,7 +62,7 @@ import { getCurriculum, FREE_MAX_ENERGY } from "@/lib/queries";
 import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from "@/lib/promo";
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 import { maxPointsForTask, parseReviewScore, resolveDecision, scoreLabel } from "@/lib/ege-points";
-import { createTeacherInvite, cancelTeacherInvite, respondToTeacherInvite, studentLimitError } from "@/lib/teacher-invites";
+import { createTeacherInvite, cancelTeacherInvite, respondToTeacherInvite, studentLimitError, needsEmailForMoreStudents, EMAIL_FOR_MORE_STUDENTS_TEXT } from "@/lib/teacher-invites";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -249,8 +249,8 @@ export async function reviewAttemptAction(
           await pushNotification(tx, {
             userId: link.parentId,
             type: "skill_completed",
-            title: `${student?.name ?? "Ученик"} прошёл(а) навык «${skill?.title ?? ""}»`,
-            body: `Все задачи навыка решены верно.`,
+            title: `${student?.name ?? "Ученик"}: пройдена тема «${skill?.title ?? ""}»`,
+            body: `Все задачи темы решены верно.`,
             link: `/parent/child/${attempt.studentId}`,
           });
         }
@@ -302,14 +302,11 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
   // (выдано вручную из /admin бессрочно) тоже считается активным.
   const isTeacherProActive = isTeacherPaidActive(teacher);
   const plan = teacherPlanState(teacher);
-  // Анти-абуз: бесплатные места для учеников — только после подтверждения
-  // email. Иначе 10 аккаунтов на выдуманные адреса = 30 бесплатных мест.
-  // Платящий репетитор и владелец платформы не затрагиваются.
-  if (!teacher.isPlatformOwner && !isTeacherProActive && !teacher.emailVerifiedAt) {
-    return {
-      error:
-        "Чтобы добавлять учеников, подтвердите email — ссылка в письме после регистрации. Письмо можно отправить ещё раз вверху страницы.",
-    };
+  // Анти-абуз: без подтверждения email — только первые ученики
+  // (lib/teacher-invites.ts:UNVERIFIED_STUDENT_LIMIT). Платящий репетитор и
+  // владелец платформы не затрагиваются.
+  if (needsEmailForMoreStudents(teacher, (await getStudentsOfTeacher(teacher.id)).length, isTeacherProActive)) {
+    return { error: EMAIL_FOR_MORE_STUDENTS_TEXT };
   }
   // Лимит учеников по тарифу: бесплатно 3, «Репетитор» 15, «Профи» и
   // пробный период — без лимита. Уже добавленные ученики не отключаются.

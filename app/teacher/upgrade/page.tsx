@@ -159,7 +159,7 @@ export default async function TeacherUpgradePage(
               <PromoBox active={activePromo} error={promoError} success={promoSuccess} />
               <TeacherPlanPicker
                 mode="buy"
-                current={plan.paidTier ?? "free"}
+                current={plan.source === "trial" ? null : (plan.paidTier ?? "free")}
                 realPayments={realPayments}
                 promo={activePromo ? { code: activePromo.code, percent: activePromo.percent } : null}
               />

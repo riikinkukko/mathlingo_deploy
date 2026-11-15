@@ -45,6 +45,26 @@ export function inviteEligibility(
   return { ok: true };
 }
 
+/**
+ * Сколько учеников можно добавить, не подтвердив email. Раньше было 0 — и
+ * новый репетитор упирался в стену с первой минуты (письмо могло не дойти).
+ * Двух хватает, чтобы попробовать всё; дальше — подтверждение (анти-абуз:
+ * без него 10 выдуманных адресов дали бы 30 бесплатных мест).
+ */
+export const UNVERIFIED_STUDENT_LIMIT = 2;
+
+/** Нужно ли подтвердить email, чтобы добавить ещё ученика. */
+export function needsEmailForMoreStudents(
+  teacher: { emailVerifiedAt?: string | null; isPlatformOwner?: boolean | null } & Parameters<typeof teacherPlanState>[0],
+  currentCount: number,
+  paidActive: boolean
+): boolean {
+  if (teacher.isPlatformOwner || paidActive || teacher.emailVerifiedAt) return false;
+  return currentCount >= UNVERIFIED_STUDENT_LIMIT;
+}
+
+export const EMAIL_FOR_MORE_STUDENTS_TEXT = `Без подтверждения email можно добавить ${UNVERIFIED_STUDENT_LIMIT} учеников. Подтвердите почту — ссылка в письме после регистрации, письмо можно отправить ещё раз.`;
+
 /** Текст ошибки, если у репетитора кончились места по тарифу; null — место есть. */
 export function studentLimitError(
   teacher: Parameters<typeof teacherPlanState>[0],
