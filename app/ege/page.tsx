@@ -3,6 +3,7 @@ import SeoShell, { SeoCta } from "@/components/seo/SeoShell";
 import { EGE_TASKS, EGE_TOPICS } from "@/lib/seo/ege-content";
 import { getAllTaskStats, PART1_LAST, pointsFor, type TaskStats } from "@/lib/seo/ege-data";
 import { pluralRu } from "@/lib/pluralize";
+import { articlesIn, articleUrl } from "@/lib/seo/articles";
 
 export const revalidate = 86400;
 
@@ -84,6 +85,18 @@ export default async function EgeHubPage() {
               {x.topicTitle}
             </a>
           ))}
+        </div>
+      </section>
+
+      <section className="mt-8">
+        <h2 className="mb-3 font-display text-[21px] font-black text-ink">Формулы и советы</h2>
+        <div className="flex flex-wrap gap-2">
+          {[...articlesIn("formuly"), ...articlesIn("sovety")].map((a) => (
+            <a key={a.slug} href={articleUrl(a)} className="rounded-pill border border-line-soft bg-white px-3.5 py-2 text-[14px] font-extrabold text-ink hover:border-pine">
+              {a.section === "formuly" ? `Формулы: ${a.title.toLowerCase()}` : a.title}
+            </a>
+          ))}
+          <a href="/stati" className="rounded-pill bg-pine-light px-3.5 py-2 text-[14px] font-extrabold text-pine-dark">Все статьи →</a>
         </div>
       </section>
 

@@ -21,6 +21,9 @@ export default function SeoShell({
             <a href="/ege" className="hidden h-10 items-center rounded-xl px-3 text-[15px] font-bold text-ink-soft hover:text-ink sm:inline-flex">
               Задания ЕГЭ
             </a>
+            <a href="/stati" className="hidden h-10 items-center rounded-xl px-3 text-[15px] font-bold text-ink-soft hover:text-ink sm:inline-flex">
+              Статьи
+            </a>
             <a
               href="/login"
               className="inline-flex h-10 items-center rounded-xl border-2 border-line bg-white px-4 text-[15px] font-black text-ink hover:border-pine"

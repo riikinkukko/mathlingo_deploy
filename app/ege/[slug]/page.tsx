@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import SeoShell, { SeoCta } from "@/components/seo/SeoShell";
+import { ARTICLES, articleUrl } from "@/lib/seo/articles";
 import DiagramRenderer from "@/components/diagrams/DiagramRenderer";
 import { EGE_TASKS, EGE_TOPICS } from "@/lib/seo/ege-content";
 import { getAllTaskStats, getSampleProblem, PART1_LAST, pointsFor, type SampleProblem, type TaskStats } from "@/lib/seo/ege-data";
@@ -164,6 +165,22 @@ export default async function EgeTaskPage(props: { params: Promise<{ slug: strin
             )}
           </section>
         )}
+
+        {(() => {
+          const sheets = ARTICLES.filter((x) => x.egeNumbers?.includes(t.n));
+          return sheets.length ? (
+            <section className="mt-8">
+              <h2 className="mb-3 font-display text-[21px] font-black text-ink">Пригодится</h2>
+              <div className="flex flex-wrap gap-2">
+                {sheets.map((x) => (
+                  <a key={x.slug} href={articleUrl(x)} className="rounded-pill border border-line-soft bg-white px-3.5 py-2 text-[14px] font-extrabold text-ink hover:border-pine">
+                    {x.section === "formuly" ? `Формулы: ${x.title.toLowerCase()}` : x.title}
+                  </a>
+                ))}
+              </div>
+            </section>
+          ) : null;
+        })()}
 
         <SeoCta
           title={`Тренируй задание №${t.n} по 10 минут в день`}

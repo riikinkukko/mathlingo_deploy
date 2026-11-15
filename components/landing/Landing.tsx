@@ -220,6 +220,12 @@ export default async function Landing({ initial = "tutor" }: { initial?: Audienc
             >
               Разбор всех 20 заданий ЕГЭ по номерам →
             </a>
+            <a
+              href="/stati"
+              className="ml-0 mt-2 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-[15px] font-extrabold text-pine-dark hover:bg-pine-light sm:ml-2"
+            >
+              Формулы, советы родителям и репетиторам →
+            </a>
           </div>
         </section>
 
