@@ -113,7 +113,7 @@ export function mapProblem(row: typeof schema.problems.$inferSelect): Problem {
   };
 }
 
-function mapHomework(row: typeof schema.homeworks.$inferSelect): Homework {
+export function mapHomework(row: typeof schema.homeworks.$inferSelect): Homework {
   return {
     id: row.id,
     teacherId: row.teacherId ?? undefined,

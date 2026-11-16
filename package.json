@@ -25,6 +25,7 @@
     "canvas-confetti": "^1.9.4",
     "disposable-email-domains": "^1.0.62",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
     "jose": "5.9.6",
     "next": "^15.5.28",
     "nodemailer": "^10.0.1",

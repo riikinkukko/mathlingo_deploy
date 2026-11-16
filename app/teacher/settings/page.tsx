@@ -30,6 +30,17 @@ export default async function TeacherSettingsPage(props: { searchParams: Promise
           />
         </TelegramConnectCard>
 
+        <div className="card p-5">
+          <h2 className="font-display text-lg font-black text-ink">Все данные в Excel</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-ink-soft">
+            Ученики с балансами и заметками, все занятия, оплаты, отчёты, пробники и задания — одним файлом. Ваши данные
+            всегда можно забрать с собой.
+          </p>
+          <a href="/teacher/export" className="btn-secondary mt-3 inline-flex" download>
+            Скачать Excel
+          </a>
+        </div>
+
         <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
           <form action={logoutAction}>
