@@ -38,7 +38,13 @@ function getTransporter() {
   return cachedTransporter;
 }
 
+/** Логин без почты (ученик, заведённый репетитором без email) — писем не шлём. */
+export function isLoginOnlyEmail(email: string): boolean {
+  return email.toLowerCase().endsWith("@u.planimetrika.online");
+}
+
 export async function sendEmail(params: { to: string; subject: string; html: string }): Promise<void> {
+  if (isLoginOnlyEmail(params.to)) return;
   if (!isEmailConfigured()) {
     // Не бросаем ошибку наружу — вызывающий код (регистрация, сброс
     // пароля) не должен падать целиком только из-за того, что email ещё

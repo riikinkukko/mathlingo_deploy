@@ -13,7 +13,7 @@ export default async function NewStudentPage() {
   const count = (await getStudentsOfTeacher(user.id)).length;
   const atLimit = count >= plan.limit;
   const needEmail = needsEmailForMoreStudents(user, count, isTeacherEffectivelyPro(user));
-  const unverified = !user.emailVerifiedAt && !user.isPlatformOwner && !isTeacherEffectivelyPro(user);
+  const unverified = !user.emailVerifiedAt && !user.isPlatformOwner && !isTeacherEffectivelyPro(user) && plan.source !== "trial";
   return (
     <TeacherShell active="students" title="Новый ученик">
       <main className="mx-auto max-w-md px-4 py-6">
@@ -42,6 +42,13 @@ export default async function NewStudentPage() {
                 Пока email не подтверждён, можно добавить {UNVERIFIED_STUDENT_LIMIT} учеников (добавлено {count}).
               </p>
             )}
+            <a
+              href="/teacher/students/import"
+              className="mb-4 flex items-center justify-between rounded-2xl border-2 border-dashed border-line bg-white px-4 py-3 text-[14px] font-extrabold text-pine-dark hover:border-pine"
+            >
+              Несколько учеников сразу — вставить список из таблицы
+              <span aria-hidden>→</span>
+            </a>
             <AddStudentForm />
           </>
         )}

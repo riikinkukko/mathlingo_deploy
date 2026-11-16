@@ -69,12 +69,30 @@ export default function AddStudentForm() {
         <input className="input" id="name" name="name" required placeholder="Иван Иванов" />
       </div>
       <div>
-        <label className="label" htmlFor="email">Email</label>
-        <input className="input" id="email" name="email" type="email" required placeholder="ivan@example.ru" />
+        <label className="label" htmlFor="email">Email ученика (необязательно)</label>
+        <input className="input" id="email" name="email" type="email" placeholder="ivan@example.ru" />
       </div>
       <p className="-mt-2 text-[12px] text-ink-soft">
-        Если ученик уже зарегистрирован в Планиметрике сам, мы отправим ему приглашение — прогресс сохранится.
+        Нет почты — не страшно: выдадим ученику логин и пароль, их можно переслать маме в мессенджер. Если ученик уже
+        зарегистрирован в Планиметрике сам, по его email отправим приглашение — прогресс сохранится.
       </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label" htmlFor="grade">Класс</label>
+          <select className="input" id="grade" name="grade" defaultValue="">
+            <option value="">—</option>
+            {[11, 10, 9, 8, 7].map((g) => (
+              <option key={g} value={g}>
+                {g} класс
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="lessonPriceRub">Цена занятия, ₽</label>
+          <input className="input" id="lessonPriceRub" name="lessonPriceRub" type="number" inputMode="numeric" min={100} step={50} placeholder="2000" />
+        </div>
+      </div>
       <div>
         <label className="label" htmlFor="password">Пароль (необязательно)</label>
         <input className="input" id="password" name="password" placeholder="оставьте пустым — сгенерируем" />

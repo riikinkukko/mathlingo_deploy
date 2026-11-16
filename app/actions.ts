@@ -57,6 +57,7 @@ import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
 import { createLessonReport } from "@/lib/lesson-report";
 import { recordSignupSource } from "@/lib/signup-source";
+import { createStudentForTeacher, parseGrade, parsePrice } from "@/lib/student-accounts";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
 import { getCurriculum, FREE_MAX_ENERGY } from "@/lib/queries";
@@ -321,37 +322,34 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
 
   const name = String(formData.get("name") || "").trim().slice(0, 80);
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
-  const password = String(formData.get("password") || "").trim() || generatePassword();
   const consent = formData.get("consent");
 
-  if (!name || !email) return { error: "Заполните имя и email" };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return { error: "Проверьте email ученика" };
+  if (!name) return { error: "Укажите имя ученика" };
   if (consent !== "on") {
     return { error: "Нужно подтвердить, что согласие ученика (или его представителя) получено" };
   }
 
-  const existing = await getUserByEmail(email);
-  // Частый случай: ученик сначала зарегистрировался сам. Привязать чужой
-  // аккаунт молча нельзя — отправляем приглашение, ученик подтверждает сам.
-  if (existing) {
-    const res = await createTeacherInvite(teacher, existing);
-    if (!res.ok) return { error: res.message, inviteError: res.code };
-    revalidatePath("/teacher");
-    return { invited: true as const, name: existing.name, email: existing.email };
-  }
-
-  const studentId = genId("u");
-  await db.insert(schema.users).values({
-    id: studentId,
+  // Email не обязателен: без него ученику выдаётся логин (lib/student-accounts.ts).
+  const res = await createStudentForTeacher(teacher, {
     name,
     email,
-    passwordHash: await hashPassword(password),
-    role: "STUDENT",
-    teacherId: teacher.id,
-    consentGivenAt: new Date(),
+    password: String(formData.get("password") || ""),
+    grade: parseGrade(formData.get("grade")),
+    lessonPriceRub: parsePrice(formData.get("lessonPriceRub")),
   });
+  if (!res.ok) {
+    // Частый случай: ученик сначала зарегистрировался сам. Привязать чужой
+    // аккаунт молча нельзя — отправляем приглашение, ученик подтверждает сам.
+    if (res.existing) {
+      const inv = await createTeacherInvite(teacher, res.existing);
+      if (!inv.ok) return { error: inv.message, inviteError: inv.code };
+      revalidatePath("/teacher");
+      return { invited: true as const, name: res.existing.name, email: res.existing.email };
+    }
+    return { error: res.error };
+  }
   revalidatePath("/teacher");
-  return { success: true, password, email, name, studentId };
+  return { success: true, password: res.password, email: res.email, name: res.name, studentId: res.studentId, loginOnly: res.loginOnly };
 }
 
 // ---------- Приглашения «репетитор → самостоятельный ученик» ----------
