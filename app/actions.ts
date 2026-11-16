@@ -57,6 +57,8 @@ import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
 import { createLessonReport } from "@/lib/lesson-report";
 import { recordSignupSource } from "@/lib/signup-source";
+import { ownTaskPhotoIds } from "@/lib/task-photos";
+import { displayLogin } from "@/lib/email";
 import { createStudentForTeacher, parseGrade, parsePrice } from "@/lib/student-accounts";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
@@ -349,7 +351,7 @@ export async function addStudentAction(_prevState: unknown, formData: FormData) 
     return { error: res.error };
   }
   revalidatePath("/teacher");
-  return { success: true, password: res.password, email: res.email, name: res.name, studentId: res.studentId, loginOnly: res.loginOnly };
+  return { success: true, password: res.password, email: displayLogin(res.email), name: res.name, studentId: res.studentId, loginOnly: res.loginOnly };
 }
 
 // ---------- Приглашения «репетитор → самостоятельный ученик» ----------
@@ -535,6 +537,7 @@ export async function createHomeworkAction(formData: FormData) {
     correctAnswer: string;
     hint: string;
     explanation: string;
+    photoId?: string;
   };
   const customRaw = String(formData.get("customProblems") || "[]");
   let drafts: DraftProblem[] = [];
@@ -550,10 +553,15 @@ export async function createHomeworkAction(formData: FormData) {
         correctAnswer: d.correctAnswer.slice(0, 2000),
         hint: typeof d.hint === "string" ? d.hint.slice(0, 1000) : "",
         explanation: typeof d.explanation === "string" ? d.explanation.slice(0, 3000) : "",
+        photoId: typeof d.photoId === "string" ? d.photoId.slice(0, 40) : undefined,
       }));
   } catch {
     // некорректный JSON от клиента — просто игнорируем свои задачи, банк не трогаем
   }
+
+  // Фото страниц сборника — только свои (загружены этим репетитором).
+  const ownPhotos = await ownTaskPhotoIds(teacher.id, drafts.map((d) => d.photoId ?? ""));
+  for (const d of drafts) if (d.photoId && !ownPhotos.has(d.photoId)) d.photoId = undefined;
 
   // Выдача по шаблону (lib/templates.ts): задачи берём из шаблона этого же
   // репетитора — там могут быть и его авторские задачи без навыка.
@@ -591,6 +599,7 @@ export async function createHomeworkAction(formData: FormData) {
         hints: [d.hint?.trim() || "Внимательно перечитайте условие задачи ещё раз."],
         explanation: d.explanation?.trim() || d.correctAnswer.trim(),
         difficulty: 2,
+        photoId: d.photoId ?? null,
       });
     }
 

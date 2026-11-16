@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { errorText } from "@/lib/api";
+import { api, errorText } from "@/lib/api";
+import { pickSolutionPhoto } from "@/lib/image";
+import { say } from "@/lib/alert";
 import { plural } from "@/lib/hooks";
 import { confirm, KIND_LABEL, mskKey, useT, useTAction, type TBuilder } from "@/lib/teacher";
 import { Button, Card, Empty, ErrorBox, Header, Loading, Pill, Row, Screen, T } from "@/components/ui";
@@ -251,6 +253,113 @@ function Manual({ b, target }: { b: TBuilder; target: Target }) {
   );
 }
 
+/** «5 12», «9: 0,25», «14» → номер и ответ (без ответа — развёрнутое). Как на сайте. */
+function parseNumbers(text: string): { n: string; answer: string }[] {
+  const out: { n: string; answer: string }[] = [];
+  for (const raw of text.split(/\n|;/)) {
+    const m = /^№?\s*(\d{1,3}(?:\.\d{1,3})?[а-яa-z]?)\s*(?:[:)\-—–=.]\s*|\s+|$)(.*)$/i.exec(raw.trim());
+    if (m) out.push({ n: m[1], answer: m[2].trim() });
+  }
+  return out.slice(0, 30);
+}
+
+function Book({ b, target }: { b: TBuilder; target: Target }) {
+  const { run, busy } = useTAction();
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState("");
+  const [photo, setPhoto] = useState<{ id: string; uri: string } | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [numbers, setNumbers] = useState("");
+  const [title, setTitle] = useState("");
+  const [due, setDue] = useState(b.defaultDue);
+  const list = parseNumbers(numbers);
+
+  async function take(camera: boolean) {
+    const data = await pickSolutionPhoto(camera);
+    if (data === "denied") return say("Нет доступа к камере", "Разрешите доступ в настройках телефона или выберите фото из галереи.");
+    if (!data) return;
+    setUploading(true);
+    try {
+      const r = await api<{ id: string }>("/api/task-photo", { body: { data }, timeoutMs: 60_000 });
+      setPhoto({ id: r.id, uri: data });
+    } catch (e) {
+      say("Фото не загрузилось", errorText(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const src = source.trim() || "Сборник";
+  const drafts = photo
+    ? list.map(({ n, answer }) => ({
+        text: `${src} · № ${n}. Условие — на фото.`,
+        answerType: answer ? "NUMBER" : "DETAILED",
+        correctAnswer: answer || "Решение проверяет репетитор",
+        hint: "Посмотри условие на фото ещё раз и проверь вычисления.",
+        explanation: answer ? `Ответ: ${answer}` : "Разбор — в комментарии репетитора.",
+        photoId: photo.id,
+      }))
+    : [];
+
+  return (
+    <>
+      <Section title="Из сборника по фото" />
+      <Card style={{ gap: 10 }}>
+        <T size={13} color={C.inkSoft}>
+          Сфотографируйте страницу Ященко или другого сборника и перечислите номера. С ответом — проверится сам, без ответа — ученик пришлёт решение вам на проверку.
+        </T>
+        <Button title="📷 Задать по фото" kind="secondary" onPress={() => setOpen(true)} />
+      </Card>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Задачи из сборника">
+        <Field label="Откуда задачи" value={source} onChangeText={setSource} placeholder="Ященко 2027, вариант 14" maxLength={80} />
+        {photo ? (
+          <Image source={{ uri: photo.uri }} style={{ width: "100%", height: 200, borderRadius: 12 }} resizeMode="contain" />
+        ) : null}
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Button title={photo ? "Переснять" : "Камера"} kind="secondary" small loading={uploading} onPress={() => take(true)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Button title="Из галереи" kind="secondary" small disabled={uploading} onPress={() => take(false)} />
+          </View>
+        </Row>
+        <Field
+          label="Номера и ответы — по одному в строке"
+          value={numbers}
+          onChangeText={setNumbers}
+          multiline
+          placeholder={"5 12\n9 0,25\n14"}
+          style={{ minHeight: 110, textAlignVertical: "top" }}
+        />
+        <T size={12} color={C.inkSoft}>
+          {list.length ? list.map((x) => `№${x.n}${x.answer ? ` → ${x.answer}` : " (развёрнуто)"}`).join(" · ") : "Номер, пробел, ответ. Без ответа — развёрнутое решение."}
+        </T>
+        <Field label="Название задания" value={title} onChangeText={setTitle} maxLength={120} placeholder={source ? `${source}` : "например, Ященко, вариант 14"} />
+        <DateStepper label="Срок сдачи" value={due} onChange={setDue} min={mskKey()} />
+        <Button
+          title={!photo ? "Сначала фото страницы" : list.length ? `Выдать ${list.length} ${plural(list.length, ["задачу", "задачи", "задач"])}` : "Добавьте номера"}
+          disabled={!photo || !list.length}
+          loading={busy === "createHomework"}
+          onPress={async () => {
+            const r = await run("createHomework", {
+              ...targetFields(target),
+              title: title.trim() || src,
+              kind: "homework",
+              dueDate: due,
+              allowHints: true,
+              customProblems: JSON.stringify(drafts),
+            });
+            if (r) {
+              setOpen(false);
+              router.back();
+            }
+          }}
+        />
+      </Sheet>
+    </>
+  );
+}
+
 export default function HomeworkNew() {
   const p = useLocalSearchParams<{ studentId?: string; groupId?: string }>();
   const target: Target = useMemo(() => (p.groupId ? { groupId: p.groupId } : p.studentId ? { studentId: p.studentId } : {}), [p.groupId, p.studentId]);
@@ -264,6 +373,7 @@ export default function HomeworkNew() {
   return (
     <Screen header={header}>
       <Quick b={b} target={target} />
+      <Book b={b} target={target} />
       <Templates b={b} target={target} />
       <Manual b={b} target={target} />
     </Screen>

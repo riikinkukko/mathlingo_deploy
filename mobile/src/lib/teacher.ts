@@ -149,7 +149,7 @@ export interface TSchedule {
 export interface TReviewItem {
   attemptId: string;
   student: { id: string; name: string };
-  problem: { id: string; text: string; egeTaskNumber: number | null; solution: string; diagramSvg: string | null };
+  problem: { id: string; text: string; egeTaskNumber: number | null; solution: string; diagramSvg: string | null; photoPath?: string | null };
   maxPoints: number | null;
   skillTitle: string;
   answer: string;

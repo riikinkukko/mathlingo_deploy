@@ -1395,6 +1395,12 @@ function Panel({
           <span className={`min-w-0 flex-1 font-semibold text-ink ${condOpen ? "whitespace-pre-wrap" : "line-clamp-2"}`}>{review.problem.text}</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={`mt-0.5 shrink-0 text-ink-soft transition ${condOpen ? "rotate-180" : ""}`} aria-hidden><path d="m6 9 6 6 6-6" /></svg>
         </button>
+        {condOpen && review.problem.photoId && (
+          <a href={`/api/task-photo/${review.problem.photoId}`} target="_blank" rel="noreferrer" className="mt-2 block overflow-hidden rounded-xl border border-line-soft">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/task-photo/${review.problem.photoId}`} alt="Условие — фото страницы" className="max-h-[50vh] w-full object-contain" />
+          </a>
+        )}
         {condOpen && review.problem.diagram && (
           <div className="mx-auto mt-2 max-w-[300px]">
             <DiagramRenderer spec={review.problem.diagram} />

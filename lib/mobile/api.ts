@@ -49,6 +49,8 @@ export interface MobileProblem {
   answerType: Problem["answerType"];
   choices: { id: string; text: string }[] | null;
   diagramSvg: string | null;
+  /** Фото страницы сборника (условие задачи репетитора): путь на сервере, грузить с токеном. */
+  photoPath: string | null;
   keyFormula: string | null;
   egeTaskNumber: number | null;
   /** Подсказки по нарастающей (без ответа) — для урока без сети. */
@@ -70,6 +72,7 @@ export function mobileProblem(p: Problem, opts: { offline?: boolean } = {}): Mob
     answerType: p.answerType,
     choices: p.choices ?? null,
     diagramSvg: diagramSvg(p.diagram),
+    photoPath: p.photoId ? `/api/task-photo/${p.photoId}` : null,
     keyFormula: p.keyFormula ?? null,
     egeTaskNumber: p.egeTaskNumber ?? null,
     hints: offline ? p.hints : [],

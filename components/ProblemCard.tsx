@@ -345,6 +345,20 @@ export default function ProblemCard({
         </div>
       )}
 
+      {/* Фото страницы сборника — условие задачи репетитора «из Ященко» */}
+      {problem.photoId && (
+        <a
+          href={`/api/task-photo/${problem.photoId}`}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-4 block overflow-hidden rounded-2xl border border-line-soft bg-paper"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={`/api/task-photo/${problem.photoId}`} alt="Условие задачи — фото страницы" className="max-h-[70vh] w-full object-contain" />
+          <span className="block border-t border-line-soft px-3 py-1.5 text-[12px] font-bold text-ink-soft">Нажми, чтобы открыть крупно</span>
+        </a>
+      )}
+
       {/* Диаграмма — тап открывает черновик для пометок */}
       {problem.diagram && (
         <>

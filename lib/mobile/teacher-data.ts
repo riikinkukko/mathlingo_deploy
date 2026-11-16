@@ -313,6 +313,7 @@ export async function teacherReviews(user: User) {
             egeTaskNumber: it.problem.egeTaskNumber,
             solution: it.problem.solution,
             diagramSvg: diagramSvg(it.problem.diagram ?? undefined),
+            photoPath: it.problem.photoId ? `/api/task-photo/${it.problem.photoId}` : null,
           },
           maxPoints: it.problem.egeTaskNumber ? maxPointsForTask(it.problem.egeTaskNumber) : null,
           skillTitle: it.skillTitle,

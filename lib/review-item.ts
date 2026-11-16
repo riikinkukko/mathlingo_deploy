@@ -15,6 +15,7 @@ export interface ReviewItem {
     /** эталонное решение — для сверки репетитором */
     solution: string;
     diagram: DiagramSpec | null;
+    photoId: string | null;
   };
   skillTitle: string;
   answer: string;
@@ -37,6 +38,7 @@ export function toReviewItem(r: PendingReview, extra: Partial<Pick<ReviewItem, "
       egeTaskNumber: r.problem.egeTaskNumber ?? null,
       solution: r.problem.explanation || r.problem.correctAnswer,
       diagram: r.problem.diagram ?? null,
+      photoId: r.problem.photoId ?? null,
     },
     skillTitle: r.skillTitle,
     // «(решение на фото)» — заглушка, когда ученик приложил только фото.

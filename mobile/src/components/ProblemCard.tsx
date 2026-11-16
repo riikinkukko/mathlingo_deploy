@@ -15,6 +15,7 @@ import { loadSketch, type SketchItem } from "@/lib/sketch";
 import type { MobileProblem, ProblemStateM } from "@/lib/types";
 import { Button, Card, Pill, Row, T } from "./ui";
 import { Diagram, Icon, Mascot } from "./Svg";
+import TaskPhoto from "./TaskPhoto";
 import { Confetti, Pop, PressScale } from "./motion";
 import Scratchpad, { SketchSheet, type ViewRef } from "./Scratchpad";
 
@@ -198,6 +199,8 @@ export default function ProblemCard({
           </T>
         </View>
       ) : null}
+
+      {problem.photoPath ? <TaskPhoto path={problem.photoPath} /> : null}
 
       {problem.diagramSvg ? (
         <View style={{ gap: 6 }}>

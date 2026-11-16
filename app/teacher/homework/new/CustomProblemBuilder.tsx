@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import BookTasksBuilder from "./BookTasksBuilder";
 
 export interface DraftProblem {
   text: string;
@@ -8,18 +9,25 @@ export interface DraftProblem {
   correctAnswer: string;
   hint: string;
   explanation: string;
+  photoId?: string;
 }
 
 const EMPTY: DraftProblem = { text: "", answerType: "NUMBER", correctAnswer: "", hint: "", explanation: "" };
 
 export default function CustomProblemBuilder() {
   const [open, setOpen] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
   const [draft, setDraft] = useState<DraftProblem>(EMPTY);
   const [added, setAdded] = useState<DraftProblem[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   // Скрытое поле не шлёт событий — сообщаем форме сами, чтобы счётчик
   // на кнопке «Назначить задание» учитывал свои задачи.
   const mounted = useRef(false);
+  useEffect(() => {
+    const open = () => setBookOpen(true);
+    window.addEventListener("open-book-tasks", open);
+    return () => window.removeEventListener("open-book-tasks", open);
+  }, []);
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
@@ -40,7 +48,7 @@ export default function CustomProblemBuilder() {
   }
 
   return (
-    <div ref={rootRef}>
+    <div ref={rootRef} id="book-tasks" className="scroll-mt-24">
       <input type="hidden" name="customProblems" value={JSON.stringify(added)} />
 
       <p className="mb-2 text-xs font-extrabold uppercase tracking-wide text-ink-soft">
@@ -52,7 +60,7 @@ export default function CustomProblemBuilder() {
           {added.map((p, i) => (
             <div key={i} className="card flex items-start justify-between gap-3 p-3 text-sm">
               <div className="min-w-0">
-                <p className="text-ink">{p.text}</p>
+                <p className="text-ink">{p.photoId ? "📷 " : ""}{p.text}</p>
                 <p className="mt-0.5 text-[11px] text-ink-soft">
                   {p.answerType === "DETAILED" ? "Развёрнутый ответ" : `Ответ: ${p.correctAnswer}`}
                 </p>
@@ -69,14 +77,23 @@ export default function CustomProblemBuilder() {
         </div>
       )}
 
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="btn-secondary !text-xs"
-        >
-          + Написать свою задачу
-        </button>
+      {bookOpen ? (
+        <BookTasksBuilder
+          onAdd={(d) => {
+            setAdded((prev) => [...prev, ...d]);
+            setBookOpen(false);
+          }}
+          onCancel={() => setBookOpen(false)}
+        />
+      ) : !open ? (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBookOpen(true)} className="btn-secondary !text-xs">
+            📷 Из сборника по фото
+          </button>
+          <button type="button" onClick={() => setOpen(true)} className="btn-secondary !text-xs">
+            + Написать свою задачу
+          </button>
+        </div>
       ) : (
         <div className="card space-y-3 p-4">
           <div>

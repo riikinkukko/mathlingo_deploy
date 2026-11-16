@@ -7,6 +7,7 @@ import TeacherShell from "@/components/TeacherShell";
 import { createHomeworkAction } from "@/app/actions";
 import AssignmentKindPicker from "./AssignmentKindPicker";
 import CustomProblemBuilder from "./CustomProblemBuilder";
+import OpenBookButton from "./OpenBookButton";
 import SelectedSubmitBar from "./SelectedSubmitBar";
 import QuickHomework from "@/components/QuickHomework";
 import { weakSpotsSummary, availableExamNumbers } from "@/lib/quick-homework";
@@ -154,6 +155,8 @@ export default async function NewHomeworkPage(
         />
 
         <form action={createHomeworkAction} className="space-y-6">
+          <OpenBookButton />
+
           {group ? (
             <input type="hidden" name="groupId" value={group.id} />
           ) : (

@@ -417,7 +417,23 @@ export const problems = pgTable("problems", {
   difficulty: integer("difficulty").notNull(),
   egeTaskNumber: integer("ege_task_number"),
   tier: tierEnum("tier"),
+  // Фото страницы сборника (своя задача репетитора «из Ященко»): условие на
+  // снимке, сама картинка — в task_photos и отдаётся по /api/task-photo/[id].
+  photoId: text("photo_id").references((): AnyPgColumn => taskPhotos.id, { onDelete: "set null" }),
 });
+
+// Снимки страниц сборников для заданий репетитора. Одна страница может быть
+// условием сразу нескольких задач (№ 5, 9, 12 одного варианта).
+export const taskPhotos = pgTable("task_photos", {
+  id: text("id").primaryKey(),
+  teacherId: text("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  data: text("data").notNull(), // data URL JPEG, до ~900 КБ
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byTeacher: index("task_photos_teacher_idx").on(t.teacherId),
+}));
 
 export const attempts = pgTable("attempts", {
   id: text("id").primaryKey(),

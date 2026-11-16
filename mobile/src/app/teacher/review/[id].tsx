@@ -3,6 +3,7 @@ import { say } from "@/lib/alert";
 import { View, useWindowDimensions } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { authedImage } from "@/lib/api";
+import TaskPhoto from "@/components/TaskPhoto";
 import { relDay, timeLabel, useT, useTAction } from "@/lib/teacher";
 import { Button, Card, Empty, Header, Loading, Pill, Row, Screen, T } from "@/components/ui";
 import { Field } from "@/components/Field";
@@ -64,6 +65,7 @@ export default function ReviewOne() {
         </T>
         <T>{r.problem.text}</T>
         {r.problem.diagramSvg ? <Diagram svg={r.problem.diagramSvg} maxHeight={220} /> : null}
+        {r.problem.photoPath ? <TaskPhoto path={r.problem.photoPath} height={240} /> : null}
       </Card>
 
       {r.answer ? (

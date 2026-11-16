@@ -62,6 +62,8 @@ export interface MobileProblem {
   answerType: "NUMBER" | "CHOICE" | "DETAILED";
   choices: { id: string; text: string }[] | null;
   diagramSvg: string | null;
+  /** Фото страницы сборника (задача репетитора); нет у старого сервера. */
+  photoPath?: string | null;
   keyFormula: string | null;
   egeTaskNumber: number | null;
   hints: string[];

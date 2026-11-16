@@ -110,6 +110,7 @@ export function mapProblem(row: typeof schema.problems.$inferSelect): Problem {
     difficulty: row.difficulty as 1 | 2 | 3,
     egeTaskNumber: row.egeTaskNumber ?? undefined,
     tier: row.tier ?? undefined,
+    photoId: row.photoId ?? undefined,
   };
 }
 

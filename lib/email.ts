@@ -43,6 +43,17 @@ export function isLoginOnlyEmail(email: string): boolean {
   return email.toLowerCase().endsWith("@u.planimetrika.online");
 }
 
+/** Логин для показа: без служебного домена («masha.sokolova.2665»). */
+export function displayLogin(email: string): string {
+  return isLoginOnlyEmail(email) ? email.slice(0, email.lastIndexOf("@")) : email;
+}
+
+/** Что ввели в поле входа: логин без «@» дополняем служебным доменом. */
+export function loginToEmail(input: string): string {
+  const v = input.trim().toLowerCase();
+  return v && !v.includes("@") ? `${v}@u.planimetrika.online` : v;
+}
+
 export async function sendEmail(params: { to: string; subject: string; html: string }): Promise<void> {
   if (isLoginOnlyEmail(params.to)) return;
   if (!isEmailConfigured()) {

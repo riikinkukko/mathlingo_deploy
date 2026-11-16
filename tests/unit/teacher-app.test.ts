@@ -129,3 +129,25 @@ test("занятия: вт и чт одной формой, пересечени
   const [back] = await db.select().from(schema.scheduledLessons).where(eq(schema.scheduledLessons.id, first.id));
   assert.equal(back.status, "planned");
 });
+
+test("задание из сборника по фото: задачи с фото, ответ — проверка, без ответа — развёрнутое; чужое фото не прикрепить", async () => {
+  const { saveTaskPhoto } = await import("../../lib/task-photos");
+  const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  const t = await makeUser({ role: "TEACHER" });
+  const other = await makeUser({ role: "TEACHER" });
+  const s = await makeUser({ teacherId: t.id });
+  const mine = await saveTaskPhoto(t, PNG);
+  const theirs = await saveTaskPhoto(other, PNG);
+  assert.ok("id" in mine && "id" in theirs);
+  if (!("id" in mine) || !("id" in theirs)) return;
+  const drafts = [
+    { text: "Ященко · № 5. Условие — на фото.", answerType: "NUMBER", correctAnswer: "12", hint: "", explanation: "", photoId: mine.id },
+    { text: "Ященко · № 14. Условие — на фото.", answerType: "DETAILED", correctAnswer: "Решение проверяет репетитор", hint: "", explanation: "", photoId: mine.id },
+    { text: "Чужое", answerType: "NUMBER", correctAnswer: "1", hint: "", explanation: "", photoId: theirs.id },
+  ];
+  const r = await act(t, "createHomework", { studentId: s.id, title: "Ященко, вариант 14", dueDate: "2030-01-01", kind: "homework", allowHints: true, customProblems: JSON.stringify(drafts) });
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  const [hw] = await db.select().from(schema.homeworks).where(eq(schema.homeworks.studentId, s.id));
+  const probs = await Promise.all(hw.problemIds.map(async (id) => (await db.select().from(schema.problems).where(eq(schema.problems.id, id)))[0]));
+  assert.deepEqual(probs.map((p) => [p.answerType, p.photoId]), [["NUMBER", mine.id], ["DETAILED", mine.id], ["NUMBER", null]]);
+});
