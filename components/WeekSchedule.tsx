@@ -372,7 +372,13 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
                   <input type="hidden" name="lessonId" value={item.id} />
                   <input type="hidden" name="status" value="done" />
                   <input type="hidden" name="from" value="schedule" />
-                  <button type="submit" className="h-11 w-full rounded-xl bg-pine-dark text-[15px] font-black text-white">
+                  <button
+                    type="submit"
+                    onClick={(e) => {
+                      if (!started && !window.confirm("Занятие ещё не началось. Отметить его проведённым? Оно засчитается в оплату.")) e.preventDefault();
+                    }}
+                    className="h-11 w-full rounded-xl bg-pine-dark text-[15px] font-black text-white"
+                  >
                     {started ? "Было" : "Провести"}
                   </button>
                 </form>

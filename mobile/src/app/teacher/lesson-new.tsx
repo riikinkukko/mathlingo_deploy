@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { errorText } from "@/lib/api";
-import { mskKey, timeLabel, useT, useTAction } from "@/lib/teacher";
+import { say } from "@/lib/alert";
+import { mskKey, tAction, timeLabel, useT } from "@/lib/teacher";
 import { Button, Card, ErrorBox, Header, Loading, Screen, T } from "@/components/ui";
 import { Field } from "@/components/Field";
 import { Chip, Chips, DateStepper, Seg, TimeStepper } from "@/components/teacher";
@@ -11,6 +13,7 @@ import { C } from "@/theme";
 const DURATIONS = [45, 60, 90, 120];
 const REPEATS: [number, string][] = [
   [1, "Один раз"],
+  [0, "До конца мая"],
   [4, "4 нед."],
   [8, "8 нед."],
   [12, "12 нед."],
@@ -21,7 +24,9 @@ const REPEATS: [number, string][] = [
 export default function LessonNew() {
   const p = useLocalSearchParams<{ studentId?: string; groupId?: string; date?: string; lessonId?: string; startsAt?: string; durationMin?: string; series?: string; group?: string; title?: string }>();
   const move = !!p.lessonId;
-  const { run, busy } = useTAction();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const [days, setDays] = useState<Set<number>>(new Set());
   const sched = useT("schedule", { week: null }, !move);
   const [target, setTarget] = useState(p.groupId ? `g:${p.groupId}` : p.studentId ?? "");
   const [date, setDate] = useState(p.startsAt ? mskKey(new Date(p.startsAt)) : p.date ?? mskKey());
@@ -31,12 +36,26 @@ export default function LessonNew() {
   const [topic, setTopic] = useState("");
   const [scope, setScope] = useState<"one" | "following">("one");
 
-  async function save() {
+  async function save(force = false) {
     const startsAt = `${date}T${time}`;
-    const r = move
-      ? await run("rescheduleLesson", { lessonId: p.lessonId, startsAt, durationMin: dur, scope, wholeGroup: p.group ? "1" : undefined })
-      : await run("createLesson", { studentId: target, startsAt, durationMin: dur, repeatWeeks: repeat, topic });
-    if (r) router.back();
+    setBusy(true);
+    try {
+      if (move) await tAction("rescheduleLesson", { lessonId: p.lessonId, startsAt, durationMin: dur, scope, wholeGroup: p.group ? "1" : undefined, force });
+      else await tAction("createLesson", { studentId: target, startsAt, durationMin: dur, repeatWeeks: repeat, topic, days: repeat === 1 ? [] : [...days], force });
+      await qc.invalidateQueries({ queryKey: ["t"] });
+      router.back();
+    } catch (e) {
+      const msg = errorText(e);
+      // Пересечение с другим занятием — спрашиваем и при согласии ставим всё равно.
+      if (!force && /Всё равно/.test(msg)) {
+        say("В это время уже есть занятие", msg.replace(/\. Если так и нужно.*$/, "."), [
+          { text: "Отмена", style: "cancel" },
+          { text: move ? "Перенести всё равно" : "Поставить всё равно", onPress: () => void save(true) },
+        ]);
+      } else say("Не получилось", msg);
+    } finally {
+      setBusy(false);
+    }
   }
 
   const header = <Header title={move ? "Перенести занятие" : "Новое занятие"} subtitle={move ? p.title : undefined} />;
@@ -94,6 +113,30 @@ export default function LessonNew() {
               <Chip key={n} label={l} on={repeat === n} onPress={() => setRepeat(n)} />
             ))}
           </Chips>
+          {repeat !== 1 ? (
+            <View style={{ gap: 6 }}>
+              <T w="extrabold" size={13} color={C.inkSoft}>
+                Ещё в эти дни, в то же время
+              </T>
+              <Chips>
+                {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d, i) => (
+                  <Chip
+                    key={d}
+                    label={d}
+                    on={days.has(i)}
+                    onPress={() =>
+                      setDays((s0) => {
+                        const n = new Set(s0);
+                        if (n.has(i)) n.delete(i);
+                        else n.add(i);
+                        return n;
+                      })
+                    }
+                  />
+                ))}
+              </Chips>
+            </View>
+          ) : null}
           <Field label="Тема (необязательно)" value={topic} onChangeText={setTopic} placeholder="например, Параметры" maxLength={200} />
         </Card>
       )}
@@ -102,7 +145,7 @@ export default function LessonNew() {
           Ученику придёт уведомление о новом времени.
         </T>
       ) : null}
-      <Button title={move ? "Перенести" : "Запланировать"} disabled={!move && !target} loading={!!busy} onPress={save} />
+      <Button title={move ? "Перенести" : "Запланировать"} disabled={!move && !target} loading={busy} onPress={() => void save()} />
     </Screen>
   );
 }

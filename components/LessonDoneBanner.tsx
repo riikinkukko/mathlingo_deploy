@@ -1,4 +1,5 @@
 import { ScheduledLesson } from "@/lib/types";
+import { setLessonStatusAction } from "@/app/actions-schedule";
 
 /**
  * Плашка после «Провести / ✓ Было»: предлагает сразу записать отчёт о занятии.
@@ -39,9 +40,20 @@ export default function LessonDoneBanner({
           Запишите короткий отчёт — ученик и родители получат его в приложении и в Telegram.
         </p>
       </div>
-      <a href={href} className="btn-primary shrink-0">
-        ✍️ Записать отчёт
-      </a>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <a href={href} className="btn-primary">
+          ✍️ Записать отчёт
+        </a>
+        {/* Промахнулись с «Провести» — вернуть занятие в план одним нажатием. */}
+        <form action={setLessonStatusAction}>
+          <input type="hidden" name="lessonId" value={lesson.id} />
+          <input type="hidden" name="status" value="planned" />
+          <input type="hidden" name="from" value={onStudentPage ? "student" : "schedule"} />
+          <button type="submit" className="h-10 rounded-pill px-3 text-[13px] font-extrabold text-ink-soft hover:bg-white">
+            Отменить отметку
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

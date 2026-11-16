@@ -48,8 +48,10 @@ export function inviteEligibility(
 /**
  * Сколько учеников можно добавить, не подтвердив email. Раньше было 0 — и
  * новый репетитор упирался в стену с первой минуты (письмо могло не дойти).
- * Двух хватает, чтобы попробовать всё; дальше — подтверждение (анти-абуз:
- * без него 10 выдуманных адресов дали бы 30 бесплатных мест).
+ * На пробном «Профи» почта не нужна вовсе: репетитор решает в первые минуты,
+ * а письмо может уйти в спам (критика репетитора со стажем — 14 учеников).
+ * После пробного без подтверждения — только двое (анти-абуз: иначе 10
+ * выдуманных адресов дали бы 30 бесплатных мест).
  */
 export const UNVERIFIED_STUDENT_LIMIT = 2;
 
@@ -60,6 +62,7 @@ export function needsEmailForMoreStudents(
   paidActive: boolean
 ): boolean {
   if (teacher.isPlatformOwner || paidActive || teacher.emailVerifiedAt) return false;
+  if (teacherPlanState(teacher).source === "trial") return false;
   return currentCount >= UNVERIFIED_STUDENT_LIMIT;
 }
 

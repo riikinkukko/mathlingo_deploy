@@ -13,7 +13,7 @@ import { countDistinctLessons, getGroupsOfTeacher } from "@/lib/groups";
 import { debtText, hasDebt } from "@/lib/money";
 import { teacherPlanState, TEACHER_TIERS } from "@/lib/teacher-plan";
 import { countPaidChecksWaiting, isReviewer } from "@/lib/paid-review";
-import { getPendingInvitesForTeacher } from "@/lib/teacher-invites";
+import { getPendingInvitesForTeacher, UNVERIFIED_STUDENT_LIMIT } from "@/lib/teacher-invites";
 import { cancelTeacherInviteAction } from "@/app/actions";
 import StudentTable, { StudentTableRow, PendingInviteRow } from "@/components/teacher/StudentTable";
 
@@ -166,8 +166,8 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
               <VerifyEmailReminder
                 compact
                 reason={
-                  !isOwner && !isPro
-                    ? "Подтвердите email — без этого нельзя добавлять учеников"
+                  !isOwner && !isPro && teacherPlanState(user).source !== "trial"
+                    ? `Подтвердите email: пока он не подтверждён, можно добавить только ${UNVERIFIED_STUDENT_LIMIT} учеников`
                     : undefined
                 }
               />

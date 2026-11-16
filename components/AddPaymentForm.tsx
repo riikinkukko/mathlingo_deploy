@@ -99,7 +99,7 @@ export default function AddPaymentForm({
             inputMode="numeric"
             min={1}
             step={1}
-            placeholder="например, 6000"
+            placeholder="6000"
             required
             value={amount}
             onChange={(e) => setAmount(e.target.value)}

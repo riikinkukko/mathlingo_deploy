@@ -22,11 +22,11 @@ export default function StudentNew() {
     <Screen header={<Header title="Новый ученик" />}>
       <Card style={{ gap: 12 }}>
         <Field label="Имя и фамилия" value={name} onChangeText={setName} placeholder="Иван Иванов" maxLength={80} />
-        <Field label="Email ученика" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="ivan@example.ru" />
+        <Field label="Email ученика (необязательно)" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="нет почты — выдадим логин" />
         <Field label="Пароль" value={password} onChangeText={setPassword} autoCapitalize="none" placeholder="оставьте пустым — придумаем сами" />
         <Toggle label="Согласие получено" text="Ученика (или его представителя) — на обработку персональных данных" value={consent} onChange={setConsent} />
       </Card>
-      {home && !home.emailVerified && home.plan.source !== "owner" ? (
+      {home && !home.emailVerified && home.plan.source !== "owner" && home.plan.source !== "trial" ? (
         <Card style={{ backgroundColor: C.amberLight, borderColor: C.amber }}>
           <T size={13} w="bold">
             Пока email не подтверждён, можно добавить 2 учеников. Ссылка для подтверждения — в письме после регистрации.
@@ -38,7 +38,7 @@ export default function StudentNew() {
       </T>
       <Button
         title="Добавить"
-        disabled={!name.trim() || !email.trim() || !consent}
+        disabled={!name.trim() || !consent}
         loading={!!busy}
         onPress={async () => {
           const r = (await run("addStudent", { name, email, password, consent })) as { result?: Res } | null;
@@ -48,7 +48,7 @@ export default function StudentNew() {
           if (res.invited) {
             say("Приглашение отправлено", `${res.name} увидит его в своём кабинете.`);
           } else if (res.password) {
-            const msg = `Вход в Планиметрику: planimetrika.online\nEmail: ${res.email}\nПароль: ${res.password}`;
+            const msg = `Вход в Планиметрику: planimetrika.online\nЛогин: ${res.email}\nПароль: ${res.password}`;
             say("Ученик добавлен", `Передайте ученику данные для входа:\n\n${res.email}\n${res.password}`, [
               { text: "Отправить", onPress: () => void Share.share({ message: msg }) },
               { text: "Готово" },

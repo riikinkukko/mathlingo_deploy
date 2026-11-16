@@ -239,11 +239,15 @@ export default async function StudentDetailPage(
               )}
               {upcomingLessons[0] && (
                 <span className="rounded-pill border border-line-soft bg-white px-2.5 py-0.5 text-[12px] font-bold text-ink-soft">
-                  {new Date(upcomingLessons[0].startsAt).toLocaleString("ru-RU", {
-                    timeZone: "Europe/Moscow",
-                    weekday: "short",
-                  })}{" "}
-                  {lessonTimeRange(upcomingLessons[0].startsAt, upcomingLessons[0].durationMin)}
+                  {/* Регулярные дни (вт и чт), а не только ближайшее занятие. */}
+                  {(() => {
+                    const wd = (iso: string) => new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Moscow", weekday: "short" });
+                    const week = upcomingLessons.filter((l) => new Date(l.startsAt).getTime() < new Date(upcomingLessons[0].startsAt).getTime() + 7 * 86_400_000);
+                    const days = [...new Set(week.map((l) => wd(l.startsAt)))];
+                    return days.length > 1
+                      ? `${days.join(", ")} · ближайшее ${wd(upcomingLessons[0].startsAt)} ${lessonTimeRange(upcomingLessons[0].startsAt, upcomingLessons[0].durationMin)}`
+                      : `${wd(upcomingLessons[0].startsAt)} ${lessonTimeRange(upcomingLessons[0].startsAt, upcomingLessons[0].durationMin)}`;
+                  })()}
                 </span>
               )}
               {pendingReviews.length > 0 && (

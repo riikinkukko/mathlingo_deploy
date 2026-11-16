@@ -593,9 +593,12 @@ export default function ProblemCard({
             <>
               <p className="mb-1 flex items-center gap-1.5 font-extrabold text-amber-text">
                 <IconLightbulb className="h-4 w-4 shrink-0" />
-                Пока не то. Подсказка:
+                {wrongState.hint?.trim() ? "Пока не то. Подсказка:" : "Пока не то"}
               </p>
-              <p className="text-ink-soft">{wrongState.hint}</p>
+              <p className="text-ink-soft">
+                {/* У своих задач репетитора подсказки может не быть — не показываем пустое «Подсказка:». */}
+                {wrongState.hint?.trim() || "Проверь вычисления и попробуй ещё раз."}
+              </p>
 
               {solution ? (
                 <div className="mt-3 rounded-xl border border-line bg-white p-3">

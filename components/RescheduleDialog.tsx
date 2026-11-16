@@ -95,6 +95,12 @@ export default function RescheduleDialog({
         )}
         <p className="text-[12px] text-ink-soft">Ученик{wholeGroup ? "и группы получат" : " получит"} уведомление о новом времени.</p>
         {state?.error && <p className="text-sm font-semibold text-coral">{state.error}</p>}
+        {state?.conflict && (
+          <label className="flex items-center gap-2 text-sm font-bold text-ink">
+            <input type="checkbox" name="force" className="h-5 w-5 accent-pine" />
+            Всё равно перенести
+          </label>
+        )}
         <div className="flex gap-2">
           <Submit />
           <button type="button" onClick={onClose} className="h-12 rounded-2xl border-2 border-line px-4 text-[15px] font-extrabold text-ink-soft">

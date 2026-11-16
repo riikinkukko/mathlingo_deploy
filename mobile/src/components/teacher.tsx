@@ -264,7 +264,7 @@ export function LessonCard({ lesson, showDay = false, from = "schedule" }: { les
           ) : null}
         </View>
         {st ? <Pill text={st.text} bg={st.bg} color={st.color} /> : null}
-        {planned ? (
+        {planned || !group ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Действия с занятием" hitSlop={8} onPress={() => setMenu(true)} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}>
             <T w="black" size={20} color={C.inkSoft}>
               ⋯
@@ -286,7 +286,18 @@ export function LessonCard({ lesson, showDay = false, from = "schedule" }: { les
         )
       ) : null}
 
-      <Sheet open={menu} onClose={() => setMenu(false)} title={lesson.title}>
+      <Sheet open={menu && !planned} onClose={() => setMenu(false)} title={lesson.title}>
+        <SheetItem
+          title="Отменить отметку"
+          text="Вернуть занятие в план — например, если отметили по ошибке"
+          onPress={async () => {
+            setMenu(false);
+            await run("setLessonStatus", { lessonId: lesson.id, status: "planned", from });
+          }}
+        />
+      </Sheet>
+
+      <Sheet open={menu && planned} onClose={() => setMenu(false)} title={lesson.title}>
         {past && !group ? <SheetItem title="Было" onPress={() => mark("done")} /> : null}
         {past && !group ? <SheetItem title="Не пришёл" text="Занятие засчитается, если пропуски оплачиваются" onPress={() => mark("missed")} /> : null}
         {past && group ? <SheetItem title="Отметить, кто был" onPress={() => (setMenu(false), setAttendance(true))} /> : null}

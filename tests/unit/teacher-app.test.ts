@@ -102,3 +102,30 @@ test("данные экранов: свой ученик виден, чужой 
   }
   assert.equal((await data(s, "view=home")).status, 403);
 });
+
+test("занятия: вт и чт одной формой, пересечение — предупреждение, «всё равно» — ставит; отмена отметки", async () => {
+  const t = await makeUser({ role: "TEACHER" });
+  const s = await makeUser({ teacherId: t.id });
+  const s2 = await makeUser({ teacherId: t.id });
+  // 2030-03-05 — вторник. Ещё четверг (3), 4 недели → 8 занятий.
+  const r = await act(t, "createLesson", { studentId: s.id, startsAt: "2030-03-05T17:00", durationMin: 60, repeatWeeks: 4, days: [3] });
+  assert.equal(r.status, 200, JSON.stringify(await r.clone().json()));
+  const rows = await db.select().from(schema.scheduledLessons).where(eq(schema.scheduledLessons.studentId, s.id));
+  assert.equal(rows.length, 8);
+  const days = new Set(rows.map((x) => new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Moscow", weekday: "short" }).format(x.startsAt)));
+  assert.deepEqual([...days].sort(), ["Thu", "Tue"]);
+
+  // Другой ученик на то же время — предупреждение.
+  const c = await act(t, "createLesson", { studentId: s2.id, startsAt: "2030-03-07T17:30", durationMin: 60, repeatWeeks: 1 });
+  assert.equal(c.status, 400);
+  assert.match((await c.json()).error, /Всё равно/);
+  const f = await act(t, "createLesson", { studentId: s2.id, startsAt: "2030-03-07T17:30", durationMin: 60, repeatWeeks: 1, force: true });
+  assert.equal(f.status, 200);
+
+  // Отметили по ошибке — вернули в план.
+  const first = rows.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
+  await act(t, "setLessonStatus", { lessonId: first.id, status: "done" });
+  await act(t, "setLessonStatus", { lessonId: first.id, status: "planned" });
+  const [back] = await db.select().from(schema.scheduledLessons).where(eq(schema.scheduledLessons.id, first.id));
+  assert.equal(back.status, "planned");
+});

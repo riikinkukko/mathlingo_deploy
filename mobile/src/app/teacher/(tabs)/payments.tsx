@@ -64,7 +64,7 @@ export default function TeacherPayments() {
             {b.debt ? (
               <Pill text={`долг ${b.debt}`} bg={C.coralLight} color={C.coralText} />
             ) : (b.balanceRub ?? b.balance) > 0 ? (
-              <Pill text={b.balanceRub !== null ? `+${rub(b.balanceRub)}` : `+${b.balance} ${plural(b.balance, ["занятие", "занятия", "занятий"])}`} />
+              <Pill text={`осталось ${b.balance} ${plural(b.balance, ["занятие", "занятия", "занятий"])}`} />
             ) : (
               <Pill text="0" bg={C.paper} color={C.inkSoft} />
             )}

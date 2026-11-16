@@ -1,3 +1,4 @@
+import ConfirmSubmitButton from "@/components/ConfirmSubmitButton";
 import { setLessonStatusAction } from "@/app/actions-schedule";
 import LessonDeleteControl from "./LessonDeleteControl";
 import GroupLessonActions from "./GroupLessonActions";
@@ -155,8 +156,8 @@ export default function UpcomingLessons({
                     <input type="hidden" name="from" value={from} />
                     {/* Прошедшее занятие: три равноправных варианта. Залитая зелёным
                         «✓ Было» читалась как уже выбранная отметка. */}
-                    <button
-                      type="submit"
+                    <ConfirmSubmitButton
+                      confirmText={past ? undefined : "Занятие ещё не началось. Отметить его проведённым? Оно засчитается в оплату."}
                       className={
                         past
                           ? PAST_CHOICE + " hover:border-pine hover:bg-pine-light hover:text-pine-dark"
@@ -164,7 +165,7 @@ export default function UpcomingLessons({
                       }
                     >
                       {past ? "Было" : "Провести"}
-                    </button>
+                    </ConfirmSubmitButton>
                   </form>
                   <form action={setLessonStatusAction} className="flex-1 lg:flex-none">
                     <input type="hidden" name="lessonId" value={l.id} />

@@ -89,7 +89,7 @@ export function AddMockScoreForm({ studentId }: { studentId: string }) {
   return (
     <form ref={formRef} action={action} onSubmit={keepAction} className="card space-y-3 p-4">
       <input type="hidden" name="studentId" value={studentId} />
-      <div className="grid gap-3 sm:grid-cols-[120px_170px_1fr]">
+      <div className="grid gap-3 sm:grid-cols-[120px_170px_minmax(0,1fr)] [&>div]:min-w-0">
         <div>
           <label className="label" htmlFor="mock-score">Балл</label>
           <input

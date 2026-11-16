@@ -228,9 +228,7 @@ function Payments({ d }: { d: TStudent }) {
           {b?.debt
             ? `Долг ${b.debt}`
             : b && (b.balanceRub ?? b.balance) > 0
-              ? b.balanceRub !== null
-                ? `Предоплата ${rub(b.balanceRub)}`
-                : `Оплачено вперёд: ${b.balance} ${plural(b.balance, ["занятие", "занятия", "занятий"])}`
+              ? `Оплачено вперёд: ${b.balance} ${plural(b.balance, ["занятие", "занятия", "занятий"])}${b.balanceRub !== null ? ` (${rub(b.balanceRub)})` : ""}`
               : "Всё оплачено"}
         </T>
         {b ? (

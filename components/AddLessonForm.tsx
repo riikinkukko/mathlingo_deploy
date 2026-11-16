@@ -58,6 +58,7 @@ export default function AddLessonForm({
   const topicRef = useRef<HTMLInputElement>(null);
   const repeatRef = useRef<HTMLSelectElement>(null);
   const [showSaved, setShowSaved] = useState(false);
+  const [repeat, setRepeat] = useState("1");
 
   useEffect(() => {
     if (!state?.ok) return;
@@ -65,6 +66,7 @@ export default function AddLessonForm({
     if (topicRef.current) topicRef.current.value = "";
     // Повтор сбрасываем, чтобы следующее сохранение случайно не создало ещё серию.
     if (repeatRef.current) repeatRef.current.value = "1";
+    setRepeat("1");
     setShowSaved(true);
     onSaved?.();
     const t = setTimeout(() => setShowSaved(false), 3000);
@@ -141,14 +143,32 @@ export default function AddLessonForm({
 
       <div>
         <label className="label" htmlFor="repeatWeeks">Повторять</label>
-        <select ref={repeatRef} className="input" id="repeatWeeks" name="repeatWeeks" defaultValue="1">
+        <select ref={repeatRef} className="input" id="repeatWeeks" name="repeatWeeks" defaultValue="1" onChange={(e) => setRepeat(e.target.value)}>
           <option value="1">Не повторять — одно занятие</option>
+          <option value="0">Каждую неделю — до конца мая (до ЕГЭ)</option>
           <option value="4">Каждую неделю — 4 занятия (месяц)</option>
           <option value="8">Каждую неделю — 8 занятий (2 месяца)</option>
           <option value="12">Каждую неделю — 12 занятий (3 месяца)</option>
           <option value="24">Каждую неделю — 24 занятия (полгода)</option>
         </select>
       </div>
+
+      {repeat !== "1" && (
+        <div>
+          <p className="label">Ещё в эти дни недели, в то же время</p>
+          {/* День первого занятия входит всегда; можно добавить, например, четверг ко вторнику. */}
+          <div className="flex flex-wrap gap-1.5">
+            {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d, i) => (
+              <label key={d} className="cursor-pointer">
+                <input type="checkbox" name="days" value={i} className="peer sr-only" />
+                <span className="inline-flex h-9 min-w-[44px] items-center justify-center rounded-pill border-2 border-line px-3 text-[13px] font-extrabold text-ink-soft peer-checked:border-pine peer-checked:bg-pine peer-checked:text-white">
+                  {d}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <label className="label" htmlFor="topic">Тема (необязательно)</label>
@@ -162,6 +182,12 @@ export default function AddLessonForm({
       </div>
 
       {state?.error && <p className="text-sm font-semibold text-coral">{state.error}</p>}
+      {state?.conflict && (
+        <label className="flex items-center gap-2 text-sm font-bold text-ink">
+          <input type="checkbox" name="force" className="h-5 w-5 accent-pine" />
+          Всё равно поставить
+        </label>
+      )}
 
       <div className="flex items-center gap-3">
         <SubmitButton />

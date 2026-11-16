@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
@@ -50,6 +50,7 @@ const WEEKDAY_DATIVE = [
   "по воскресеньям",
 ];
 
+const WEEKDAY_SHORT = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
 /** День недели по Москве: 0 — понедельник … 6 — воскресенье. */
 function weekdayMsk(d: Date): number {
   const short = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Moscow", weekday: "short" }).format(d);
@@ -73,7 +74,45 @@ function backTo(from: string, studentId: string, groupId?: string | null): strin
   return "/teacher/schedule";
 }
 
-export type CreateLessonState = { ok?: boolean; error?: string; at?: number; count?: number } | null;
+export type CreateLessonState = { ok?: boolean; error?: string; at?: number; count?: number; conflict?: boolean } | null;
+
+/** Конец мая учебного года (день перед ЕГЭ-сезоном) — для «повторять до конца мая». */
+function endOfMayMsk(from: Date): string {
+  const y = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Moscow", year: "numeric" }).format(from));
+  const m = Number(new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Moscow", month: "numeric" }).format(from));
+  return `${m <= 5 ? y : y + 1}-05-31`;
+}
+
+/**
+ * Пересечение с уже стоящими занятиями репетитора (кроме отменённых).
+ * Возвращает текст первого конфликта или null.
+ */
+async function findLessonConflict(
+  teacherId: string,
+  slots: { start: Date; durationMin: number }[],
+  ignoreIds: string[] = []
+): Promise<string | null> {
+  if (!slots.length) return null;
+  const min = new Date(Math.min(...slots.map((x) => x.start.getTime())) - 6 * 3600 * 1000);
+  const max = new Date(Math.max(...slots.map((x) => x.start.getTime())) + 6 * 3600 * 1000);
+  const rows = await db
+    .select({ id: schema.scheduledLessons.id, startsAt: schema.scheduledLessons.startsAt, durationMin: schema.scheduledLessons.durationMin, status: schema.scheduledLessons.status, name: schema.users.name })
+    .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .where(and(eq(schema.scheduledLessons.teacherId, teacherId), gte(schema.scheduledLessons.startsAt, min), lte(schema.scheduledLessons.startsAt, max)));
+  for (const slot of slots) {
+    const a0 = slot.start.getTime();
+    const a1 = a0 + slot.durationMin * 60_000;
+    const hit = rows.find((r) => {
+      if (r.status === "cancelled" || ignoreIds.includes(r.id)) return false;
+      const b0 = r.startsAt.getTime();
+      const b1 = b0 + r.durationMin * 60_000;
+      return a0 < b1 && b0 < a1;
+    });
+    if (hit) return `${formatMsk(hit.startsAt)} уже стоит занятие: ${hit.name}`;
+  }
+  return null;
+}
 
 /**
  * Планирование занятия. Работает через useFormState (без редиректа): так форма
@@ -109,14 +148,46 @@ export async function createLessonAction(
 
   if (!startsAt) return { error: "Укажите дату и время занятия" };
 
-  // Повтор: 1 — разовое занятие, иначе столько недель подряд (только из списка).
-  const repeatWeeks = Number(formData.get("repeatWeeks") || 1);
-  if (!REPEAT_OPTIONS.includes(repeatWeeks)) return { error: "Некорректный вариант повтора" };
+  // Повтор: 1 — разовое занятие, N — столько недель подряд (из списка),
+  // 0 — «до даты» (repeatUntil, по умолчанию конец мая — до ЕГЭ).
+  const repeatRaw = Number(formData.get("repeatWeeks") || 1);
+  if (![...REPEAT_OPTIONS, 0].includes(repeatRaw)) return { error: "Некорректный вариант повтора" };
+  let repeatWeeks = repeatRaw;
+  if (repeatRaw === 0) {
+    const untilRaw = String(formData.get("repeatUntil") || "") || endOfMayMsk(startsAt);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(untilRaw)) return { error: "Укажите, до какой даты повторять" };
+    const until = new Date(`${untilRaw}T23:59:59${MSK_OFFSET}`);
+    repeatWeeks = Math.floor((until.getTime() - startsAt.getTime()) / WEEK_MS) + 1;
+    if (repeatWeeks < 1) return { error: "Дата окончания раньше первого занятия" };
+    repeatWeeks = Math.min(repeatWeeks, 60);
+  }
 
+  // Несколько дней недели сразу («вт и чт в 17:00»): days — дни недели
+  // 0 (пн) … 6 (вс); день первого занятия входит всегда.
+  const startDay = weekdayMsk(startsAt);
+  const days = [...new Set([startDay, ...formData.getAll("days").map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)])];
+  const DAY_MS = 24 * 3600 * 1000;
   // Каждое занятие серии — через ровно 7 суток. В Москве нет перехода на
-  // летнее время, поэтому время занятия не «уезжает».
-  const dates = Array.from({ length: repeatWeeks }, (_, i) => new Date(startsAt.getTime() + i * WEEK_MS));
-  const seriesId = repeatWeeks > 1 ? genId("ser") : null;
+  // летнее время, поэтому время занятия не «уезжает». Дополнительные дни —
+  // ближайшие после первого занятия; «до даты» не выходит за эту дату.
+  const untilMs =
+    repeatRaw === 0
+      ? new Date(`${String(formData.get("repeatUntil") || "") || endOfMayMsk(startsAt)}T23:59:59${MSK_OFFSET}`).getTime()
+      : Infinity;
+  const dates = days
+    .flatMap((d) => {
+      const first = startsAt.getTime() + ((d - startDay + 7) % 7) * DAY_MS;
+      return Array.from({ length: repeatWeeks }, (_, i) => new Date(first + i * WEEK_MS));
+    })
+    .filter((d) => d.getTime() <= untilMs)
+    .sort((a, b) => a.getTime() - b.getTime());
+  const seriesId = dates.length > 1 ? genId("ser") : null;
+
+  // Пересечение с другими занятиями — предупреждаем; «force» — поставить всё равно.
+  if (formData.get("force") !== "on") {
+    const conflict = await findLessonConflict(teacher.id, dates.map((d) => ({ start: d, durationMin })));
+    if (conflict) return { error: `${conflict}. Если так и нужно — отметьте «Всё равно поставить».`, conflict: true };
+  }
 
   // У группового занятия — строка на каждого ученика; строки одного занятия
   // связаны общим groupLessonId (посещаемость отмечается по ученикам).
@@ -146,12 +217,12 @@ export async function createLessonAction(
       userId: studentId,
       type: "lesson_scheduled",
       title:
-        repeatWeeks > 1
-          ? `Регулярные занятия ${WEEKDAY_DATIVE[weekdayMsk(startsAt)]} в ${timeMsk(startsAt)}`
+        dates.length > 1
+          ? `Регулярные занятия ${days.length > 1 ? `по ${[...days].sort((a, b) => a - b).map((d) => WEEKDAY_SHORT[d]).join(" и ")}` : WEEKDAY_DATIVE[startDay]} в ${timeMsk(startsAt)}`
           : `Занятие назначено: ${formatMsk(startsAt)}`,
       body:
-        repeatWeeks > 1
-          ? `Первое — ${formatMsk(startsAt)}, всего ${repeatWeeks} занятий.${topic ? ` Тема: ${topic}` : ""}`
+        dates.length > 1
+          ? `Первое — ${formatMsk(startsAt)}, всего ${dates.length} занятий.${topic ? ` Тема: ${topic}` : ""}`
           : topic
             ? `Тема: ${topic}`
             : "Не пропусти — увидимся на занятии!",
@@ -165,7 +236,7 @@ export async function createLessonAction(
   if (group) revalidatePath(`/teacher/groups/${group.id}`);
   // at — метка времени, чтобы два успешных сохранения подряд были разными
   // состояниями и эффект очистки формы срабатывал каждый раз.
-  return { ok: true, at: Date.now(), count: repeatWeeks };
+  return { ok: true, at: Date.now(), count: dates.length };
 }
 
 export async function setLessonStatusAction(formData: FormData) {
@@ -179,6 +250,15 @@ export async function setLessonStatusAction(formData: FormData) {
   // занятия в редиректе «утекали» бы id ученика/группы.
   if (!teacher || teacher.role !== "TEACHER" || !lesson || lesson.teacherId !== teacher.id) redirect("/teacher/schedule?error=1");
   const back = backTo(from, lesson.studentId, lesson.groupId);
+  // «Отменить отметку»: промахнулся с «Провести» — возвращаем занятие в план,
+  // зафиксированная цена сбрасывается, баланс пересчитается сам.
+  if (status === "planned") {
+    await db.update(schema.scheduledLessons).set({ status: "planned", priceRub: null }).where(eq(schema.scheduledLessons.id, lessonId));
+    revalidatePath("/teacher/schedule");
+    revalidatePath("/teacher");
+    revalidatePath(`/teacher/student/${lesson.studentId}`);
+    redirect(`${back}?ok=lesson`);
+  }
   if (status !== "done" && status !== "cancelled" && status !== "missed") redirect(`${back}?error=1`);
 
   // Та же логика, что у кнопок «Было / Не было» в Telegram.
@@ -302,7 +382,7 @@ export async function setGroupLessonStatusAction(formData: FormData) {
   redirect(`${back}?ok=lesson`);
 }
 
-export type RescheduleState = { ok?: boolean; error?: string; at?: number; count?: number } | null;
+export type RescheduleState = { ok?: boolean; error?: string; at?: number; count?: number; conflict?: boolean } | null;
 
 /**
  * Перенос занятия. scope=one — только это занятие (у группового — у всей
@@ -352,6 +432,19 @@ export async function rescheduleLessonAction(_prev: RescheduleState, formData: F
             .where(and(eq(L.groupLessonId, lesson.groupLessonId), eq(L.teacherId, teacher.id), eq(L.status, "planned")))
         : [{ id: lesson.id, studentId: lesson.studentId, startsAt: oldStart }];
   if (rows.length === 0) return { error: "Нечего переносить" };
+
+  if (formData.get("force") !== "on") {
+    // Строки этого же занятия (у группы — у всех учеников) сами с собой не конфликтуют.
+    const sameSlot = lesson.groupLessonId
+      ? (await db.select({ id: L.id }).from(L).where(eq(L.groupLessonId, lesson.groupLessonId))).map((r) => r.id)
+      : [];
+    const conflict = await findLessonConflict(
+      teacher.id,
+      rows.map((r) => ({ start: new Date(r.startsAt.getTime() + delta), durationMin })),
+      [...rows.map((r) => r.id), ...sameSlot]
+    );
+    if (conflict) return { error: `${conflict}. Если так и нужно — отметьте «Всё равно перенести».`, conflict: true };
+  }
 
   // Перенос одного ученика из группового занятия (со страницы ученика):
   // его строки становятся индивидуальными, иначе в общем расписании они
