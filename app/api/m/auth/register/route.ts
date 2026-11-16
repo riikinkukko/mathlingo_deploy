@@ -2,6 +2,7 @@ import { clientIpFromHeaders, registerStudent } from "@/lib/auth-flows";
 import { getUserById } from "@/lib/queries";
 import { fail, json, readJson } from "@/lib/mobile/api";
 import { sessionPayload } from "@/lib/mobile/session";
+import { recordSignupSource } from "@/lib/signup-source";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export async function POST(req: Request) {
     clientIpFromHeaders(req.headers)
   );
   if ("error" in res) return fail(res.error);
+  await recordSignupSource(res.userId, "app");
   const user = await getUserById(res.userId);
   if (!user) return fail("Не удалось создать аккаунт", 500);
   return json(await sessionPayload(user));

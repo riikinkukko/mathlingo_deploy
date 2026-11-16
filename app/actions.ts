@@ -56,6 +56,7 @@ import { getGroupForTeacher } from "@/lib/groups";
 import { cleanImageDataUrl } from "@/lib/image-data";
 import { mskEndOfDay } from "@/lib/lesson-time";
 import { createLessonReport } from "@/lib/lesson-report";
+import { recordSignupSource } from "@/lib/signup-source";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
 import { getCurriculum, FREE_MAX_ENERGY } from "@/lib/queries";
@@ -685,6 +686,7 @@ export async function registerAction(_prevState: unknown, formData: FormData) {
   );
   if ("error" in res) return { error: res.error };
   await applyPromoAtRegistration(res.userId, formData.get("promo"));
+  await recordSignupSource(res.userId);
   const token = await createSessionToken(res.userId, "STUDENT");
   await setSessionCookie(token);
   redirect("/onboarding?ym=register");
@@ -738,6 +740,7 @@ export async function registerTeacherAction(_prevState: unknown, formData: FormD
     // только вручную одному конкретному человеку (владельцу платформы)
     // через прямой SQL, см. README.
   });
+  await recordSignupSource(userId);
 
   const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
   await sendVerificationEmail(email, verificationToken).catch((e) =>

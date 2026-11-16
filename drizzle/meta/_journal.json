@@ -344,6 +344,13 @@
       "when": 1794576330554,
       "tag": "0048_lesson_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794821852372,
+      "tag": "0049_signup_source",
+      "breakpoints": true
     }
   ]
 }

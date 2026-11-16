@@ -128,6 +128,9 @@ export const users = pgTable("users", {
   // при первом показе), кто пригласил этого репетитора и когда обоим выдан
   // бонус (после первой оплаты приглашённого) — см. lib/promo.ts.
   referralCode: text("referral_code").unique(),
+  // Откуда пришёл при регистрации: «источник|первая страница» (cookie pl_src,
+  // components/SignupSource.tsx; из приложения — «app»). Для воронки в админке.
+  signupSource: text("signup_source"),
   referredBy: text("referred_by"),
   referralRewardedAt: timestamp("referral_rewarded_at", { withTimezone: true }),
   // Владелец платформы (вы) — полностью вне обычной системы тарифов, а

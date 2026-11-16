@@ -1,5 +1,5 @@
 import { requireAdmin } from "@/lib/auth";
-import { getActivity, getCohorts, getStandaloneFunnel, getFeatureUsage, getTeacherStats } from "@/lib/metrics";
+import { getActivity, getCohorts, getStandaloneFunnel, getFeatureUsage, getTeacherStats, getWeekly, getTutorFunnel, getMoney, getSources } from "@/lib/metrics";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,29 @@ function Tile({ value, label, hint }: { value: string | number; label: string; h
   );
 }
 
+const rub = (n: number) => `${n.toLocaleString("ru-RU")} ₽`;
+
+function Funnel({ steps }: { steps: { label: string; n: number }[] }) {
+  return (
+    <div className="space-y-2 rounded-2xl border border-line-soft bg-white p-4">
+      {steps.map((s, i) => (
+        <div key={s.label}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-bold text-ink">{s.label}</span>
+            <span className="shrink-0 tabular-nums text-ink-soft">
+              <span className="font-black text-ink">{s.n}</span>
+              {i > 0 && ` · ${pct(s.n, steps[0].n)}`}
+            </span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-pill bg-grid">
+            <div className="h-full rounded-pill bg-pine" style={{ width: steps[0].n ? `${(s.n / steps[0].n) * 100}%` : "0%" }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
     <section className="mb-6">
@@ -29,12 +52,16 @@ function Section({ title, note, children }: { title: string; note?: string; chil
 
 export default async function AdminMetricsPage() {
   await requireAdmin();
-  const [act, cohorts, funnel, usage, teachers] = await Promise.all([
+  const [act, cohorts, funnel, usage, teachers, weekly, tutorFunnel, money, sources] = await Promise.all([
     getActivity(),
     getCohorts(),
     getStandaloneFunnel(),
     getFeatureUsage(),
     getTeacherStats(),
+    getWeekly(8),
+    getTutorFunnel(90),
+    getMoney(),
+    getSources(90),
   ]);
   const steps = [
     { label: "Зарегистрировались", n: funnel.registered },
@@ -55,6 +82,116 @@ export default async function AdminMetricsPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 pt-6">
+        <Section title="Деньги" note="Успешные оплаты на платформе (тарифы учеников и репетиторов, платная проверка). Оплаты репетиторам от учеников сюда не входят.">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Tile value={rub(money.thisMonth)} label="в этом месяце" hint={`в прошлом: ${rub(money.prevMonth)}`} />
+            <Tile value={rub(money.total)} label="за всё время" hint={`платили: ${money.payers} чел.`} />
+            <Tile value={money.tutorsPaid} label="репетиторов на платном тарифе" hint={`с автопродлением: ${money.tutorsAutorenew}`} />
+            <Tile value={money.studentsPro} label="учеников с Pro сейчас" />
+          </div>
+        </Section>
+
+        <Section
+          title="По неделям"
+          note="Неделя — с понедельника по Москве. «Начали» — ученик решил хоть одну задачу, репетитор добавил хоть одного ученика (к сегодняшнему дню)."
+        >
+          <div className="overflow-x-auto rounded-2xl border border-line-soft bg-white">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-line-soft text-left text-[11px] font-black uppercase tracking-wide text-ink-soft">
+                  <th className="px-4 py-2.5">Неделя</th>
+                  <th className="px-3 py-2.5 text-right">Ученики сами</th>
+                  <th className="px-3 py-2.5 text-right">Начали</th>
+                  <th className="px-3 py-2.5 text-right">Репетиторы</th>
+                  <th className="px-3 py-2.5 text-right">Начали</th>
+                  <th className="px-3 py-2.5 text-right">Ученики от репетиторов</th>
+                  <th className="px-3 py-2.5 text-right">Оплаты</th>
+                  <th className="px-4 py-2.5 text-right">Выручка</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weekly.map((w, i) => (
+                  <tr key={w.week} className="border-b border-line-soft last:border-0">
+                    <td className="px-4 py-2.5 font-bold text-ink">{i === 0 ? "эта неделя" : `с ${weekLabel(w.week)}`}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{w.students}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft">{w.students ? `${w.studentsActivated} · ${pct(w.studentsActivated, w.students)}` : "—"}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{w.tutors}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-ink-soft">{w.tutors ? `${w.tutorsActivated} · ${pct(w.tutorsActivated, w.tutors)}` : "—"}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{w.tutorStudents}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{w.paidCount}</td>
+                    <td className="px-4 py-2.5 text-right font-black tabular-nums" title={`репетиторы ${rub(w.revenueTutors)} · ученики ${rub(w.revenueStudents)}`}>
+                      {w.revenue ? rub(w.revenue) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+
+        <Section title="Воронка репетиторов" note={`Зарегистрированные за 90 дней. Сейчас на пробном «Профи»: ${tutorFunnel.onTrial}.`}>
+          <Funnel
+            steps={[
+              { label: "Зарегистрировались", n: tutorFunnel.registered },
+              { label: "Подтвердили email", n: tutorFunnel.verified },
+              { label: "Добавили первого ученика", n: tutorFunnel.student1 },
+              { label: "Поставили занятие или задание", n: tutorFunnel.used },
+              { label: "3 и больше учеников", n: tutorFunnel.student3 },
+              { label: "Заплатили", n: tutorFunnel.paid },
+            ]}
+          />
+        </Section>
+
+        <Section
+          title="Откуда приходят"
+          note="Самостоятельные ученики и репетиторы за 90 дней. Источник — метка utm_source/ym в ссылке или сайт, с которого перешли; «direct» — набрали адрес или открыли закладку; «app» — регистрация в приложении. До 16 ноября 2026 источник не записывался."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-2xl border border-line-soft bg-white">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-line-soft text-left text-[11px] font-black uppercase tracking-wide text-ink-soft">
+                    <th className="px-4 py-2.5">Источник</th>
+                    <th className="px-3 py-2.5 text-right">Ученики</th>
+                    <th className="px-3 py-2.5 text-right">Репетиторы</th>
+                    <th className="px-4 py-2.5 text-right">Платили</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sources.sources.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-3 text-ink-soft">Пока нет регистраций.</td>
+                    </tr>
+                  )}
+                  {sources.sources.map((s) => (
+                    <tr key={s.src} className="border-b border-line-soft last:border-0">
+                      <td className="max-w-[160px] truncate px-4 py-2 font-bold text-ink">{s.src}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{s.students}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{s.tutors}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{s.paid}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="rounded-2xl border border-line-soft bg-white p-4">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-ink-soft">Первая страница визита</p>
+              {sources.pages.length === 0 ? (
+                <p className="text-sm text-ink-soft">Появится после первых регистраций.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {sources.pages.map((p) => (
+                    <li key={p.page} className="flex justify-between gap-3">
+                      <span className="truncate text-ink">{p.page}</span>
+                      <span className="shrink-0 font-black tabular-nums">{p.n}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </Section>
+
         <Section title="Активность учеников" note="Ученик активен, если решил хотя бы одну задачу.">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Tile value={act.dau} label="сегодня" />

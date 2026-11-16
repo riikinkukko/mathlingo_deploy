@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/ServiceWorkerRegister";
+import SignupSource from "@/components/SignupSource";
 import Analytics from "@/components/Analytics";
 
 export const metadata: Metadata = {
@@ -66,6 +67,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans bg-paper text-ink antialiased">
         <ServiceWorkerRegister />
+        <SignupSource />
         {/* useSearchParams в Analytics требует Suspense-границы в App Router */}
         <Suspense fallback={null}>
           <Analytics />
