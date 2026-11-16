@@ -21,7 +21,7 @@ import {
   recordLoginFailure,
   recordRegistrationAttempt,
 } from "./queries";
-import { sendVerificationEmail } from "./email";
+import { loginToEmail, sendVerificationEmail } from "./email";
 import { isDisposableEmail, isValidEmailFormat } from "./email-rules";
 import type { Role, User } from "./types";
 
@@ -44,7 +44,8 @@ export async function passwordLogin(
   passwordRaw: unknown,
   clientIp: string
 ): Promise<{ user: User } | { error: string }> {
-  const email = normalizeEmail(emailRaw);
+  // Ученик без почты входит по логину («masha.sokolova.2665») — без домена.
+  const email = loginToEmail(normalizeEmail(emailRaw));
   const password = String(passwordRaw ?? "");
   if (await isLoginRateLimited(clientIp, email)) {
     return { error: "Слишком много неудачных попыток входа. Подождите 15 минут или восстановите пароль." };

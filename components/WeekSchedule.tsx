@@ -354,6 +354,7 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
         <p className="mt-2 text-[14px] text-ink-soft">{item.topic || <span className="italic">Тема не указана</span>}</p>
 
         {item.status === "done" || item.status === "missed" ? (
+          <>
           <p className="mt-4 rounded-2xl bg-pine-light px-4 py-3 text-sm font-extrabold text-pine-dark">
             {item.status === "missed" ? "Отмечено: не пришёл" : "✓ Занятие проведено"}
             {group && item.members!.some((m) => m.status === "missed") && (
@@ -362,6 +363,23 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
               </span>
             )}
           </p>
+          {!group && (
+            <form action={setLessonStatusAction} className="mt-2 text-center">
+              <input type="hidden" name="lessonId" value={item.id} />
+              <input type="hidden" name="status" value="planned" />
+              <input type="hidden" name="from" value="schedule" />
+              <button
+                type="submit"
+                onClick={(e) => {
+                  if (!window.confirm("Снять отметку? Занятие снова станет запланированным и не будет засчитано в оплату.")) e.preventDefault();
+                }}
+                className="text-[13px] font-bold text-ink-soft underline-offset-2 hover:text-coral hover:underline"
+              >
+                Отменить отметку
+              </button>
+            </form>
+          )}
+          </>
         ) : (
           <div className="mt-4 flex items-start gap-2">
             {group && item.groupLessonId ? (

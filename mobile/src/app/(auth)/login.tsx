@@ -41,7 +41,7 @@ export default function LoginScreen() {
           </T>
         </View>
         <Card style={{ gap: 14 }}>
-          <Field label="Email" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="email" keyboardType="email-address" textContentType="emailAddress" placeholder="you@mail.ru" />
+          <Field label="Email или логин" value={email} onChangeText={setEmail} autoCapitalize="none" autoComplete="username" keyboardType="email-address" textContentType="username" placeholder="you@mail.ru" />
           <Field label="Пароль" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" textContentType="password" placeholder="••••••" onSubmitEditing={submit} returnKeyType="go" />
           {error ? (
             <T w="bold" color={C.coralText} style={{ backgroundColor: C.coralLight, padding: 10, borderRadius: 12 }}>

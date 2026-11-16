@@ -24,13 +24,16 @@ export default function LoginForm() {
     <form action={formAction} onSubmit={keepFormAction} className="space-y-4">
       <div>
         <label className="label" htmlFor="email">
-          Email
+          Email или логин
         </label>
         <input
           className="input"
           id="email"
           name="email"
-          type="email"
+          type="text"
+          inputMode="email"
+          autoCapitalize="none"
+          autoComplete="username"
           placeholder="you@example.ru"
           required
         />

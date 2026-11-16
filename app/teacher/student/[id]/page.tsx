@@ -1,3 +1,5 @@
+import StudentLoginCard from "@/components/StudentLoginCard";
+import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
 import SaveTemplateButton from "@/components/SaveTemplateButton";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -301,6 +303,10 @@ export default async function StudentDetailPage(
               Записать оплату
             </a>
           </div>
+        )}
+
+        {tab === "overview" && (
+          <StudentLoginCard studentId={student.id} name={student.name} login={displayLogin(student.email)} loginOnly={isLoginOnlyEmail(student.email)} />
         )}
 
         {tab === "lessons" && (<>

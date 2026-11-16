@@ -22,7 +22,7 @@ export default function TeacherSetupChecklist({
   firstStudentId?: string;
 }) {
   const steps: Step[] = [
-    { key: "email", done: emailVerified, title: "Подтвердить email", hint: "Без подтверждения можно добавить только 2 учеников", href: "/teacher/students/new" },
+    { key: "email", done: emailVerified, title: "Подтвердить email", hint: "Чтобы восстановить пароль, если забудете. После пробного периода без подтверждения нельзя добавлять новых учеников", href: "/teacher/students/new" },
     { key: "student", done: studentsCount > 0, title: "Добавить первого ученика", hint: "Создадим аккаунт и готовое приглашение для мессенджера", href: "/teacher/students/new" },
     {
       key: "hw",

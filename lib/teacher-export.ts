@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getStudentBalances, getStudentsOfTeacher, homeworkStatus, mapHomework } from "@/lib/queries";
-import { isLoginOnlyEmail } from "@/lib/email";
+import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
 import type { User } from "@/lib/types";
 
 const STATUS: Record<string, string> = { planned: "запланировано", done: "проведено", cancelled: "отменено", missed: "не пришёл" };
@@ -72,7 +72,7 @@ export async function buildTeacherExport(teacher: User): Promise<Buffer> {
       const b = bal.get(s.id);
       return {
         name: s.name,
-        email: s.email + (isLoginOnlyEmail(s.email) ? " (логин)" : ""),
+        email: isLoginOnlyEmail(s.email) ? `${displayLogin(s.email)} (логин)` : s.email,
         grade: s.grade ?? "",
         target: s.targetScore ?? "",
         price: s.lessonPriceRub ?? "",

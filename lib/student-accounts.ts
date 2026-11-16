@@ -101,6 +101,10 @@ export interface ImportRow {
   email: string | null;
   grade: number | null;
   price: number | null;
+  /** В строке был телефон — его не переносим (отдельного поля нет). */
+  phone?: boolean;
+  /** Такой ученик уже есть (или повтор в списке) — пропустим. */
+  duplicate?: boolean;
   error?: string;
 }
 
@@ -119,6 +123,7 @@ export function parseImport(text: string): ImportRow[] {
     const row: ImportRow = { line: i + 1, name: cells[0].slice(0, 80), email: null, grade: null, price: null };
     for (const c of cells.slice(1)) {
       if (c.includes("@")) row.email = c.toLowerCase();
+      else if (/^\+?[\d\s\-()]{10,}$/.test(c) && c.replace(/\D/g, "").length >= 10) row.phone = true;
       else if (/^\d{1,2}(\s*(кл|класс)\.?)?$/i.test(c) && parseGrade(c)) row.grade = parseGrade(c);
       else if (parsePrice(c)) row.price = parsePrice(c);
     }

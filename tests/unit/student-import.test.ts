@@ -59,3 +59,19 @@ test("выгрузка в Excel: все листы, ученик, занятие
   assert.deepEqual([ls.getCell(1).value, ls.getCell(2).value, ls.getCell(7).value], ["10.11.2026", "17:00", "проведено"]);
   assert.equal(wb.getWorksheet("Оплаты")!.getRow(2).getCell(3).value, 3000);
 });
+
+test("вход по короткому логину без домена; телефон в строке замечаем", async () => {
+  const { passwordLogin } = await import("../../lib/auth-flows");
+  const { displayLogin } = await import("../../lib/email");
+  const t = await makeUser({ role: "TEACHER" });
+  const r = await createStudentForTeacher(t, { name: "Коля Логинов" });
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const short = displayLogin(r.email);
+  assert.match(short, /^kolya\.loginov\.\d{4}$/);
+  const res = await passwordLogin(short.toUpperCase(), r.password, "127.0.0.9");
+  assert.ok("user" in res && res.user.id === r.studentId);
+  const [row] = parseImport("Маша\t+7 (900) 123-45-67\t11");
+  assert.ok(row.phone);
+  assert.equal(row.price, null);
+});

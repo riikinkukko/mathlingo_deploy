@@ -153,14 +153,26 @@ export default function AddLessonForm({
         </select>
       </div>
 
-      {repeat !== "1" && (
+      {(
         <div>
-          <p className="label">Ещё в эти дни недели, в то же время</p>
+          <p className="label">{repeat === "1" ? "Каждую неделю по дням (например, вт и чт)" : "Ещё в эти дни недели, в то же время"}</p>
           {/* День первого занятия входит всегда; можно добавить, например, четверг ко вторнику. */}
           <div className="flex flex-wrap gap-1.5">
             {["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].map((d, i) => (
               <label key={d} className="cursor-pointer">
-                <input type="checkbox" name="days" value={i} className="peer sr-only" />
+                <input
+                  type="checkbox"
+                  name="days"
+                  value={i}
+                  className="peer sr-only"
+                  onChange={(e) => {
+                    // Выбрали день при «не повторять» — значит, нужен еженедельный повтор: ставим «до конца мая».
+                    if (e.target.checked && repeatRef.current && repeatRef.current.value === "1") {
+                      repeatRef.current.value = "0";
+                      setRepeat("0");
+                    }
+                  }}
+                />
                 <span className="inline-flex h-9 min-w-[44px] items-center justify-center rounded-pill border-2 border-line px-3 text-[13px] font-extrabold text-ink-soft peer-checked:border-pine peer-checked:bg-pine peer-checked:text-white">
                   {d}
                 </span>

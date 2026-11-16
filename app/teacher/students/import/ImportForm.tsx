@@ -72,7 +72,9 @@ export default function ImportForm() {
   }
 
   const rows = state?.rows;
-  const good = rows?.filter((r) => !r.error).length ?? 0;
+  const good = rows?.filter((r) => !r.error && !r.duplicate).length ?? 0;
+  const dups = rows?.filter((r) => !r.error && r.duplicate).length ?? 0;
+  const phones = rows?.some((r) => r.phone) ?? false;
   return (
     <form action={action} className="space-y-4">
       <textarea
@@ -91,9 +93,15 @@ export default function ImportForm() {
       {rows && (
         <div className="card p-4">
           <p className="mb-2 font-black text-ink">
-            Найдено учеников: {good}
-            {rows.length > good ? ` · с ошибками: ${rows.length - good}` : ""}
+            Добавим учеников: {good}
+            {dups ? ` · уже есть: ${dups}` : ""}
+            {rows.length - good - dups > 0 ? ` · с ошибками: ${rows.length - good - dups}` : ""}
           </p>
+          {phones && (
+            <p className="mb-2 text-[12px] font-bold text-ink-soft">
+              Телефоны из таблицы не переносим — отдельного поля для них нет. Если нужно, запишите в заметки об ученике.
+            </p>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] text-left text-[13px]">
               <thead>
@@ -106,9 +114,11 @@ export default function ImportForm() {
               </thead>
               <tbody className="divide-y divide-line-soft">
                 {rows.map((r) => (
-                  <tr key={r.line} className={r.error ? "text-coral-text" : ""}>
+                  <tr key={r.line} className={r.error ? "text-coral-text" : r.duplicate ? "text-ink-soft line-through" : ""}>
                     <td className="py-1.5 pr-3 font-bold">{r.name}</td>
-                    <td className="py-1.5 pr-3">{r.error ?? r.email ?? <span className="text-ink-soft">выдадим логин</span>}</td>
+                    <td className="py-1.5 pr-3">
+                      {r.error ?? (r.duplicate ? <span className="no-underline">уже есть — пропустим</span> : r.email ?? <span className="text-ink-soft">выдадим логин</span>)}
+                    </td>
                     <td className="py-1.5 pr-3">{r.grade ?? "—"}</td>
                     <td className="py-1.5">{r.price ? `${r.price} ₽` : "—"}</td>
                   </tr>
