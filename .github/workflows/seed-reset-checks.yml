@@ -1,0 +1,106 @@
+name: Seed reset checks
+
+on:
+  pull_request:
+    branches: [master]
+    paths:
+      - 'scripts/seed*.ts'
+      - 'scripts/content/**'
+      - 'lib/db/**'
+      - 'drizzle/**'
+      - 'drizzle.config.ts'
+      - 'tests/integration/seed-reset.test.ts'
+      - 'package*.json'
+      - '.github/workflows/seed-reset-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: seedtester
+          POSTGRES_PASSWORD: seed_test_local
+          POSTGRES_DB: mathapp_test
+        ports: ['5432/tcp']
+        options: >-
+          --health-cmd "pg_isready -U seedtester"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SESSION_SECRET: ci-only-session-secret-not-used-anywhere-else-0123456789
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3100
+      BASE_URL: http://127.0.0.1:3100
+      PUSH_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Prepare disposable PostgreSQL databases
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+          PG_PORT: ${{ job.services.postgres.ports[5432] }}
+        run: |
+          target="seed_reset_test_$(openssl rand -hex 16)"
+          control="seed_reset_test_$(openssl rand -hex 16)"
+          token="$(openssl rand -hex 16)"
+          docker exec "$PG_CONTAINER" createdb -U seedtester "$target"
+          docker exec "$PG_CONTAINER" createdb -U seedtester "$control"
+          docker exec "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U seedtester -d postgres \
+            -c "COMMENT ON DATABASE $target IS 'planimetrika:seed-reset:$token'" \
+            -c "COMMENT ON DATABASE $control IS 'planimetrika:seed-test-control:$token'"
+          url_prefix="postgresql://seedtester:seed_test_local@127.0.0.1:$PG_PORT"
+          {
+            echo "SEED_RESET_TOKEN=$token"
+            echo "SEED_RESET_DATABASE_URL=$url_prefix/$target"
+            echo "SEED_RESET_TEST_CONTROL_URL=$url_prefix/$control"
+            echo "TEST_DATABASE_URL=$url_prefix/mathapp_test"
+            echo "DATABASE_URL=$url_prefix/mathapp_test"
+          } >> "$GITHUB_ENV"
+          DATABASE_URL="$url_prefix/$target" npx --no-install drizzle-kit migrate
+          DATABASE_URL="$url_prefix/$control" npx --no-install drizzle-kit migrate
+
+      - run: npm run test:seed-reset
+      - name: Rehearse restoration from a synthetic backup
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          source_db="${SEED_RESET_DATABASE_URL##*/}"
+          restored_db="seed_restore_test_$(openssl rand -hex 16)"
+          docker exec "$PG_CONTAINER" createdb -U seedtester "$restored_db"
+          docker exec "$PG_CONTAINER" pg_dump -U seedtester -d "$source_db" -Fc --no-owner --no-privileges > "$RUNNER_TEMP/seed.dump"
+          docker exec -i "$PG_CONTAINER" pg_restore -U seedtester -d "$restored_db" \
+            --exit-on-error --single-transaction --no-owner --no-privileges < "$RUNNER_TEMP/seed.dump"
+          sql='SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM homeworks),
+            (SELECT count(*) FROM attempts a JOIN users u ON u.id = a.student_id JOIN problems p ON p.id = a.problem_id),
+            (SELECT count(*) FROM srs_states s JOIN users u ON u.id = s.student_id JOIN problems p ON p.id = s.problem_id)'
+          before="$(docker exec "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester -d "$source_db" -c "$sql")"
+          after="$(docker exec "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester -d "$restored_db" -c "$sql")"
+          test "$before" = "$after"
+          printf 'Restored rows and relationships: %s\n' "$after"
+
+      - run: npm run test:db
+      - run: npm test
+      - run: npx --no-install tsc --noEmit
+      - run: npm run build
+      - name: Smoke-test the application
+        run: |
+          npx --no-install playwright-core install --with-deps chromium
+          npx --no-install next start -H 127.0.0.1 -p 3100 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS "$BASE_URL/login" >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          npm run test:e2e
