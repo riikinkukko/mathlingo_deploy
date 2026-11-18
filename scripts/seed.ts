@@ -1,4 +1,3 @@
-import { db as pgDb } from "../lib/db/client";
 import * as schema from "../lib/db/schema";
 import { hashPassword } from "../lib/auth";
 import { DB, Skill } from "../lib/types";
@@ -10,15 +9,7 @@ import { addParams18 } from "./content/params18";
 import { addTask6 } from "./content/task6";
 import { addStereo15 } from "./content/stereo15";
 import { addNumberTheory20 } from "./content/nt20";
-
-// Явно грузим .env.local — не как CLI-обёртку (dotenv-cli конфликтовал с
-// одноимённой командой из Python на некоторых машинах), а прямым вызовом
-// функции пакета dotenv. Это обычный вызов (не import), поэтому выполняется
-// именно здесь, после того как импорты выше уже разрешились — что нормально:
-// клиент БД (lib/db/client.ts) теперь ленивый и не трогает DATABASE_URL до
-// первого реального запроса, а первый запрос случится только внутри main()
-// ниже, то есть уже после этой строчки.
-config({ path: path.resolve(__dirname, "../.env.local") });
+import { SeedResetRefusal, withSeedReset, withSeedTransaction, type SeedTransaction } from "./seed-reset";
 
 // Детерминированный генератор id: при каждом запуске скрипта вызовы в одном
 // и том же порядке дают одни и те же id (в отличие от случайного genId).
@@ -34,32 +25,33 @@ function stableId(prefix: string) {
 
 const RESET = process.argv.includes("--reset");
 
-async function main() {
-  if (RESET) {
-    console.log("⚠️  Режим --reset: база будет полностью пересоздана, все реальные данные будут стёрты.");
+async function seedDatabase(tx: SeedTransaction, reset: boolean) {
+  // Serialize seed writers before checking whether the database is empty.
+  await tx.execute(sql`SELECT pg_catalog.pg_advisory_xact_lock(73810017, 1)`);
+  if (reset) {
     // Порядок важен из-за внешних ключей — сначала таблицы, которые
     // ссылаются на других, потом на кого ссылаются.
-    await pgDb.delete(schema.assignmentSessions);
-    await pgDb.delete(schema.notifications);
-    await pgDb.delete(schema.attempts);
-    await pgDb.delete(schema.lessonLogs);
-    await pgDb.delete(schema.homeworks);
-    await pgDb.delete(schema.problems);
-    await pgDb.delete(schema.skills);
-    await pgDb.delete(schema.subtopics);
-    await pgDb.delete(schema.topics);
-    await pgDb.delete(schema.parentLinks);
-    await pgDb.delete(schema.users);
+    await tx.delete(schema.assignmentSessions);
+    await tx.delete(schema.notifications);
+    await tx.delete(schema.attempts);
+    await tx.delete(schema.lessonLogs);
+    await tx.delete(schema.homeworks);
+    await tx.delete(schema.problems);
+    await tx.delete(schema.skills);
+    await tx.delete(schema.subtopics);
+    await tx.delete(schema.topics);
+    await tx.delete(schema.parentLinks);
+    await tx.delete(schema.users);
   }
 
-  const [{ count: userCount }] = await pgDb
+  const [{ count: userCount }] = await tx
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.users);
   const isFreshInstall = userCount === 0;
 
   // Локальный накопитель — всё неизменённое тело скрипта ниже наполняет этот
   // обычный JS-объект через db.xxx.push(...), как и раньше. Реальная запись
-  // в Postgres происходит в самом конце через commitToDatabase(db, ...).
+  // в Postgres происходит в самом конце через writeSeedData(tx, db, ...).
   const db: DB = {
     users: [],
     parentLinks: [],
@@ -8576,7 +8568,7 @@ async function main() {
   // Артём Волков — тестовый аккаунт для проверки SRS: решил core-задачи
   // первых двух навыков "Треугольников". Само состояние повторения (какая
   // задача когда снова "созреет") проставляется отдельно, напрямую в
-  // Postgres, ПОСЛЕ commitToDatabase внизу файла — SRS не часть общего
+  // Postgres, ПОСЛЕ writeSeedData внизу файла — SRS не часть общего
   // накопителя db.*, а таблица со своей отдельной бизнес-логикой.
   const srsCoreProblems = db.problems.filter(
     (p) => (p.skillId === skAngles || p.skillId === skCevians) && (p.tier ?? "core") === "core"
@@ -8754,7 +8746,7 @@ async function main() {
   );
   } // конец if (isFreshInstall) для демо-данных
 
-  await commitToDatabase(db, isFreshInstall);
+  await writeSeedData(tx, db, isFreshInstall);
 
   // SRS-состояния для Артёма Волкова — напрямую в Postgres (не часть
   // db.*-накопителя выше). Половина задач уже "просрочена" (готова к
@@ -8772,7 +8764,7 @@ async function main() {
       const nextReviewAt = overdue
         ? new Date(now - 2 * 3600 * 1000) // 2 часа назад — уже пора повторять
         : new Date(now + 3 * 86400 * 1000); // через 3 дня — ещё рано
-      await pgDb.insert(schema.srsStates).values({
+      await tx.insert(schema.srsStates).values({
         studentId: srsTestUserId,
         problemId: p.id,
         box,
@@ -8783,10 +8775,14 @@ async function main() {
     }
   }
 
+  return isFreshInstall;
+}
+
+function reportSeedSuccess(isFreshInstall: boolean) {
   if (isFreshInstall) {
     console.log("✅ База данных создана и заполнена демо-данными.");
     console.log("");
-    console.log("Демо-аккаунты (пароль у всех: demo1234):");
+    console.log("Демо-аккаунты:");
     console.log("  Учитель:  teacher@demo.ru");
     console.log("  Ученик:   student@demo.ru   (домашка, контрольная, журнал занятий, 1 ответ на проверке)");
     console.log("  Ученик 2: student2@demo.ru  (чистый прогресс)");
@@ -8800,7 +8796,6 @@ async function main() {
     console.log(
       "   Пользователи, прогресс, попытки, домашки, журнал занятий и уведомления не тронуты — они не пересоздавались."
     );
-    console.log("   Если нужно начать с абсолютно чистой базы — запустите: npm run seed:reset");
   }
 }
 
@@ -8849,143 +8844,152 @@ function toEge2027Numbers(built: DB) {
   }
 }
 
-async function commitToDatabase(built: DB, isFreshInstall: boolean) {
+async function writeSeedData(tx: SeedTransaction, built: DB, isFreshInstall: boolean) {
   toEge2027Numbers(built);
   normalizePlanimetryNumbers(built);
-  await pgDb.transaction(async (tx) => {
-    for (const t of built.topics) {
-      await tx
-        .insert(schema.topics)
-        .values(t)
-        .onConflictDoUpdate({ target: schema.topics.id, set: { order: t.order, title: t.title } });
-    }
+  for (const t of built.topics) {
+    await tx
+      .insert(schema.topics)
+      .values(t)
+      .onConflictDoUpdate({ target: schema.topics.id, set: { order: t.order, title: t.title } });
+  }
 
-    for (const s of built.subtopics) {
-      await tx
-        .insert(schema.subtopics)
-        .values(s)
-        .onConflictDoUpdate({
-          target: schema.subtopics.id,
-          set: { topicId: s.topicId, order: s.order, title: s.title },
-        });
-    }
-
-    for (const sk of built.skills) {
-      const row = { id: sk.id, subtopicId: sk.subtopicId, order: sk.order, title: sk.title, theoryCards: sk.theoryCards };
-      await tx
-        .insert(schema.skills)
-        .values(row)
-        .onConflictDoUpdate({
-          target: schema.skills.id,
-          set: { subtopicId: row.subtopicId, order: row.order, title: row.title, theoryCards: row.theoryCards },
-        });
-    }
-
-    for (const p of built.problems) {
-      const row = {
-        id: p.id,
-        skillId: p.skillId ?? null,
-        text: p.text,
-        answerType: p.answerType,
-        correctAnswer: p.correctAnswer,
-        choices: p.choices ?? null,
-        diagram: p.diagram ?? null,
-        keyFormula: p.keyFormula ?? null,
-        hints: p.hints,
-        explanation: p.explanation,
-        difficulty: p.difficulty,
-        egeTaskNumber: p.egeTaskNumber ?? null,
-        tier: p.tier ?? null,
-      };
-      await tx
-        .insert(schema.problems)
-        .values(row)
-        .onConflictDoUpdate({
-          target: schema.problems.id,
-          set: {
-            skillId: row.skillId,
-            text: row.text,
-            answerType: row.answerType,
-            correctAnswer: row.correctAnswer,
-            choices: row.choices,
-            diagram: row.diagram,
-            keyFormula: row.keyFormula,
-            hints: row.hints,
-            explanation: row.explanation,
-            difficulty: row.difficulty,
-            egeTaskNumber: row.egeTaskNumber,
-            tier: row.tier,
-          },
-        });
-    }
-
-    if (!isFreshInstall) return; // пользовательские данные уже в базе — не трогаем
-
-    for (const u of built.users) {
-      await tx.insert(schema.users).values({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        passwordHash: u.passwordHash,
-        role: u.role,
-        teacherId: u.teacherId ?? null,
-        plan: u.plan ?? null,
-        energy: u.energy ?? null,
-        energyUpdatedAt: u.energyUpdatedAt ? new Date(u.energyUpdatedAt) : null,
-        proUntil: u.proUntil ? new Date(u.proUntil) : null,
-        isAdmin: u.isAdmin ?? false,
-        isPlatformOwner: u.isPlatformOwner ?? false,
-        createdAt: new Date(u.createdAt),
+  for (const s of built.subtopics) {
+    await tx
+      .insert(schema.subtopics)
+      .values(s)
+      .onConflictDoUpdate({
+        target: schema.subtopics.id,
+        set: { topicId: s.topicId, order: s.order, title: s.title },
       });
-    }
-    for (const l of built.parentLinks) {
-      await tx.insert(schema.parentLinks).values(l);
-    }
-    for (const a of built.attempts) {
-      await tx.insert(schema.attempts).values({
-        id: a.id,
-        studentId: a.studentId,
-        problemId: a.problemId,
-        answer: a.answer,
-        isCorrect: a.isCorrect,
-        source: a.source,
-        reviewStatus: a.reviewStatus ?? null,
-        teacherFeedback: a.teacherFeedback ?? null,
-        createdAt: new Date(a.createdAt),
+  }
+
+  for (const sk of built.skills) {
+    const row = { id: sk.id, subtopicId: sk.subtopicId, order: sk.order, title: sk.title, theoryCards: sk.theoryCards };
+    await tx
+      .insert(schema.skills)
+      .values(row)
+      .onConflictDoUpdate({
+        target: schema.skills.id,
+        set: { subtopicId: row.subtopicId, order: row.order, title: row.title, theoryCards: row.theoryCards },
       });
-    }
-    for (const h of built.homeworks) {
-      await tx.insert(schema.homeworks).values({
-        id: h.id,
-        teacherId: h.teacherId ?? null,
-        studentId: h.studentId ?? null,
-        title: h.title,
-        kind: h.kind,
-        allowHints: h.allowHints,
-        timeLimitMinutes: h.timeLimitMinutes ?? null,
-        audience: h.audience ?? null,
-        problemIds: h.problemIds,
-        dueDate: new Date(h.dueDate),
-        createdAt: new Date(h.createdAt),
+  }
+
+  for (const p of built.problems) {
+    const row = {
+      id: p.id,
+      skillId: p.skillId ?? null,
+      text: p.text,
+      answerType: p.answerType,
+      correctAnswer: p.correctAnswer,
+      choices: p.choices ?? null,
+      diagram: p.diagram ?? null,
+      keyFormula: p.keyFormula ?? null,
+      hints: p.hints,
+      explanation: p.explanation,
+      difficulty: p.difficulty,
+      egeTaskNumber: p.egeTaskNumber ?? null,
+      tier: p.tier ?? null,
+    };
+    await tx
+      .insert(schema.problems)
+      .values(row)
+      .onConflictDoUpdate({
+        target: schema.problems.id,
+        set: {
+          skillId: row.skillId,
+          text: row.text,
+          answerType: row.answerType,
+          correctAnswer: row.correctAnswer,
+          choices: row.choices,
+          diagram: row.diagram,
+          keyFormula: row.keyFormula,
+          hints: row.hints,
+          explanation: row.explanation,
+          difficulty: row.difficulty,
+          egeTaskNumber: row.egeTaskNumber,
+          tier: row.tier,
+        },
       });
-    }
-    for (const l of built.lessonLogs) {
-      await tx.insert(schema.lessonLogs).values({
-        id: l.id,
-        teacherId: l.teacherId,
-        studentId: l.studentId,
-        date: l.date,
-        topic: l.topic,
-        report: l.report,
-        createdAt: new Date(l.createdAt),
-      });
-    }
-  });
+  }
+
+  if (!isFreshInstall) return; // пользовательские данные уже в базе — не трогаем
+
+  for (const u of built.users) {
+    await tx.insert(schema.users).values({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      passwordHash: u.passwordHash,
+      role: u.role,
+      teacherId: u.teacherId ?? null,
+      plan: u.plan ?? null,
+      energy: u.energy ?? null,
+      energyUpdatedAt: u.energyUpdatedAt ? new Date(u.energyUpdatedAt) : null,
+      proUntil: u.proUntil ? new Date(u.proUntil) : null,
+      isAdmin: u.isAdmin ?? false,
+      isPlatformOwner: u.isPlatformOwner ?? false,
+      createdAt: new Date(u.createdAt),
+    });
+  }
+  for (const l of built.parentLinks) {
+    await tx.insert(schema.parentLinks).values(l);
+  }
+  for (const a of built.attempts) {
+    await tx.insert(schema.attempts).values({
+      id: a.id,
+      studentId: a.studentId,
+      problemId: a.problemId,
+      answer: a.answer,
+      isCorrect: a.isCorrect,
+      source: a.source,
+      reviewStatus: a.reviewStatus ?? null,
+      teacherFeedback: a.teacherFeedback ?? null,
+      createdAt: new Date(a.createdAt),
+    });
+  }
+  for (const h of built.homeworks) {
+    await tx.insert(schema.homeworks).values({
+      id: h.id,
+      teacherId: h.teacherId ?? null,
+      studentId: h.studentId ?? null,
+      title: h.title,
+      kind: h.kind,
+      allowHints: h.allowHints,
+      timeLimitMinutes: h.timeLimitMinutes ?? null,
+      audience: h.audience ?? null,
+      problemIds: h.problemIds,
+      dueDate: new Date(h.dueDate),
+      createdAt: new Date(h.createdAt),
+    });
+  }
+  for (const l of built.lessonLogs) {
+    await tx.insert(schema.lessonLogs).values({
+      id: l.id,
+      teacherId: l.teacherId,
+      studentId: l.studentId,
+      date: l.date,
+      topic: l.topic,
+      report: l.report,
+      createdAt: new Date(l.createdAt),
+    });
+  }
+}
+
+async function main() {
+  if (RESET) {
+    return withSeedReset((tx) => seedDatabase(tx, true));
+  }
+
+  config({ path: path.resolve(__dirname, "../.env.local"), quiet: true });
+  return withSeedTransaction({ connectionString: process.env.DATABASE_URL }, (tx) => seedDatabase(tx, false));
 }
 
 main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => process.exit(0));
+  .then(reportSeedSuccess)
+  .catch((error: unknown) => {
+    console.error(error instanceof SeedResetRefusal
+      ? error.message
+      : "Не удалось завершить заполнение базы. Проверьте подключение и схему.");
+    process.exitCode = 1;
+  });
