@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'scripts/seed*.ts'
+      - 'scripts/seed-reset-permit.sql'
       - 'scripts/content/**'
       - 'lib/db/**'
       - 'drizzle/**'
@@ -56,10 +57,12 @@ jobs:
           token="$(openssl rand -hex 16)"
           docker exec "$PG_CONTAINER" createdb -U seedtester "$target"
           docker exec "$PG_CONTAINER" createdb -U seedtester "$control"
+          docker exec -i "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U seedtester -d "$target" \
+            -v permit_token="$token" < scripts/seed-reset-permit.sql
           docker exec "$PG_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U seedtester -d postgres \
-            -c "COMMENT ON DATABASE $target IS 'planimetrika:seed-reset:$token'" \
             -c "COMMENT ON DATABASE $control IS 'planimetrika:seed-test-control:$token'"
           url_prefix="postgresql://seedtester:seed_test_local@127.0.0.1:$PG_PORT"
+          printf '::add-mask::%s\n' "$token" "$url_prefix/$target" "$url_prefix/$control" "$url_prefix/mathapp_test"
           {
             echo "SEED_RESET_TOKEN=$token"
             echo "SEED_RESET_DATABASE_URL=$url_prefix/$target"
@@ -71,23 +74,47 @@ jobs:
           DATABASE_URL="$url_prefix/$control" npx --no-install drizzle-kit migrate
 
       - run: npm run test:seed-reset
-      - name: Rehearse restoration from a synthetic backup
+      - name: Rehearse restoration and reject the inherited reset permit
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           source_db="${SEED_RESET_DATABASE_URL##*/}"
-          restored_db="seed_restore_test_$(openssl rand -hex 16)"
-          docker exec "$PG_CONTAINER" createdb -U seedtester "$restored_db"
-          docker exec "$PG_CONTAINER" pg_dump -U seedtester -d "$source_db" -Fc --no-owner --no-privileges > "$RUNNER_TEMP/seed.dump"
-          docker exec -i "$PG_CONTAINER" pg_restore -U seedtester -d "$restored_db" \
-            --exit-on-error --single-transaction --no-owner --no-privileges < "$RUNNER_TEMP/seed.dump"
-          sql='SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM homeworks),
+          [[ "$source_db" =~ ^seed_reset_test_[a-f0-9]{32}$ ]]
+          saved_db="seed_original_$(openssl rand -hex 16)"
+          run_psql() {
+            docker exec "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester "$@"
+          }
+          identity_sql="SELECT oid, shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = current_database()"
+          report_sql='SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM homeworks),
             (SELECT count(*) FROM attempts a JOIN users u ON u.id = a.student_id JOIN problems p ON p.id = a.problem_id),
             (SELECT count(*) FROM srs_states s JOIN users u ON u.id = s.student_id JOIN problems p ON p.id = s.problem_id)'
-          before="$(docker exec "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester -d "$source_db" -c "$sql")"
-          after="$(docker exec "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester -d "$restored_db" -c "$sql")"
-          test "$before" = "$after"
-          printf 'Restored rows and relationships: %s\n' "$after"
+          fingerprint_sql="SELECT md5(string_agg(entry, '' ORDER BY entry)) FROM (
+            SELECT 'u:' || to_jsonb(t)::text AS entry FROM users t
+            UNION ALL SELECT 'h:' || to_jsonb(t)::text FROM homeworks t
+            UNION ALL SELECT 'a:' || to_jsonb(t)::text FROM attempts t
+            UNION ALL SELECT 's:' || to_jsonb(t)::text FROM srs_states t
+            UNION ALL SELECT 'p:' || to_jsonb(t)::text FROM problems t
+          ) AS rows_to_check"
+          original_identity="$(run_psql -d "$source_db" -c "$identity_sql")"
+          expected_report="$(run_psql -d "$source_db" -c "$report_sql")"
+          expected_fingerprint="$(run_psql -d "$source_db" -c "$fingerprint_sql")"
+          docker exec "$PG_CONTAINER" pg_dump -U seedtester -d "$source_db" -Fc --no-owner --no-privileges > "$RUNNER_TEMP/seed.dump"
+          run_psql -d postgres -c "ALTER DATABASE $source_db RENAME TO $saved_db"
+          docker exec -i "$PG_CONTAINER" pg_restore -U seedtester -d postgres \
+            --exit-on-error --create --no-owner --no-privileges < "$RUNNER_TEMP/seed.dump"
+          restored_identity="$(run_psql -d "$source_db" -c "$identity_sql")"
+          [[ "${restored_identity%%|*}" != "${original_identity%%|*}" ]]
+          [[ "${restored_identity#*|}" == "${original_identity#*|}" ]]
+          [[ "${restored_identity#*|}" == planimetrika:seed-reset:v2:* ]]
+          [[ "$(run_psql -d "$source_db" -c "$report_sql")" == "$expected_report" ]]
+          [[ "$(run_psql -d "$source_db" -c "$fingerprint_sql")" == "$expected_fingerprint" ]]
+
+          status=0
+          ALLOW_SEED_RESET=1 node --import tsx scripts/seed.ts --reset > "$RUNNER_TEMP/reset-refusal.log" 2>&1 || status=$?
+          [[ "$status" == 1 ]]
+          grep -Fxq 'Сброс запрещён: одноразовая база не подтверждена.' "$RUNNER_TEMP/reset-refusal.log"
+          [[ "$(run_psql -d "$source_db" -c "$fingerprint_sql")" == "$expected_fingerprint" ]]
+          printf 'Restored rows and relationships: %s; inherited reset permit refused\n' "$expected_report"
 
       - run: npm run test:db
       - run: npm test

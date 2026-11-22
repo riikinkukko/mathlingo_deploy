@@ -26,8 +26,6 @@ function stableId(prefix: string) {
 const RESET = process.argv.includes("--reset");
 
 async function seedDatabase(tx: SeedTransaction, reset: boolean) {
-  // Serialize seed writers before checking whether the database is empty.
-  await tx.execute(sql`SELECT pg_catalog.pg_advisory_xact_lock(73810017, 1)`);
   if (reset) {
     // Порядок важен из-за внешних ключей — сначала таблицы, которые
     // ссылаются на других, потом на кого ссылаются.

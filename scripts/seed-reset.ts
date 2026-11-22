@@ -3,7 +3,8 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Client, type ClientConfig } from "pg";
 import * as schema from "../lib/db/schema";
 
-export type SeedTransaction = Parameters<Parameters<NodePgDatabase<typeof schema>["transaction"]>[0]>[0];
+type TransactionArgs = Parameters<NodePgDatabase<typeof schema>["transaction"]>;
+export type SeedTransaction = Parameters<TransactionArgs[0]>[0];
 
 export class SeedResetRefusal extends Error {
   constructor(reason: "permission" | "configuration" | "target") {
@@ -47,14 +48,22 @@ function readResetTarget() {
   }
 }
 
-export async function withSeedTransaction<T>(config: ClientConfig, run: (tx: SeedTransaction) => Promise<T>): Promise<T> {
+export async function withSeedTransaction<T>(
+  config: ClientConfig,
+  run: (tx: SeedTransaction) => Promise<T>,
+  transactionConfig?: TransactionArgs[1],
+): Promise<T> {
   const client = new Client(config);
   // A disconnected client rejects subsequent queries. Also absorb idle socket
   // errors so they cannot bypass the CLI's sanitized exception handler.
   client.on("error", () => {});
   try {
     await client.connect();
-    return await drizzle(client, { schema }).transaction(run);
+    return await drizzle(client, { schema }).transaction(async (tx) => {
+      // Serialize seed writers before checking the permit or whether the database is empty.
+      await tx.execute(sql`SELECT pg_catalog.pg_advisory_xact_lock(73810017, 1)`);
+      return run(tx);
+    }, transactionConfig);
   } finally {
     await client.end();
   }
@@ -70,18 +79,24 @@ export function withSeedReset<T>(run: (tx: SeedTransaction) => Promise<T>): Prom
     password,
     database,
     ssl: false,
+    application_name: "planimetrika-seed-reset",
     options: "-c search_path=public,pg_catalog",
     connectionTimeoutMillis: 5000,
   }, async (tx) => {
-    const { rows: [identity] } = await tx.execute<{ database: string; role: string; marker: string | null }>(sql`
-      SELECT d.datname AS database, current_user AS role,
-             pg_catalog.shobj_description(d.oid, 'pg_database') AS marker
+    // Compare the inherited comment against the live database and postmaster identity
+    // after acquiring the seed lock. See scripts/seed-reset-permit.sql.
+    const { rows: [identity] } = await tx.execute<{ permitted: boolean | null }>(sql`
+      SELECT pg_catalog.shobj_description(d.oid, 'pg_database') =
+             pg_catalog.concat('planimetrika:seed-reset:v2:', ${token}::text, ':',
+               (pg_catalog.pg_control_system()).system_identifier, ':',
+               EXTRACT(EPOCH FROM pg_catalog.pg_postmaster_start_time()), ':', d.oid) AS permitted
       FROM pg_catalog.pg_database AS d
-      WHERE d.datname = pg_catalog.current_database()
+      WHERE d.datname = pg_catalog.current_database() AND d.datname = ${database}
+        AND current_user = ${user}
     `);
-    if (identity?.database !== database || identity.role !== user || identity.marker !== `planimetrika:seed-reset:${token}`) {
+    if (identity?.permitted !== true) {
       throw new SeedResetRefusal("target");
     }
     return run(tx);
-  });
+  }, { isolationLevel: "read committed" }); // Read the permit after any revocation committed while waiting.
 }

@@ -19,11 +19,17 @@ async function verifiedFixture(rawUrl: string | undefined, marker: string) {
   const client = new Client({ connectionString: url.href, connectionTimeoutMillis: 5000 });
   try {
     await client.connect();
-    const { rows: [target] } = await client.query<{ name: string; marker: string }>(`
-      SELECT datname AS name, pg_catalog.shobj_description(oid, 'pg_database') AS marker
+    const { rows: [target] } = await client.query<{
+      name: string; marker: string | null; fingerprint: string;
+    }>(`
+      SELECT datname AS name, pg_catalog.shobj_description(oid, 'pg_database') AS marker,
+             concat((pg_control_system()).system_identifier, ':',
+               extract(epoch from pg_postmaster_start_time()), ':', oid) AS fingerprint
       FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()
     `);
-    assert.ok(target?.name === url.pathname.slice(1) && target.marker === marker, "Fixture identity was not established");
+    const expected = marker.endsWith(":") ? marker + target?.fingerprint : marker;
+    assert.ok(target?.name === url.pathname.slice(1) && target.marker === expected,
+      "Fixture identity was not established");
     return client;
   } catch {
     await client.end();
@@ -102,6 +108,20 @@ async function seedIdentities(client: Client) {
   return rows;
 }
 
+async function waitForResetLockWaiters(client: Client, count: number) {
+  const deadline = Date.now() + 15_000;
+  do {
+    const { rows: [row] } = await client.query<{ waiting: number }>(`
+      SELECT count(*)::int AS waiting FROM pg_catalog.pg_stat_activity
+      WHERE datname = current_database() AND application_name = 'planimetrika-seed-reset'
+        AND wait_event_type = 'Lock' AND wait_event = 'advisory'
+    `);
+    if (row.waiting === count) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  } while (Date.now() < deadline);
+  assert.fail(`Expected ${count} reset process(es) waiting on the advisory lock`);
+}
+
 test("reset refuses missing, wrong, or malformed configuration before dialing", async () => {
   let connections = 0;
   const server = createServer((socket) => {
@@ -131,7 +151,7 @@ test("reset refuses missing, wrong, or malformed configuration before dialing", 
 });
 
 test("seed CLI preserves data on refusal and rolls back all reset writes", async (t) => {
-  const allowed = await verifiedFixture(allowUrl, `planimetrika:seed-reset:${token}`);
+  const allowed = await verifiedFixture(allowUrl, `planimetrika:seed-reset:v2:${token}:`);
   try {
     const control = await verifiedFixture(controlUrl, `planimetrika:seed-test-control:${token}`);
     try {
@@ -156,6 +176,31 @@ test("seed CLI preserves data on refusal and rolls back all reset writes", async
         refused(await seed({ ...reset, marker: otherToken }), /одноразовая база не подтверждена/);
         assert.deepEqual(await fixtureSnapshot(control), controlBefore);
         assert.deepEqual(await fixtureSnapshot(allowed), allowedBefore);
+      });
+
+      await t.test("reset rechecks permission revoked while waiting for the lock", async () => {
+        const { rows: [saved] } = await allowed.query<{ restore: string }>(`
+          SELECT format('COMMENT ON DATABASE %I IS %L', datname, shobj_description(oid, 'pg_database')) AS restore
+          FROM pg_catalog.pg_database WHERE datname = current_database()
+        `);
+        const { rows: [revoke] } = await allowed.query<{ command: string }>(
+          "SELECT format('COMMENT ON DATABASE %I IS NULL', current_database()) AS command",
+        );
+        await allowed.query("SELECT pg_advisory_lock(73810017, 1)");
+        const pending = seed(reset);
+        try {
+          try {
+            await waitForResetLockWaiters(allowed, 1);
+            await allowed.query(revoke.command);
+          } finally {
+            await allowed.query("SELECT pg_advisory_unlock(73810017, 1)");
+          }
+          refused(await pending, /одноразовая база не подтверждена/);
+          assert.deepEqual(await fixtureSnapshot(allowed), allowedBefore);
+        } finally {
+          await pending;
+          await allowed.query(saved.restore);
+        }
       });
 
       await t.test("ordinary seed updates existing content and preserves linked user data", async () => {
@@ -192,6 +237,19 @@ test("seed CLI preserves data on refusal and rolls back all reset writes", async
         assert.ok(previous.every((entry) => entry.ids?.length > 0));
         assert.equal((await seed(reset)).status, 0);
         assert.deepEqual(await seedIdentities(allowed), previous);
+      });
+
+      await t.test("two parallel resets serialize and commit complete seed data", async () => {
+        const before = await seedIdentities(allowed);
+        await allowed.query("SELECT pg_advisory_lock(73810017, 1)");
+        const results = Promise.all([seed(reset), seed(reset)]);
+        try {
+          await waitForResetLockWaiters(allowed, 2);
+        } finally {
+          await allowed.query("SELECT pg_advisory_unlock(73810017, 1)");
+          assert.deepEqual((await results).map(({ status }) => status), [0, 0]);
+        }
+        assert.deepEqual(await seedIdentities(allowed), before);
       });
     } finally {
       await control.end();
