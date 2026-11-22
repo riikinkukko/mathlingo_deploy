@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "fix/issue-1-safe-seed-reset": false
+    }
+  }
+}
