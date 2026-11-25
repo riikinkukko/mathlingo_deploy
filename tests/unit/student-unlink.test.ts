@@ -14,12 +14,13 @@ import { createSessionToken, hashPassword, runAsUser } from "../../lib/auth";
 import { passwordLogin } from "../../lib/auth-flows";
 import { db } from "../../lib/db/client";
 import * as s from "../../lib/db/schema";
-import { getUserById, getStudentBalance, getQuestionsForTeacher, computeOverallStats } from "../../lib/queries";
+import { getUserById, getStudentBalance, getQuestionsForTeacher, computeOverallStats, createAuthToken } from "../../lib/queries";
 import { applyLessonStatus } from "../../lib/lesson-status";
 import { unlinkStudent, UNLINK_CLIENT_UPDATE, UNLINK_CREDENTIALS, UNLINK_DENIED } from "../../lib/student-links";
 import { cancelTeacherInvite, createTeacherInvite, respondToTeacherInvite } from "../../lib/teacher-invites";
 import { readTaskPhoto } from "../../lib/task-photos";
 import { resetStudentPasswordAction } from "../../app/actions-import";
+import { resetPasswordAction } from "../../app/actions";
 import { cleanup, makeHomework, makeUser, problems } from "../helpers";
 import type { User } from "../../lib/types";
 
@@ -204,9 +205,19 @@ test("teacher-issued credentials require the student's new password and login be
     const fields = new FormData();
     fields.set("studentId", student.id);
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: false, error: UNLINK_CREDENTIALS });
-    await db.update(s.users).set({ passwordHash: await hashPassword(password), credentialHandoffPending: true }).where(eq(s.users.id, student.id));
+    const shortLogin = email.endsWith("@u.planimetrika.online");
+    if (shortLogin) {
+      await db.update(s.users).set({ passwordHash: await hashPassword(password), credentialHandoffPending: true })
+        .where(eq(s.users.id, student.id));
+    } else {
+      const reset = new FormData();
+      reset.set("token", await createAuthToken(student.id, "password_reset", 60000));
+      reset.set("password", password);
+      await assert.rejects(resetPasswordAction(null, reset), (error: unknown) =>
+        (error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT"));
+    }
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: false, error: UNLINK_CREDENTIALS });
-    const login = email.endsWith("@u.planimetrika.online") ? email.split("@")[0] : email;
+    const login = shortLogin ? email.split("@")[0] : email;
     assert.ok("error" in await passwordLogin(login, "issued-password", ""));
     assert.ok("user" in await passwordLogin(login, password, ""));
     assert.ok((await runAsUser(teacher, () => resetStudentPasswordAction(null, fields)))?.error);

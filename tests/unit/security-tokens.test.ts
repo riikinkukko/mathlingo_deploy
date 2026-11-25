@@ -29,8 +29,9 @@ test("код привязки Telegram: живёт сутки, старый фо
 
 test("вход на сайт из приложения: длинный случайный одноразовый токен", async () => {
   const u = await makeUser();
-  const t = await createWebLink(u.id, "/student/profile");
+  const createdAt = new Date();
+  const t = await createWebLink(u.id, "/student/profile", createdAt);
   assert.ok(t.length >= 30, "не короткий id, а криптостойкий токен");
-  assert.deepEqual(await consumeWebLink(t), { userId: u.id, next: "/student/profile" });
+  assert.deepEqual(await consumeWebLink(t), { userId: u.id, next: "/student/profile", createdAt });
   assert.equal(await consumeWebLink(t), null);
 });
