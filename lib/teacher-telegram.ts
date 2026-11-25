@@ -30,7 +30,7 @@ import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
-import { activeTeacherLinks, lockStudent, withActiveTeacherDeliveries, withUnchangedTeacherRoster } from "./student-links";
+import { activeTeacherLinks, lockStudent, withActiveTeacherDeliveries, withUnchangedTeacherRoster, type StudentLinkTransaction } from "./student-links";
 import { debtText, hasDebt } from "./money";
 import { reportButton, startTelegramReport } from "./lesson-report";
 
@@ -207,7 +207,10 @@ function lessonKeyboard(lessonId: string): InlineKeyboard {
 }
 
 /** Раз в несколько минут из воркера бота. Возвращает число отправленных вопросов. */
-export async function sendLessonStatusPrompts(now: Date = new Date(), send = sendTelegramMessage): Promise<number> {
+export async function sendLessonStatusPrompts(
+  now: Date = new Date(),
+  send: (chatId: string, text: string, options: { replyMarkup: InlineKeyboard }, tx: StudentLinkTransaction) => Promise<boolean> = sendTelegramMessage,
+): Promise<number> {
   if (isQuietHours(now)) return 0;
 
   const claimed = await db
@@ -249,7 +252,7 @@ export async function sendLessonStatusPrompts(now: Date = new Date(), send = sen
         const body = groupPromptText(users[0].groupName, names, first.startsAt, first.durationMin, first.topic) +
           `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
           openLink(first.groupId ? `/teacher/groups/${first.groupId}` : "/teacher/schedule", "Отметить посещаемость →");
-        return send(teacher.telegramChatId!, body, { replyMarkup: groupKeyboard(groupLessonId) });
+        return send(teacher.telegramChatId!, body, { replyMarkup: groupKeyboard(groupLessonId) }, tx);
       });
       if (sentGroup) sent++;
     } catch (e) {
@@ -270,7 +273,7 @@ export async function sendLessonStatusPrompts(now: Date = new Date(), send = sen
         if (!active) return false;
         const body = lessonPromptText(active.name, lesson.startsAt, lesson.durationMin, lesson.topic) +
           "\n\nОтметьте, было ли занятие, — от этого зависит баланс оплат.";
-        return send(teacher.telegramChatId!, body, { replyMarkup: lessonKeyboard(lesson.id) });
+        return send(teacher.telegramChatId!, body, { replyMarkup: lessonKeyboard(lesson.id) }, tx);
       })) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось спросить про занятие", lesson.id, e);

@@ -246,7 +246,8 @@ export async function startTelegramReport(teacherId: string, chatId: string, les
         .where(and(eq(schema.scheduledLessons.id, lessonId), isNull(schema.scheduledLessons.archivedAt)));
       if (!active) return false;
       await tx.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));
-      return sendTelegramMessage(chatId, text);
+      await sendTelegramMessage(chatId, text);
+      return true;
     });
   return sent ? "Жду текст отчёта" : "Занятие не найдено";
 }

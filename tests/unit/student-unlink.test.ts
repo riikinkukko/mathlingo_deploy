@@ -408,28 +408,25 @@ test("direct Telegram lesson prompt and unlink are serialized", async () => {
     id, teacherId: teacher.id, studentId: student.id,
     startsAt: new Date(now.getTime() - 3600000), durationMin: 30, status: "planned",
   });
-  let enter!: () => void;
+  let enter!: (pid: number) => void;
   let release!: () => void;
-  const started = new Promise<void>((resolve) => { enter = resolve; });
+  const started = new Promise<number>((resolve) => { enter = resolve; });
   const paused = new Promise<void>((resolve) => { release = resolve; });
-  const send = sendLessonStatusPrompts(now, async () => { enter(); await paused; return true; });
-  await Promise.race([started, send.then(() => assert.fail("fixture did not send"))]);
+  const send = sendLessonStatusPrompts(now, async (_chatId, _text, _options, tx) => {
+    const { rows: [{ pid }] } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+    enter(pid);
+    await paused;
+    return true;
+  });
+  const pid = await Promise.race([started, send.then(() => assert.fail("fixture did not send"))]);
   const observer = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   await observer.connect();
-  let detached = false;
-  const detach = unlinkStudent(teacher, student.id, version(student)).then((result) => { detached = true; return result; });
+  const detach = unlinkStudent(teacher, student.id, version(student));
   try {
-    const deadline = Date.now() + 4000;
-    let waiting = false;
-    while (!waiting && Date.now() < deadline) {
-      const result = await observer.query("select 1 from pg_stat_activity where wait_event_type = 'Lock' and query like '%for update%'");
-      waiting = !!result.rowCount;
-      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    assert.equal(waiting, true, "unlink should wait for the delivery transaction");
-    assert.equal(detached, false);
+    await waitForBlocked(observer, pid);
   } finally {
     release();
+    await Promise.allSettled([send, detach]);
     await observer.end();
   }
   assert.equal(await send, 1);
