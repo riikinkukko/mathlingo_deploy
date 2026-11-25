@@ -8,11 +8,12 @@ export const dynamic = "force-dynamic";
  * нет в приложении (кабинет репетитора и родителя, тариф, настройки).
  */
 export async function POST(req: Request) {
+  const authenticatedAt = new Date();
   const user = await requireUser(req);
   if (user instanceof Response) return user;
   const body = await readJson<{ next?: unknown }>(req, 2_000);
   const next = safeNext(body?.next ?? `/${user.role.toLowerCase()}`);
-  const t = await createWebLink(user.id, next);
+  const t = await createWebLink(user.id, next, authenticatedAt);
   const base = (process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin).replace(/\/$/, "");
   return json({ url: `${base}/auth/app?t=${encodeURIComponent(t)}` });
 }

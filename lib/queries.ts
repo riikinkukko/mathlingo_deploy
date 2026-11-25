@@ -3,7 +3,7 @@ import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
 import { randomBytes } from "crypto";
 import { convertRemainingDays } from "./teacher-plan";
-import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lt, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lt, lte, gte, type SQL } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays, computeBestStreak } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
@@ -46,6 +46,9 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     passwordHash: row.passwordHash,
     role: row.role,
     teacherId: row.teacherId ?? undefined,
+    teacherLinkVersion: row.teacherLinkVersion,
+    independentCredentials: row.independentCredentials,
+    credentialHandoffPending: row.credentialHandoffPending,
     plan: row.plan ?? undefined,
     energy: row.energy ?? undefined,
     energyUpdatedAt: row.energyUpdatedAt ? row.energyUpdatedAt.toISOString() : undefined,
@@ -714,7 +717,7 @@ export async function getLessonLogsForStudent(studentId: string, teacherId?: str
 
 // ---------- Расписание занятий (этап 2) ----------
 
-function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): import("./types").ScheduledLesson {
+export function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): import("./types").ScheduledLesson {
   return {
     id: r.id,
     teacherId: r.teacherId,
@@ -726,6 +729,7 @@ function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): imp
     seriesId: r.seriesId,
     groupId: r.groupId,
     groupLessonId: r.groupLessonId,
+    archivedAt: r.archivedAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -749,6 +753,8 @@ export async function getUnmarkedPastLessons(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         eq(schema.scheduledLessons.status, "planned"),
+        isNull(schema.scheduledLessons.archivedAt),
+        eq(schema.users.teacherId, teacherId),
         lte(schema.scheduledLessons.startsAt, new Date()),
         ...(studentId ? [eq(schema.scheduledLessons.studentId, studentId)] : [])
       )
@@ -767,12 +773,15 @@ export async function getUpcomingLessonsForTeacher(
   const planned = and(
     eq(schema.scheduledLessons.teacherId, teacherId),
     eq(schema.scheduledLessons.status, "planned"),
+    eq(schema.users.teacherId, teacherId),
+    isNull(schema.scheduledLessons.archivedAt),
     gte(schema.scheduledLessons.startsAt, new Date())
   );
   const lessonKey = sql<string>`coalesce(${schema.scheduledLessons.groupLessonId}, ${schema.scheduledLessons.id})`;
   const keys = await db
     .select({ key: lessonKey, first: sql`min(${schema.scheduledLessons.startsAt})` })
     .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
     .where(planned)
     .groupBy(lessonKey)
     .orderBy(sql`min(${schema.scheduledLessons.startsAt})`)
@@ -803,6 +812,7 @@ export async function getLessonsForTeacherRange(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        or(sql`${schema.scheduledLessons.status} <> 'planned'`, and(eq(schema.users.teacherId, teacherId), isNull(schema.scheduledLessons.archivedAt))),
         gte(schema.scheduledLessons.startsAt, from),
         sql`${schema.scheduledLessons.startsAt} < ${to}`
       )
@@ -828,6 +838,7 @@ export async function getTodayLessonsForTeacher(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        or(sql`${schema.scheduledLessons.status} <> 'planned'`, and(eq(schema.users.teacherId, teacherId), isNull(schema.scheduledLessons.archivedAt))),
         gte(schema.scheduledLessons.startsAt, start),
         sql`${schema.scheduledLessons.startsAt} < ${end}`
       )
@@ -857,10 +868,13 @@ export async function getUpcomingLessonsForStudent(
   const rows = await db
     .select({ lesson: schema.scheduledLessons, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
     .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.studentId, studentId),
+        eq(schema.users.teacherId, schema.scheduledLessons.teacherId),
+        isNull(schema.scheduledLessons.archivedAt),
         eq(schema.scheduledLessons.status, "planned"),
         gte(schema.scheduledLessons.startsAt, new Date()),
         teacherId ? eq(schema.scheduledLessons.teacherId, teacherId) : undefined
@@ -942,7 +956,7 @@ export async function getStudentBalances(
         lastPaidAt: sql<string | null>`max(${schema.studentPayments.paidAt})::text`,
       })
       .from(schema.studentPayments)
-      .where(eq(schema.studentPayments.teacherId, teacherId))
+      .where(and(eq(schema.studentPayments.teacherId, teacherId), isNull(schema.studentPayments.archivedAt)))
       .groupBy(schema.studentPayments.studentId),
     // Засчитанные занятия: «было» + «не пришёл», если у репетитора пропуск
     // оплачивается. Стоимость — зафиксированная при отметке цена, а если её
@@ -958,7 +972,7 @@ export async function getStudentBalances(
       from scheduled_lessons l
       join users u on u.id = l.student_id
       join users t on t.id = l.teacher_id
-      where l.teacher_id = ${teacherId}
+      where l.teacher_id = ${teacherId} and l.archived_at is null
       group by l.student_id
     `),
   ]);
@@ -1386,6 +1400,7 @@ export async function pushNotification(
     link: string;
     /** false — только в приложении, без дубля в Telegram. */
     telegram?: boolean;
+    teacherLink?: { studentId: string; teacherId: string; version: string };
   }
 ) {
   const notificationId = genId("n");
@@ -1411,7 +1426,8 @@ const COMMIT_CHECKS_MS = [150, 1000, 4000];
 
 export async function deliverWhenCommitted(
   notificationId: string,
-  params: { userId: string; title: string; body: string; link: string; telegram?: boolean }
+  params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
+    teacherLink?: { studentId: string; teacherId: string; version: string } }
 ): Promise<boolean> {
   let committed = false;
   for (const wait of COMMIT_CHECKS_MS) {
@@ -1428,6 +1444,13 @@ export async function deliverWhenCommitted(
     }
   }
   if (!committed) return false;
+  if (params.teacherLink) {
+    const { studentId, teacherId, version } = params.teacherLink;
+    const [active] = await db.select({ id: schema.users.id }).from(schema.users).where(and(
+      eq(schema.users.id, studentId), eq(schema.users.teacherId, teacherId), eq(schema.users.teacherLinkVersion, version)
+    ));
+    if (!active) return false;
+  }
 
   // Push в мобильное приложение. Ошибки sendPushToUser глушит сам.
   void sendPushToUser(params.userId, { title: params.title, body: params.body, link: params.link });
@@ -2534,7 +2557,7 @@ export interface StudentQuestionView {
   hasSketch: boolean;
 }
 
-async function selectQuestions(where: ReturnType<typeof eq>) {
+async function selectQuestions(where: SQL) {
   const rows = await db
     .select({
       q: {
@@ -2577,7 +2600,7 @@ async function selectQuestions(where: ReturnType<typeof eq>) {
 }
 
 export function getQuestionsForTeacher(teacherId: string) {
-  return selectQuestions(eq(schema.studentQuestions.teacherId, teacherId));
+  return selectQuestions(and(eq(schema.studentQuestions.teacherId, teacherId), eq(schema.users.teacherId, teacherId))!);
 }
 
 export function getQuestionsForStudent(studentId: string) {
@@ -2588,7 +2611,9 @@ export async function getOpenQuestionsCount(teacherId: string): Promise<number> 
   const rows = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(schema.studentQuestions)
-    .where(and(eq(schema.studentQuestions.teacherId, teacherId), isNull(schema.studentQuestions.answeredAt)));
+    .innerJoin(schema.users, eq(schema.users.id, schema.studentQuestions.studentId))
+    .where(and(eq(schema.studentQuestions.teacherId, teacherId), eq(schema.users.teacherId, teacherId),
+      isNull(schema.studentQuestions.answeredAt)));
   return Number(rows[0]?.c ?? 0);
 }
 

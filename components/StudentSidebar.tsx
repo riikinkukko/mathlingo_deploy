@@ -42,8 +42,6 @@ export default function StudentSidebar({
   const currentTopic = searchParams.get("topic");
   const reviewHref = currentTopic ? `/student/review?topic=${currentTopic}` : "/student/review";
 
-  // Пробники ЕГЭ: у самостоятельного ученика своей домашки нет — этот пункт
-  // и есть «Пробники»; у ученика репетитора — отдельный пункт после домашки.
   const items = [
     { key: "subjects", label: "Предметы", href: "/student/subjects", icon: IconGrid, badge: 0 },
     { key: "path", label: "Путь обучения", href: "/student", icon: IconMap, badge: 0 },

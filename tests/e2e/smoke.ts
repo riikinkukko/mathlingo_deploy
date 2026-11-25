@@ -6,6 +6,10 @@
  *   BASE_URL=http://localhost:3100 npm run test:e2e
  */
 import { chromium, type Page } from "playwright-core";
+import assert from "node:assert/strict";
+import { cleanup, makeHomework, makeUser, problems } from "../helpers";
+import { hashPassword } from "../../lib/auth";
+import { getUserById } from "../../lib/queries";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3100";
 const PW = process.env.DEMO_PASSWORD ?? "demo1234";
@@ -53,14 +57,14 @@ const fail = (m: string) => {
   console.log("FAIL " + m);
 };
 
-async function login(email: string) {
+async function login(email: string, password = PW) {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const p = await ctx.newPage();
   const errors: string[] = [];
   p.on("pageerror", (e) => errors.push(e.message));
   await p.goto(BASE + "/login");
   await p.fill('input[name="email"]', email);
-  await p.fill('input[name="password"]', PW);
+  await p.fill('input[name="password"]', password);
   await Promise.all([p.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 15000 }), p.click('main button[type="submit"], form button[type="submit"]')]);
   return { p, errors, ctx };
 }
@@ -80,6 +84,74 @@ async function check(p: Page, errors: string[], path: string, expect: RegExp, wh
 }
 
 let browser: Awaited<ReturnType<typeof chromium.launch>>;
+
+async function checkUnlink() {
+  const dbUrl = process.env.TEST_DATABASE_URL;
+  assert.ok(dbUrl && /test/i.test(new URL(dbUrl).pathname), "Отвязку проверяем только на TEST_DATABASE_URL");
+  process.env.DATABASE_URL = dbUrl;
+  const password = "test-unlink-temporary";
+  const personalPassword = "test-unlink-personal";
+  const teacher = await makeUser({ role: "TEACHER", passwordHash: await hashPassword(password) });
+  const student = await makeUser({
+    email: `e2e-unlink-${Date.now()}@u.planimetrika.online`,
+    teacherId: teacher.id,
+    passwordHash: await hashPassword(password),
+  });
+  const loginName = student.email.split("@")[0];
+  const [problem] = await problems(1);
+  assert.ok(problem);
+  const homework = await makeHomework({
+    studentId: student.id, teacherId: teacher.id, problemIds: [problem.id], title: "Задание для проверки отвязки",
+  });
+  const t = await login(teacher.email, password);
+  const st = await login(loginName, password);
+  try {
+    const card = BASE + `/teacher/student/${student.id}`;
+    await t.p.goto(card);
+    t.p.on("dialog", (dialog) => dialog.accept());
+    st.p.on("dialog", (dialog) => dialog.accept());
+    const detach = t.p.getByRole("button", { name: "Отвязать ученика" });
+    await detach.click();
+    await t.p.getByRole("alert").filter({ hasText: "задать свой пароль" }).waitFor();
+
+    await st.p.goto(BASE + "/student/profile");
+    await st.p.locator('input[name="currentPassword"]').fill(password);
+    await st.p.locator('input[name="password"]').fill(personalPassword);
+    await Promise.all([
+      st.p.waitForURL("**/login"),
+      st.p.getByRole("button", { name: "Сменить пароль" }).click(),
+    ]);
+    const stNew = await login(loginName, personalPassword);
+    try {
+      await stNew.p.goto(BASE + "/student/profile");
+      stNew.p.on("dialog", (dialog) => dialog.accept());
+      await stNew.p.getByRole("button", { name: "Запросить удаление аккаунта" }).click();
+      await stNew.p.getByRole("button", { name: "Отменить запрос" }).waitFor();
+      await Promise.all([
+        t.p.waitForURL("**/teacher?ok=student_unlinked"),
+        detach.click(),
+      ]);
+      assert.equal((await t.p.goto(card))?.status(), 404);
+      assert.equal((await getUserById(student.id))?.teacherId, undefined);
+      assert.ok((await getUserById(student.id))?.deletionRequestedAt);
+      await stNew.p.goto(BASE + "/student/homework");
+      await stNew.p.getByRole("link", { name: /Задание для проверки отвязки/ }).waitFor();
+      assert.equal((await stNew.p.goto(BASE + `/student/homework/${homework}`))?.status(), 200);
+      await stNew.p.goto(BASE + "/student/profile");
+      await stNew.p.getByRole("button", { name: "Отменить запрос" }).click();
+      await stNew.p.getByRole("button", { name: "Запросить удаление аккаунта" }).waitFor();
+      assert.equal((await getUserById(student.id))?.deletionRequestedAt, undefined);
+      const fresh = await login(loginName, personalPassword);
+      await fresh.ctx.close();
+    } finally {
+      await stNew.ctx.close();
+    }
+    console.log("ok   веб-отвязка, передача пароля, задания и запрос удаления");
+  } finally {
+    await Promise.all([t.ctx.close(), st.ctx.close()]);
+    await cleanup();
+  }
+}
 
 async function main() {
   browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
@@ -102,6 +174,7 @@ async function main() {
     if (r.status === 401) console.log(`ok   аноним не получает ${api}`);
     else fail(`аноним получил ${api}: ${r.status}`);
   }
+  await checkUnlink();
   } finally {
     await browser.close();
   }

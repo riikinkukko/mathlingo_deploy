@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { lockTeacherStudents } from "@/lib/student-links";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, getMockScoreById } from "@/lib/queries";
@@ -60,7 +61,10 @@ export async function setTargetScoreAction(
     targetScore = n;
   }
 
-  await db.update(schema.users).set({ targetScore }).where(eq(schema.users.id, studentId));
+  const [updated] = await db.update(schema.users).set({ targetScore }).where(and(
+    eq(schema.users.id, studentId), eq(schema.users.role, "STUDENT"), eq(schema.users.teacherId, ctx.teacher.id)
+  )).returning({ id: schema.users.id });
+  if (!updated) return { error: "Ученик не найден" };
   revalidateStudent(studentId);
   return { ok: true, at: Date.now() };
 }
@@ -85,14 +89,19 @@ export async function addMockScoreAction(
   }
   const note = String(formData.get("note") || "").trim().slice(0, 200) || null;
 
-  await db.insert(schema.mockScores).values({
-    id: genId("ms"),
-    teacherId: ctx.teacher.id,
-    studentId,
-    score,
-    takenAt,
-    note,
+  const added = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, ctx.teacher.id, [studentId])).length) return false;
+    await tx.insert(schema.mockScores).values({
+      id: genId("ms"),
+      teacherId: ctx.teacher.id,
+      studentId,
+      score,
+      takenAt,
+      note,
+    });
+    return true;
   });
+  if (!added) return { error: "Ученик не найден" };
   revalidateStudent(studentId);
   return { ok: true, at: Date.now() };
 }
@@ -104,7 +113,12 @@ export async function deleteMockScoreAction(formData: FormData) {
   if (!teacher || teacher.role !== "TEACHER" || !mock || mock.teacherId !== teacher.id) redirect("/teacher?error=1");
   const back = `/teacher/student/${mock.studentId}`;
 
-  await db.delete(schema.mockScores).where(eq(schema.mockScores.id, id));
+  const removed = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, teacher.id, [mock.studentId])).length) return [];
+    return tx.delete(schema.mockScores).where(and(eq(schema.mockScores.id, id), eq(schema.mockScores.teacherId, teacher.id)))
+      .returning({ id: schema.mockScores.id });
+  });
+  if (!removed.length) redirect("/teacher?error=1");
   revalidateStudent(mock.studentId);
   redirect(back);
 }
@@ -122,13 +136,18 @@ export async function saveStudentNotesAction(
     return { error: `Слишком длинные заметки — максимум ${NOTES_MAX} символов` };
   }
 
-  await db
-    .insert(schema.studentNotes)
-    .values({ studentId, teacherId: ctx.teacher.id, notes, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: [schema.studentNotes.studentId, schema.studentNotes.teacherId],
-      set: { notes, updatedAt: new Date() },
-    });
+  const changed = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, ctx.teacher.id, [studentId])).length) return false;
+    await tx
+      .insert(schema.studentNotes)
+      .values({ studentId, teacherId: ctx.teacher.id, notes, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: [schema.studentNotes.studentId, schema.studentNotes.teacherId],
+        set: { notes, updatedAt: new Date() },
+      });
+    return true;
+  });
+  if (!changed) return { error: "Ученик не найден" };
   revalidatePath(`/teacher/student/${studentId}`);
   return { ok: true, at: Date.now() };
 }

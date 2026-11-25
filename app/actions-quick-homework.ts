@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
+import { lockTeacherStudents } from "@/lib/student-links";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, pushNotification } from "@/lib/queries";
@@ -51,6 +52,7 @@ export async function createQuickHomeworkAction(formData: FormData) {
   const due = mskEndOfDay(addDaysKey(mskDayKey(new Date()), dueDays));
 
   await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, teacher.id, [studentId])).length) redirect(`${back}&error=access`);
     await tx.insert(schema.homeworks).values({
       id: genId("h"),
       teacherId: teacher!.id,
@@ -111,8 +113,8 @@ async function createQuickGroupHomework(formData: FormData) {
   } else {
     for (const id of memberIds) perStudent.set(id, await pickWeakProblems(id, count));
   }
-  const targets = memberIds.filter((id) => (perStudent.get(id) ?? []).length > 0);
-  if (targets.length === 0) redirect(`${back}&quick=empty`);
+  const candidates = memberIds.filter((id) => (perStudent.get(id) ?? []).length > 0);
+  if (candidates.length === 0) redirect(`${back}&quick=empty`);
 
   const sorted = [...numbers].sort((a, b) => a - b);
   const title = mode === "weak" ? "Работа над ошибками" : `Практика: ${sorted.map((n) => `№${n}`).join(", ")}`;
@@ -120,8 +122,10 @@ async function createQuickGroupHomework(formData: FormData) {
   const due = mskEndOfDay(addDaysKey(mskDayKey(new Date()), dueDays));
   const batchId = genId("hb");
 
-  await db.transaction(async (tx) => {
-    for (const studentId of targets) {
+  const targets = await db.transaction(async (tx) => {
+    const active = await lockTeacherStudents(tx, teacher.id, candidates, group.id);
+    if (!active.length) redirect(`${back}&error=access`);
+    for (const studentId of active) {
       const problemIds = perStudent.get(studentId)!;
       await tx.insert(schema.homeworks).values({
         id: genId("h"),
@@ -145,6 +149,7 @@ async function createQuickGroupHomework(formData: FormData) {
         link: `/student/homework`,
       });
     }
+    return active;
   });
 
   for (const id of targets) revalidatePath(`/teacher/student/${id}`);

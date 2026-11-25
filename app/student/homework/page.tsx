@@ -4,12 +4,11 @@ import {
   getHomeworksForStudent,
   homeworkStatus,
   isStandaloneStudent,
-  isEffectivelyPro,
 } from "@/lib/queries";
 import StudentShell from "@/components/StudentShell";
 import FractionBadge from "@/components/FractionBadge";
 import Mascot from "@/components/Mascot";
-import { IconClipboard, IconCheck, IconCrown } from "@/components/icons";
+import { IconClipboard, IconCheck } from "@/components/icons";
 
 const KIND_META: Record<string, { label: string; bg: string }> = {
   homework: { label: "Домашнее задание", bg: "bg-amber" },
@@ -19,15 +18,12 @@ const KIND_META: Record<string, { label: string; bg: string }> = {
 
 export default async function HomeworkListPage() {
   const user = (await getSessionUser())!;
-  // У самостоятельного ученика своей домашки нет: вкладка — это пробники ЕГЭ.
-  if (isStandaloneStudent(user)) redirect("/student/mock");
   const homeworks = await getHomeworksForStudent(user.id);
+  if (isStandaloneStudent(user) && !homeworks.some((hw) => hw.studentId === user.id)) redirect("/student/mock");
   const statusPairs = await Promise.all(homeworks.map(async (hw) => [hw.id, await homeworkStatus(hw, user.id)] as const));
   const statusById = new Map(statusPairs);
 
-  const standalone = isStandaloneStudent(user);
-  const isPro = standalone && isEffectivelyPro(user);
-  const tabLabel = standalone ? "Пробники" : "Домашнее задание";
+  const tabLabel = "Домашнее задание";
 
   return (
     <StudentShell active="homework" title={tabLabel}>
@@ -46,34 +42,14 @@ export default async function HomeworkListPage() {
           </span>
           <span className="text-sm font-black text-pine">Открыть</span>
         </a>
-        {standalone && !isPro ? (
-          // Free-самостоятельный: своей домашки нет и авторские пробники
-          // не открыты — вместо пустого списка честный апсейл на Pro.
-          <div className="card p-8 text-center">
-            <Mascot mood="hint" size={84} className="mx-auto mb-4" />
-            <p className="mb-1 flex items-center justify-center gap-1.5 font-display text-lg font-black text-ink">
-              <IconCrown className="h-5 w-5 text-amber" />
-              Пробники — только на Pro
-            </p>
-            <p className="mx-auto mb-5 max-w-sm text-sm text-ink-soft">
-              Пользуйся Pro-версией, чтобы решать авторские варианты пробных экзаменов
-              — составлены так же тщательно, как обычные задачи, но по формату ближе
-              к настоящему ЕГЭ.
-            </p>
-            <a href="/student/upgrade" className="btn-primary !bg-amber inline-block !text-sm">
-              Открыть Pro
-            </a>
-          </div>
-        ) : homeworks.length === 0 ? (
+        {homeworks.length === 0 ? (
           <div className="card p-10 text-center">
             <Mascot mood="idle" size={72} className="mx-auto mb-3" />
             <p className="font-display text-lg font-black text-ink">
-              {standalone ? "Пока нет доступных пробников" : "Пока нет заданий"}
+              Пока нет заданий
             </p>
             <p className="mt-1 text-sm text-ink-soft">
-              {standalone
-                ? "Загляни попозже — авторские пробники добавляются постепенно."
-                : "Домашка, контрольные и пробники от репетитора появятся здесь."}
+              Домашка, контрольные и пробники от репетитора появятся здесь.
             </p>
           </div>
         ) : (

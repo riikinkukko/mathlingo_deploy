@@ -6,6 +6,7 @@
 // Относительные импорты — модуль вызывается и из воркера бота (tsx).
 import { and, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
+import { lockStudent } from "./student-links";
 import * as schema from "./db/schema";
 import { getHomeworksForStudent, homeworkStatus, pushNotification } from "./queries";
 import { isQuietHours } from "./lesson-reminders";
@@ -24,24 +25,10 @@ export function nudgedRecently(nudgedAt: Date | string | null | undefined, now: 
 
 export async function nudgeStudent(teacherId: string, studentId: string, now: Date = new Date()): Promise<NudgeResult> {
   const [st] = await db
-    .select({ id: schema.users.id, name: schema.users.name, teacherId: schema.users.teacherId })
+    .select({ id: schema.users.id, name: schema.users.name, teacherId: schema.users.teacherId, linkVersion: schema.users.teacherLinkVersion })
     .from(schema.users)
     .where(eq(schema.users.id, studentId));
   if (!st || st.teacherId !== teacherId) return { ok: false, reason: "not_found" };
-
-  const cutoff = new Date(now.getTime() - NUDGE_COOLDOWN_H * 3600 * 1000);
-  const claimed = await db
-    .update(schema.users)
-    .set({ nudgedAt: now })
-    .where(
-      and(
-        eq(schema.users.id, studentId),
-        eq(schema.users.teacherId, teacherId),
-        or(isNull(schema.users.nudgedAt), lt(schema.users.nudgedAt, cutoff))
-      )
-    )
-    .returning({ id: schema.users.id, chatId: schema.users.telegramChatId });
-  if (claimed.length === 0) return { ok: false, reason: "too_soon", studentName: st.name };
 
   const [teacher] = await db
     .select({ name: schema.users.name })
@@ -53,7 +40,7 @@ export async function nudgeStudent(teacherId: string, studentId: string, now: Da
   let link = "/student";
   let body = "Давно не виделись в Планиметрике. Реши сегодня пару задач — это минут десять.";
   for (const hw of await getHomeworksForStudent(studentId)) {
-    if (!hw.studentId) continue; // авторские пробники платформы — не от репетитора
+    if (hw.teacherId !== teacherId) continue;
     const s = await homeworkStatus(hw, studentId);
     if (s.complete) continue;
     const left = s.total - s.done;
@@ -62,16 +49,28 @@ export async function nudgeStudent(teacherId: string, studentId: string, now: Da
     break;
   }
 
-  const viaTelegram = !!claimed[0].chatId && !isQuietHours(now);
-  await pushNotification(db, {
-    userId: studentId,
-    type: "teacher_nudge",
-    title: `👋 ${teacherFirst} напоминает о занятиях`,
-    body,
-    link,
-    telegram: viaTelegram,
+  return db.transaction(async (tx) => {
+    const student = await lockStudent(tx, studentId);
+    if (student?.teacherId !== teacherId || student.teacherLinkVersion !== st.linkVersion) {
+      return { ok: false, reason: "not_found" };
+    }
+    const cutoff = new Date(now.getTime() - NUDGE_COOLDOWN_H * 3600 * 1000);
+    const [claimed] = await tx.update(schema.users).set({ nudgedAt: now }).where(and(
+      eq(schema.users.id, studentId), or(isNull(schema.users.nudgedAt), lt(schema.users.nudgedAt, cutoff))
+    )).returning({ chatId: schema.users.telegramChatId });
+    if (!claimed) return { ok: false, reason: "too_soon", studentName: st.name };
+    const viaTelegram = !!claimed.chatId && !isQuietHours(now);
+    await pushNotification(tx, {
+      userId: studentId,
+      type: "teacher_nudge",
+      title: `👋 ${teacherFirst} напоминает о занятиях`,
+      body,
+      link,
+      telegram: viaTelegram,
+      teacherLink: { studentId, teacherId, version: student.teacherLinkVersion },
+    });
+    return { ok: true, studentName: st.name, viaTelegram };
   });
-  return { ok: true, studentName: st.name, viaTelegram };
 }
 
 /** Ученики репетитора без активности INACTIVE_DAYS+ дней (по последней попытке

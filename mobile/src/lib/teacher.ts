@@ -104,6 +104,7 @@ export interface TPayment {
 export interface TStudent {
   student: {
     id: string;
+    linkVersion?: string;
     name: string;
     email: string;
     grade: number | null;

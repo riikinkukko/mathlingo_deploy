@@ -1,7 +1,7 @@
 // Группы учеников репетитора. Сама группа — именованный список учеников;
 // групповые занятия и задания хранятся строкой на каждого ученика (см.
 // комментарий у studentGroups в schema.ts).
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import type { ScheduledLessonWithStudent } from "./types";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -100,6 +100,7 @@ export async function getGroupHomeworkBatches(groupId: string, teacherId: string
       and(
         eq(schema.homeworks.groupId, groupId),
         eq(schema.homeworks.teacherId, teacherId),
+        eq(schema.users.teacherId, teacherId),
         isNotNull(schema.homeworks.batchId)
       )
     )
@@ -149,6 +150,8 @@ export async function getGroupLessons(
       and(
         eq(schema.scheduledLessons.groupId, groupId),
         eq(schema.scheduledLessons.teacherId, teacherId),
+        eq(schema.users.teacherId, teacherId),
+        isNull(schema.scheduledLessons.archivedAt),
         eq(schema.scheduledLessons.status, "planned")
       )
     )

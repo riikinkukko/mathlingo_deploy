@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSessionToken, setSessionCookie } from "@/lib/auth";
+import { createSessionToken, isSessionRevoked, setSessionCookie } from "@/lib/auth";
 import { getUserById } from "@/lib/queries";
 import { consumeWebLink } from "@/lib/mobile/web-link";
 import { FROM_APP_COOKIE, FROM_APP_MAX_AGE } from "@/lib/app-context";
@@ -12,8 +12,10 @@ export async function GET(req: Request) {
   const base = process.env.NEXT_PUBLIC_APP_URL || url.origin;
   const link = await consumeWebLink(url.searchParams.get("t") ?? "");
   const user = link ? await getUserById(link.userId) : undefined;
-  if (!link || !user) return NextResponse.redirect(new URL("/login", base));
-  await setSessionCookie(await createSessionToken(user.id, user.role));
+  if (!link || !user || isSessionRevoked(user, undefined, link.createdAt.getTime())) {
+    return NextResponse.redirect(new URL("/login", base));
+  }
+  await setSessionCookie(await createSessionToken(user.id, user.role, link.createdAt.getTime()));
   const res = NextResponse.redirect(new URL(link.next, base));
   // Пришёл из приложения — прячем оплату (правила Google Play, lib/app-context.ts).
   res.cookies.set(FROM_APP_COOKIE, "1", {

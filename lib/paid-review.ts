@@ -100,8 +100,8 @@ export async function countPaidChecksWaiting(): Promise<number> {
   return rows.length;
 }
 
-export async function markReviewOrderDone(orderId: string): Promise<void> {
-  await db.update(schema.reviewOrders).set({ status: "done", doneAt: new Date() }).where(eq(schema.reviewOrders.id, orderId));
+export async function markReviewOrderDone(orderId: string, executor: typeof db | import("./student-links").StudentLinkTransaction = db): Promise<void> {
+  await executor.update(schema.reviewOrders).set({ status: "done", doneAt: new Date() }).where(eq(schema.reviewOrders.id, orderId));
 }
 
 /** Очередь эксперта: оплаченные и ещё не проверенные решения (старые сверху). */

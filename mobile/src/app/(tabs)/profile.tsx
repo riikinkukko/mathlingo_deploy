@@ -110,7 +110,7 @@ export default function Profile() {
       </Card>
 
       <Card style={{ padding: 0, overflow: "hidden" }}>
-        {user.hasTeacher || (home?.counts.homework ?? 0) > 0 ? <Item icon="Clipboard" label="Задания репетитора" onPress={() => router.push("/homework")} /> : null}
+        {user.hasTeacher || (home?.counts.assignedHomework ?? home?.counts.homework ?? 0) > 0 ? <Item icon="Clipboard" label="Задания репетитора" onPress={() => router.push("/homework")} /> : null}
         <Item icon="Bell" label="Уведомления" onPress={() => router.push("/notifications")} />
         <Item icon="Grid" label="Тренировка по номерам ЕГЭ" onPress={() => router.push("/practice")} />
         <Item icon="Star" label="Достижения" onPress={() => router.push("/achievements")} />

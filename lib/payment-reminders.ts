@@ -8,6 +8,7 @@
 //   • долг (баланс < 0) — после каждого следующего проведённого занятия.
 // Вручную — кнопкой «Напомнить об оплате» (отправляется всегда).
 import { db } from "./db/client";
+import { lockStudent } from "./student-links";
 import { getUserById, getStudentBalance, getParentsOfStudent, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
 import { formatRub } from "./money";
@@ -78,8 +79,15 @@ export async function sendPaymentReminder(teacherId: string, studentId: string, 
       ? parents.map((p) => ({ userId: p.id, link: `/parent/child/${studentId}` }))
       : [{ userId: studentId, link: "/student" }];
 
-  for (const r of recipients) {
-    await pushNotification(db, { userId: r.userId, type: "payment_reminder", title: msg.title, body, link: r.link });
-  }
-  return recipients.length;
+  const title = msg.title;
+  return db.transaction(async (tx) => {
+    const current = await lockStudent(tx, studentId);
+    if (!current || current.teacherId !== teacherId || current.teacherLinkVersion !== student.teacherLinkVersion ||
+      (kind === "auto" && !current.paymentRemindersEnabled)) return 0;
+    for (const r of recipients) {
+      await pushNotification(tx, { userId: r.userId, type: "payment_reminder", title, body, link: r.link,
+        teacherLink: { studentId, teacherId, version: current.teacherLinkVersion } });
+    }
+    return recipients.length;
+  });
 }

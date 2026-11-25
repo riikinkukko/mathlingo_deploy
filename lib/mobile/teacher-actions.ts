@@ -15,7 +15,8 @@ import {
   cancelTeacherInviteAction,
   createHomeworkAction,
   createLessonLogAction,
-  deleteStudentAction,
+  legacyMobileUnlinkStudentAction,
+  unlinkStudentAction,
   markAllNotificationsReadAction,
   reviewAttemptAction,
 } from "@/app/actions";
@@ -58,7 +59,8 @@ export const TEACHER_ACTIONS: Record<string, Entry> = {
   // Ученики и родители
   addStudent: state(addStudentAction as never),
   addParent: state(addParentLinkAction as never),
-  deleteStudent: form(deleteStudentAction),
+  deleteStudent: form(legacyMobileUnlinkStudentAction),
+  unlinkStudent: form((fd) => unlinkStudentAction({}, fd)),
   cancelInvite: form(cancelTeacherInviteAction),
   nudge: state(nudgeStudentAction as never),
   setTargetScore: state(setTargetScoreAction as never),

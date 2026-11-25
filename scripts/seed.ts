@@ -39,6 +39,8 @@ async function seedDatabase(tx: SeedTransaction, reset: boolean) {
     await tx.delete(schema.subtopics);
     await tx.delete(schema.topics);
     await tx.delete(schema.parentLinks);
+    await tx.delete(schema.studentUnlinks);
+    await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
     await tx.delete(schema.users);
   }
 

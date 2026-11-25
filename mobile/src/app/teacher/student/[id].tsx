@@ -111,11 +111,12 @@ function Overview({ d }: { d: TStudent }) {
       )}
 
       <Button
-        title="Удалить ученика"
+        title="Отвязать ученика"
         kind="ghost"
+        disabled={!s.linkVersion}
         onPress={() =>
-          confirm("Удалить ученика?", `${s.name}: прогресс, задания, журнал и оплаты удалятся. Действие необратимо.`, "Удалить", async () => {
-            const r = await run("deleteStudent", { studentId: s.id });
+          confirm("Отвязать ученика?", `${s.name}: аккаунт, прогресс и задания сохранятся. Вы потеряете доступ к карточке и прогрессу ученика. Будущие занятия с вами будут отменены.`, "Отвязать", async () => {
+            const r = await run("unlinkStudent", { studentId: s.id, linkVersion: s.linkVersion });
             if (r) router.back();
           })
         }

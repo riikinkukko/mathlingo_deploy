@@ -20,6 +20,7 @@ export interface WeekItem {
   shortTitle: string;
   topic: string | null;
   status: "planned" | "done" | "cancelled" | "missed";
+  archived?: boolean;
   seriesId: string | null;
   studentId: string;
   groupId: string | null;
@@ -344,10 +345,13 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
           {item.timeRange}
           {item.seriesId && <span className="ml-1.5 text-[14px]" title="Регулярное занятие">🔁</span>}
         </p>
-        <a href={href} className="mt-1 block font-display text-[17px] font-black text-pine-dark">
-          {group ? "👥 " : ""}
-          {item.title} →
-        </a>
+        {item.archived && !group ? (
+          <p className="mt-1 font-display text-[17px] font-black text-pine-dark">{item.title}</p>
+        ) : (
+          <a href={href} className="mt-1 block font-display text-[17px] font-black text-pine-dark">
+            {group ? "👥 " : ""}{item.title} →
+          </a>
+        )}
         {group && (
           <p className="text-[13px] text-ink-soft">{item.members!.map((m) => m.studentName).join(", ")}</p>
         )}
@@ -363,7 +367,7 @@ function LessonSheet({ item, day, onClose }: { item: WeekItem; day: WeekDay; onC
               </span>
             )}
           </p>
-          {!group && (
+          {!group && !item.archived && (
             <form action={setLessonStatusAction} className="mt-2 text-center">
               <input type="hidden" name="lessonId" value={item.id} />
               <input type="hidden" name="status" value="planned" />

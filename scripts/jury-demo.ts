@@ -70,7 +70,10 @@ async function main() {
     .from(schema.users)
     .where(inArray(schema.users.email, Object.values(EMAILS)));
   if (old.length) {
-    await db.delete(schema.users).where(inArray(schema.users.id, old.map((u) => u.id)));
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
+      await tx.delete(schema.users).where(inArray(schema.users.id, old.map((u) => u.id)));
+    });
     console.log(`Удалено прежних демо-аккаунтов: ${old.length}`);
   }
 

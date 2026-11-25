@@ -27,6 +27,8 @@ import { MAX_FREEZES, FREEZE_EVERY_DAYS, computeBestStreak } from "@/lib/streak"
 import { logoutAction, logoutEverywhereAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
+import StudentCredentialHandoff from "@/components/StudentCredentialHandoff";
+import { isLoginOnlyEmail } from "@/lib/email";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
@@ -152,6 +154,11 @@ export default async function ProfilePage(
         />
         {/* Прогресс к экзамену: цель и пробники, неделя, карта номеров ЕГЭ. */}
         {(user.targetScore || mocks.length > 0) && <GoalCard targetScore={user.targetScore} mocks={mocks} readOnly />}
+        {user.teacherId && !user.independentCredentials && (
+          isLoginOnlyEmail(user.email)
+            ? <StudentCredentialHandoff />
+            : <a href="/forgot-password" className="card block p-4 font-bold">Задать свой пароль через почту</a>
+        )}
         <section className="mb-4 rounded-[20px] border border-line-soft bg-white p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="font-display text-[16px] font-black text-ink">Эта неделя</h2>

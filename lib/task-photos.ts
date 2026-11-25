@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { genId } from "@/lib/queries";
@@ -29,23 +29,23 @@ export async function ownTaskPhotoIds(teacherId: string, ids: string[]): Promise
   return new Set(rows.map((r) => r.id));
 }
 
-/**
- * Снимок видят: сам репетитор, его ученики и их родители. Ученик, ушедший к
- * другому репетитору, старые снимки уже не откроет — это нормально.
- */
+/** The owner can read their uploads; learners and parents need an assigned problem. */
 export async function readTaskPhoto(user: User, id: string): Promise<{ mime: string; bytes: Buffer } | null> {
   const [row] = await db.select().from(schema.taskPhotos).where(eq(schema.taskPhotos.id, id)).limit(1);
   if (!row) return null;
-  let allowed = row.teacherId === user.id || user.teacherId === row.teacherId;
-  if (!allowed && user.role === "PARENT") {
-    const kids = await db
-      .select({ teacherId: schema.users.teacherId })
-      .from(schema.parentLinks)
-      .innerJoin(schema.users, eq(schema.users.id, schema.parentLinks.studentId))
-      .where(eq(schema.parentLinks.parentId, user.id));
-    allowed = kids.some((k) => k.teacherId === row.teacherId);
+  if (user.role !== "TEACHER" || row.teacherId !== user.id) {
+    if (user.role !== "STUDENT" && user.role !== "PARENT") return null;
+    const H = schema.homeworks;
+    const P = schema.problems;
+    const owner = user.role === "STUDENT"
+      ? eq(H.studentId, user.id)
+      : sql`exists (select 1 from ${schema.parentLinks}
+          where ${schema.parentLinks.parentId} = ${user.id} and ${schema.parentLinks.studentId} = ${H.studentId})`;
+    const [assigned] = await db.select({ id: H.id }).from(H)
+      .innerJoin(P, and(eq(P.photoId, id), sql`${H.problemIds} ? ${P.id}`))
+      .where(and(or(eq(H.audience, "assigned"), isNull(H.audience)), owner)).limit(1);
+    if (!assigned) return null;
   }
-  if (!allowed) return null;
-  const m = /^data:(image\/[a-z]+);base64,(.+)$/.exec(row.data);
-  return m ? { mime: m[1], bytes: Buffer.from(m[2], "base64") } : null;
+  const match = /^data:(image\/[a-z]+);base64,(.+)$/.exec(row.data);
+  return match ? { mime: match[1], bytes: Buffer.from(match[2], "base64") } : null;
 }

@@ -227,6 +227,7 @@ export async function teacherStudent(user: User, studentId: string) {
   return {
     student: {
       id: s.id,
+      linkVersion: s.teacherLinkVersion,
       name: s.name,
       email: s.email,
       grade: s.grade ?? null,

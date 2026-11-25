@@ -10,5 +10,5 @@ export async function POST(req: Request) {
   if (!body) return fail("Некорректный запрос");
   const res = await passwordLogin(body.email, body.password, clientIpFromHeaders(req.headers));
   if ("error" in res) return fail(res.error, 401);
-  return json(await sessionPayload(res.user));
+  return json(await sessionPayload(res.user, res.authenticatedAt));
 }

@@ -34,7 +34,7 @@ export interface HomePayload {
     energyMax: number | null;
     examDaysLeft: number;
   };
-  counts: { dueReview: number; mistakes: number; homework: number };
+  counts: { dueReview: number; mistakes: number; homework: number; assignedHomework?: number };
   /** Задания дня; в старых ответах сервера поля нет. */
   quests?: {
     items: { kind: string; title: string; target: number; progress: number; done: boolean }[];

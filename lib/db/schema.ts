@@ -58,6 +58,9 @@ export const users = pgTable("users", {
   // Самоссылка: репетитор, который ведёт ученика. NULL — самостоятельный
   // пользователь (не чей-то ученик), для него имеют смысл plan/energy.
   teacherId: text("teacher_id"),
+  teacherLinkVersion: text("teacher_link_version").notNull().default(sql`gen_random_uuid()::text`),
+  independentCredentials: boolean("independent_credentials").notNull().default(false),
+  credentialHandoffPending: boolean("credential_handoff_pending").notNull().default(false),
   plan: planEnum("plan"),
   energy: integer("energy"),
   energyUpdatedAt: timestamp("energy_updated_at", { withTimezone: true }),
@@ -489,6 +492,15 @@ export const teacherInvites = pgTable("teacher_invites", {
 // групповое занятие и групповая домашка хранятся ПО СТРОКЕ НА УЧЕНИКА (с общим
 // groupLessonId / batchId). Так баланс оплат, напоминания, статусы домашки и
 // всё остальное работают как раньше, а индивидуальные задания не теряются.
+export const studentUnlinks = pgTable("student_unlinks", {
+  linkVersion: text("link_version").primaryKey(),
+  teacherId: text("teacher_id").notNull(),
+  studentId: text("student_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byPair: index("student_unlinks_pair_idx").on(t.teacherId, t.studentId),
+}));
+
 export const studentGroups = pgTable("student_groups", {
   id: text("id").primaryKey(),
   teacherId: text("teacher_id")
@@ -616,6 +628,7 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // Когда репетитору ушёл вопрос «Занятие прошло — было или не было?» с
   // кнопками в Telegram. Ставится атомарно, как remindedAt.
   teacherPromptedAt: timestamp("teacher_prompted_at", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   // Групповое занятие: строка на каждого ученика, общий groupLessonId у одного
   // занятия (у серии — ещё и общий seriesId). Посещаемость — статус строки.
   groupId: text("group_id").references(() => studentGroups.id, { onDelete: "set null" }),
@@ -647,6 +660,7 @@ export const studentPayments = pgTable("student_payments", {
   // Сколько занятий покрывает оплата (0 — оплата не за занятия, просто учёт суммы).
   lessonsCount: integer("lessons_count").notNull().default(1),
   paidAt: date("paid_at", { mode: "string" }).notNull(), // YYYY-MM-DD
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({

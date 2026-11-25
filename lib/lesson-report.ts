@@ -4,6 +4,7 @@
 // Относительные импорты: часть кода работает в воркере бота (tsx, вне Next.js).
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
+import { lockStudent } from "./student-links";
 import * as schema from "./db/schema";
 import { genId, getScheduledLessonById, getUpcomingLessonsForStudent, getUserById, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
@@ -125,26 +126,29 @@ export async function createLessonReport(p: {
   report: string;
   lessonId?: string | null;
 }): Promise<CreateReportResult> {
-  const student = await getUserById(p.studentId);
-  if (!student || student.role !== "STUDENT" || student.teacherId !== p.teacherId) return { ok: false, reason: "access" };
+
   const date = p.date.slice(0, 10);
   const topic = p.topic.trim().slice(0, 200);
   const report = cleanReport(p.report).slice(0, 5000);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !topic || !report) return { ok: false, reason: "empty" };
 
-  let lessonId: string | null = null;
-  if (p.lessonId) {
-    const l = await getScheduledLessonById(p.lessonId);
-    if (l && l.teacherId === p.teacherId && l.studentId === p.studentId) {
-      const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l.id)).limit(1);
+  return db.transaction(async (tx) => {
+    const student = await lockStudent(tx, p.studentId);
+    if (student?.teacherId !== p.teacherId) return { ok: false, reason: "access" };
+    let lessonId: string | null = null;
+    if (p.lessonId) {
+      const [l] = await tx.select().from(schema.scheduledLessons).where(and(
+        eq(schema.scheduledLessons.id, p.lessonId), eq(schema.scheduledLessons.teacherId, p.teacherId),
+        eq(schema.scheduledLessons.studentId, p.studentId), isNull(schema.scheduledLessons.archivedAt)
+      ));
+      if (!l) return { ok: false, reason: "access" };
+      const dup = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l.id)).limit(1);
       if (dup[0]) return { ok: false, reason: "exists" };
       lessonId = l.id;
     }
-  }
 
-  const parents = await db.select().from(schema.parentLinks).where(eq(schema.parentLinks.studentId, p.studentId));
-  const id = genId("l");
-  await db.transaction(async (tx) => {
+    const parents = await tx.select().from(schema.parentLinks).where(eq(schema.parentLinks.studentId, p.studentId));
+    const id = genId("l");
     await tx.insert(schema.lessonLogs).values({ id, teacherId: p.teacherId, studentId: p.studentId, date, topic, report, lessonId });
     const body = report.length > 120 ? report.slice(0, 120) + "…" : report;
     await pushNotification(tx, { userId: p.studentId, type: "lesson_log_added", title: `Новая запись о занятии: ${topic}`, body, link: `/student` });
@@ -157,8 +161,8 @@ export async function createLessonReport(p: {
         link: `/parent/child/${p.studentId}`,
       });
     }
+    return { ok: true, id };
   });
-  return { ok: true, id };
 }
 
 export interface UnreportedLesson {
@@ -184,6 +188,8 @@ export async function getUnreportedLessons(teacherId: string, { days = 14, stude
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         eq(schema.scheduledLessons.status, "done"),
+        eq(schema.users.teacherId, teacherId),
+        isNull(schema.scheduledLessons.archivedAt),
         isNull(schema.scheduledLessons.groupLessonId),
         gte(schema.scheduledLessons.startsAt, from),
         lte(schema.scheduledLessons.startsAt, new Date()),
@@ -218,7 +224,7 @@ export function reportButton(lessonId: string, label = "✍️ Написать 
 /** Кнопка «Написать отчёт»: бот ждёт следующее сообщение как текст отчёта. */
 export async function startTelegramReport(teacherId: string, chatId: string, lessonId: string): Promise<string> {
   const lesson = await getScheduledLessonById(lessonId);
-  if (!lesson || lesson.teacherId !== teacherId) return "Занятие не найдено";
+  if (!lesson || lesson.teacherId !== teacherId || lesson.archivedAt || (await getUserById(lesson.studentId))?.teacherId !== teacherId) return "Занятие не найдено";
   const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, lessonId)).limit(1);
   if (dup[0]) return "Отчёт об этом занятии уже есть";
   await db.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));

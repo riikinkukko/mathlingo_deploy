@@ -19,6 +19,7 @@ import {
   pushNotification,
   getPendingReviewsForTeacher,
   getUnmarkedPastLessons,
+  getScheduledLessonById,
   getStudentBalances,
 } from "./queries";
 import { sendTelegramMessage, callTelegram, escapeTelegramHtml as esc, InlineKeyboard } from "./telegram";
@@ -29,6 +30,7 @@ import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
+import { lockStudent } from "./student-links";
 import { debtText, hasDebt } from "./money";
 import { reportButton, startTelegramReport } from "./lesson-report";
 
@@ -98,7 +100,7 @@ export async function notifyHomeworkIfFinished(student: User, problemId: string)
     .where(
       and(
         eq(schema.homeworks.studentId, student.id),
-        isNotNull(schema.homeworks.teacherId),
+        eq(schema.homeworks.teacherId, student.teacherId),
         sql`${schema.homeworks.problemIds} @> ${JSON.stringify([problemId])}::jsonb`
       )
     );
@@ -109,16 +111,12 @@ export async function notifyHomeworkIfFinished(student: User, problemId: string)
     if (ids.length === 0 || !hw.teacherId) continue;
     const link = `/teacher/student/${student.id}?hw=${hw.id}`;
 
+    const alreadyNotified = and(eq(schema.notifications.userId, hw.teacherId),
+      eq(schema.notifications.type, "homework_completed"), eq(schema.notifications.link, link));
     const already = await db
       .select({ id: schema.notifications.id })
       .from(schema.notifications)
-      .where(
-        and(
-          eq(schema.notifications.userId, hw.teacherId),
-          eq(schema.notifications.type, "homework_completed"),
-          eq(schema.notifications.link, link)
-        )
-      )
+      .where(alreadyNotified)
       .limit(1);
     if (already.length) continue;
 
@@ -150,13 +148,19 @@ export async function notifyHomeworkIfFinished(student: User, problemId: string)
     if (pending > 0) parts.push(`на проверке ${pending} ${pluralRu(pending, ["решение", "решения", "решений"])}`);
     if (overdue) parts.push(`срок был ${mskDateShort(hw.dueDate)}`);
 
-    await pushNotification(db, {
-      userId: teacher.id,
-      type: "homework_completed",
-      title: `${student.name} сдал(а) «${hw.title}»`,
-      body: parts.join(" · "),
-      link,
-      telegram: teacher.tgNotifyHomework !== false,
+    await db.transaction(async (tx) => {
+      const current = await lockStudent(tx, student.id);
+      if (current?.teacherId !== teacher.id || current.teacherLinkVersion !== student.teacherLinkVersion) return;
+      if ((await tx.select({ id: schema.notifications.id }).from(schema.notifications).where(alreadyNotified).limit(1)).length) return;
+      await pushNotification(tx, {
+        userId: teacher.id,
+        type: "homework_completed",
+        title: `${student.name} сдал(а) «${hw.title}»`,
+        body: parts.join(" · "),
+        link,
+        telegram: teacher.tgNotifyHomework !== false,
+        teacherLink: { studentId: student.id, teacherId: teacher.id, version: current.teacherLinkVersion },
+      });
     });
   }
 }
@@ -213,6 +217,8 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
       and(
         eq(schema.scheduledLessons.status, "planned"),
         isNull(schema.scheduledLessons.teacherPromptedAt),
+        isNull(schema.scheduledLessons.archivedAt),
+        sql`exists (select 1 from users where id = ${schema.scheduledLessons.studentId} and teacher_id = ${schema.scheduledLessons.teacherId})`,
         sql`${schema.scheduledLessons.startsAt} + make_interval(mins => ${schema.scheduledLessons.durationMin}) <= ${new Date(now.getTime() - PROMPT_AFTER_END_MS)}`,
         gte(schema.scheduledLessons.startsAt, new Date(now.getTime() - PROMPT_MAX_AGE_MS))
       )
@@ -229,6 +235,7 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
       const teacher = await getUserById(first.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
       const info = await groupLessonInfo(groupLessonId);
+      if (!info.names.length) continue;
       const text =
         groupPromptText(info.groupName, info.names, first.startsAt, first.durationMin, first.topic) +
         `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
@@ -244,6 +251,7 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
       const teacher = await getUserById(lesson.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
       const student = await getUserById(lesson.studentId);
+      if (student?.teacherId !== lesson.teacherId || (await getScheduledLessonById(lesson.id))?.archivedAt) continue;
       const text =
         lessonPromptText(student?.name ?? "Ученик", lesson.startsAt, lesson.durationMin, lesson.topic) +
         "\n\nОтметьте, было ли занятие, — от этого зависит баланс оплат.";
@@ -262,7 +270,8 @@ async function groupLessonInfo(groupLessonId: string) {
     .from(schema.scheduledLessons)
     .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
     .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
-    .where(eq(schema.scheduledLessons.groupLessonId, groupLessonId));
+    .where(and(eq(schema.scheduledLessons.groupLessonId, groupLessonId),
+      eq(schema.users.teacherId, schema.scheduledLessons.teacherId), isNull(schema.scheduledLessons.archivedAt)));
   return {
     groupName: rows[0]?.groupName ?? null,
     names: rows.map((r) => r.name.split(" ")[0]).sort((a, b) => a.localeCompare(b, "ru")),

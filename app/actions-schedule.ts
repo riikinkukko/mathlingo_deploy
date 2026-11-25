@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, isNull, type SQL } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
@@ -12,6 +12,7 @@ import {
   getScheduledLessonById,
   pushNotification,
 } from "@/lib/queries";
+import { lockTeacherStudents } from "@/lib/student-links";
 import { applyLessonStatus } from "@/lib/lesson-status";
 import { getGroupForTeacher } from "@/lib/groups";
 
@@ -193,10 +194,12 @@ export async function createLessonAction(
   // связаны общим groupLessonId (посещаемость отмечается по ученикам).
   const groupLessonIds = dates.map(() => (group ? genId("gl") : null));
 
-  await db.transaction(async (tx) => {
+  const activeStudents = await db.transaction(async (tx) => {
+    const active = await lockTeacherStudents(tx, teacher.id, studentIds, group?.id);
+    if (!active.length) return [];
     await tx.insert(schema.scheduledLessons).values(
       dates.flatMap((d, i) =>
-        studentIds.map((studentId) => ({
+        active.map((studentId) => ({
           id: genId("sl"),
           teacherId: teacher.id,
           studentId,
@@ -212,7 +215,7 @@ export async function createLessonAction(
     );
 
     // Одно уведомление на всю серию — а не 12 сообщений подряд в Telegram.
-    for (const studentId of studentIds)
+    for (const studentId of active)
     await pushNotification(tx, {
       userId: studentId,
       type: "lesson_scheduled",
@@ -228,11 +231,13 @@ export async function createLessonAction(
             : "Не пропусти — увидимся на занятии!",
       link: `/student`,
     });
+    return active;
   });
+  if (!activeStudents.length) return { error: "Ученик или группа больше не доступны" };
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
-  for (const studentId of studentIds) revalidatePath(`/teacher/student/${studentId}`);
+  for (const studentId of activeStudents) revalidatePath(`/teacher/student/${studentId}`);
   if (group) revalidatePath(`/teacher/groups/${group.id}`);
   // at — метка времени, чтобы два успешных сохранения подряд были разными
   // состояниями и эффект очистки формы срабатывал каждый раз.
@@ -253,7 +258,8 @@ export async function setLessonStatusAction(formData: FormData) {
   // «Отменить отметку»: промахнулся с «Провести» — возвращаем занятие в план,
   // зафиксированная цена сбрасывается, баланс пересчитается сам.
   if (status === "planned") {
-    await db.update(schema.scheduledLessons).set({ status: "planned", priceRub: null }).where(eq(schema.scheduledLessons.id, lessonId));
+    const result = await applyLessonStatus(teacher.id, lessonId, status);
+    if (!result.ok) redirect("/teacher/schedule?error=1");
     revalidatePath("/teacher/schedule");
     revalidatePath("/teacher");
     revalidatePath(`/teacher/student/${lesson.studentId}`);
@@ -262,13 +268,27 @@ export async function setLessonStatusAction(formData: FormData) {
   if (status !== "done" && status !== "cancelled" && status !== "missed") redirect(`${back}?error=1`);
 
   // Та же логика, что у кнопок «Было / Не было» в Telegram.
-  await applyLessonStatus(teacher.id, lessonId, status);
+  const result = await applyLessonStatus(teacher.id, lessonId, status);
+  if (!result.ok) redirect("/teacher/schedule?error=1");
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
   revalidatePath(`/teacher/student/${lesson.studentId}`);
   // После «Провести/Было» страница покажет плашку «Записать отчёт →».
   redirect(status === "done" ? `${back}?done=${encodeURIComponent(lessonId)}` : `${back}?ok=lesson`);
+}
+
+async function deleteEditableLessons(teacherId: string, condition: SQL): Promise<boolean> {
+  const lessons = schema.scheduledLessons;
+  return db.transaction(async (tx) => {
+    const criteria = and(condition, eq(lessons.teacherId, teacherId), isNull(lessons.archivedAt));
+    const candidates = await tx.select({ id: lessons.id, studentId: lessons.studentId }).from(lessons).where(criteria);
+    const active = new Set(await lockTeacherStudents(tx, teacherId, candidates.map((row) => row.studentId)));
+    const ids = candidates.filter((row) => active.has(row.studentId)).map((row) => row.id);
+    if (!ids.length) return false;
+    const removed = await tx.delete(lessons).where(and(criteria, inArray(lessons.id, ids))).returning({ id: lessons.id });
+    return removed.length > 0;
+  });
 }
 
 export async function deleteLessonAction(formData: FormData) {
@@ -285,18 +305,17 @@ export async function deleteLessonAction(formData: FormData) {
   // wholeGroup — удалить занятие у всей группы (из общего расписания);
   // со страницы ученика удаляется только его строка.
   const wholeGroup = formData.get("wholeGroup") === "1" && !!lesson.groupLessonId;
-  await db
-    .delete(schema.scheduledLessons)
-    .where(
+  const removed = await deleteEditableLessons(teacher.id,
       wholeGroup
         ? and(
             eq(schema.scheduledLessons.groupLessonId, lesson.groupLessonId!),
             eq(schema.scheduledLessons.teacherId, teacher.id),
             // Отмеченные строки остаются: от «было» зависит баланс оплат.
             eq(schema.scheduledLessons.status, "planned")
-          )
+          )!
         : eq(schema.scheduledLessons.id, lessonId)
     );
+  if (!removed) redirect("/teacher/schedule?error=1");
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
@@ -323,17 +342,16 @@ export async function deleteLessonSeriesFromAction(formData: FormData) {
   // У групповой серии общий seriesId на всех учеников: со страницы ученика
   // удаляем серию только у него, из расписания/группы — у всей группы.
   const wholeGroup = formData.get("wholeGroup") === "1";
-  await db
-    .delete(schema.scheduledLessons)
-    .where(
+  const removed = await deleteEditableLessons(teacher.id,
       and(
         eq(schema.scheduledLessons.seriesId, lesson.seriesId),
         eq(schema.scheduledLessons.teacherId, teacher.id),
         eq(schema.scheduledLessons.status, "planned"),
         gte(schema.scheduledLessons.startsAt, new Date(lesson.startsAt)),
         ...(wholeGroup ? [] : [eq(schema.scheduledLessons.studentId, lesson.studentId)])
-      )
+      )!
     );
+  if (!removed) redirect("/teacher/schedule?error=1");
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
@@ -452,9 +470,12 @@ export async function rescheduleLessonAction(_prev: RescheduleState, formData: F
   const detach = !!lesson.groupLessonId && !wholeGroup;
   const newSeriesId = detach && scope === "following" && lesson.seriesId ? genId("ser") : undefined;
 
-  await db.transaction(async (tx) => {
+  const moved = await db.transaction(async (tx) => {
+    const active = new Set(await lockTeacherStudents(tx, teacher.id, rows.map((row) => row.studentId)));
+    const changed = [];
     for (const r of rows) {
-      await tx
+      if (!active.has(r.studentId)) continue;
+      const [updated] = await tx
         .update(L)
         // Напоминания по новому времени должны уйти заново.
         .set({
@@ -465,10 +486,12 @@ export async function rescheduleLessonAction(_prev: RescheduleState, formData: F
           ...(detach ? { groupLessonId: null, groupId: null } : {}),
           ...(newSeriesId ? { seriesId: newSeriesId } : detach ? { seriesId: null } : {}),
         })
-        .where(eq(L.id, r.id));
+        .where(and(eq(L.id, r.id), eq(L.teacherId, teacher.id), eq(L.status, "planned"),
+          isNull(L.archivedAt), eq(L.startsAt, r.startsAt))).returning({ id: L.id });
+      if (updated) changed.push(r);
     }
-    const studentIds = Array.from(new Set(rows.map((r) => r.studentId)));
-    const lessonsCount = new Set(rows.map((r) => r.startsAt.getTime())).size;
+    const studentIds = Array.from(new Set(changed.map((r) => r.studentId)));
+    const lessonsCount = new Set(changed.map((r) => r.startsAt.getTime())).size;
     for (const sid of studentIds) {
       await pushNotification(tx, {
         userId: sid,
@@ -481,11 +504,13 @@ export async function rescheduleLessonAction(_prev: RescheduleState, formData: F
         link: "/student",
       });
     }
+    return changed;
   });
+  if (!moved.length) return { error: "Занятие больше недоступно" };
 
   revalidatePath("/teacher/schedule");
   revalidatePath("/teacher");
-  for (const sid of new Set(rows.map((r) => r.studentId))) revalidatePath(`/teacher/student/${sid}`);
+  for (const sid of new Set(moved.map((r) => r.studentId))) revalidatePath(`/teacher/student/${sid}`);
   if (lesson.groupId) revalidatePath(`/teacher/groups/${lesson.groupId}`);
-  return { ok: true, at: Date.now(), count: new Set(rows.map((r) => r.startsAt.getTime())).size };
+  return { ok: true, at: Date.now(), count: new Set(moved.map((r) => r.startsAt.getTime())).size };
 }

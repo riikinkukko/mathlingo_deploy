@@ -14,14 +14,15 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
   const user = (await getSessionUserOrNull()) ?? (await getBearerUser(req));
   if (!user) return new NextResponse("Требуется вход", { status: 401 });
   const [q] = await db
-    .select({ studentId: schema.studentQuestions.studentId, teacherId: schema.studentQuestions.teacherId, sketch: schema.studentQuestions.sketch })
+    .select({ studentId: schema.studentQuestions.studentId, teacherId: schema.studentQuestions.teacherId, currentTeacherId: schema.users.teacherId, sketch: schema.studentQuestions.sketch })
     .from(schema.studentQuestions)
+    .innerJoin(schema.users, eq(schema.users.id, schema.studentQuestions.studentId))
     .where(eq(schema.studentQuestions.id, params.id))
     .limit(1);
-  if (!q || !q.sketch || (q.studentId !== user.id && q.teacherId !== user.id)) return new NextResponse("Не найдено", { status: 404 });
+  if (!q || !q.sketch || (q.studentId !== user.id && (user.role !== "TEACHER" || q.teacherId !== user.id || q.currentTeacherId !== user.id))) return new NextResponse("Не найдено", { status: 404 });
   const m = /^data:(image\/(?:jpeg|png));base64,(.+)$/.exec(q.sketch);
   if (!m) return new NextResponse("Не найдено", { status: 404 });
   return new NextResponse(Buffer.from(m[2], "base64"), {
-    headers: { "Content-Type": m[1], "Cache-Control": "private, max-age=86400" },
+    headers: { "Content-Type": m[1], "Cache-Control": "private, no-store" },
   });
 }

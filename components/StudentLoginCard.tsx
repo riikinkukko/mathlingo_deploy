@@ -4,7 +4,13 @@ import { useActionState, useState } from "react";
 import { resetStudentPasswordAction, type ResetPasswordState } from "@/app/actions-import";
 
 /** Карточка «Вход ученика»: логин и выдача нового пароля (для учеников без почты). */
-export default function StudentLoginCard({ studentId, name, login, loginOnly }: { studentId: string; name: string; login: string; loginOnly: boolean }) {
+export default function StudentLoginCard({ studentId, name, login, loginOnly, studentManagesPassword }: {
+  studentId: string;
+  name: string;
+  login: string;
+  loginOnly: boolean;
+  studentManagesPassword?: boolean;
+}) {
   const [state, action, pending] = useActionState<ResetPasswordState, FormData>(resetStudentPasswordAction, null);
   const [copied, setCopied] = useState(false);
   return (
@@ -14,7 +20,9 @@ export default function StudentLoginCard({ studentId, name, login, loginOnly }: 
         {loginOnly ? "Логин" : "Email"}: <b className="font-mono text-ink">{login}</b> · сайт planimetrika.online или приложение
       </p>
       {loginOnly ? (
-        state?.password ? (
+        studentManagesPassword ? (
+          <p className="mt-1 text-[12px] text-ink-soft">Ученик задал свой пароль.</p>
+        ) : state?.password ? (
           <div className="mt-3 rounded-xl bg-pine-light p-3 text-[13px]">
             <p className="font-bold text-pine-dark">
               Новый пароль: <span className="font-mono text-ink">{state.password}</span>
