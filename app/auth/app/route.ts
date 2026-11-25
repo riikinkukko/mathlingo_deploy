@@ -10,12 +10,14 @@ export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const base = process.env.NEXT_PUBLIC_APP_URL || url.origin;
-  const link = await consumeWebLink(url.searchParams.get("t") ?? "");
+  const token = url.searchParams.get("t") ?? "";
+  const credentialVersion = token.split(".")[1];
+  const link = await consumeWebLink(token);
   const user = link ? await getUserById(link.userId) : undefined;
-  if (!link || !user || isSessionRevoked(user, undefined, link.createdAt.getTime())) {
+  if (!link || !user || isSessionRevoked(user, undefined, link.createdAt.getTime(), credentialVersion)) {
     return NextResponse.redirect(new URL("/login", base));
   }
-  await setSessionCookie(await createSessionToken(user.id, user.role, link.createdAt.getTime()));
+  await setSessionCookie(await createSessionToken(user.id, user.role, link.createdAt.getTime(), credentialVersion));
   const res = NextResponse.redirect(new URL(link.next, base));
   // Пришёл из приложения — прячем оплату (правила Google Play, lib/app-context.ts).
   res.cookies.set(FROM_APP_COOKIE, "1", {

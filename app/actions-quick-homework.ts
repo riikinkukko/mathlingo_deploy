@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db/client";
-import { lockTeacherStudents } from "@/lib/student-links";
+import { lockTeacherStudents, teacherLinkFor } from "@/lib/student-links";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, pushNotification } from "@/lib/queries";
@@ -67,6 +67,7 @@ export async function createQuickHomeworkAction(formData: FormData) {
     });
     await pushNotification(tx, {
       userId: studentId,
+      teacherLink: await teacherLinkFor(tx, studentId, teacher.id),
       type: "assignment_created",
       title: "Новое домашнее задание",
       body: `${title} · ${problemIds.length} ${pluralRu(problemIds.length, ["задача", "задачи", "задач"])}`,
@@ -143,7 +144,8 @@ async function createQuickGroupHomework(formData: FormData) {
       });
       await pushNotification(tx, {
         userId: studentId,
-        type: "assignment_created",
+      teacherLink: await teacherLinkFor(tx, studentId, teacher.id),
+      type: "assignment_created",
         title: "Новое домашнее задание",
         body: `${title} · ${problemIds.length} ${pluralRu(problemIds.length, ["задача", "задачи", "задач"])}`,
         link: `/student/homework`,

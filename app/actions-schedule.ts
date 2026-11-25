@@ -12,7 +12,7 @@ import {
   getScheduledLessonById,
   pushNotification,
 } from "@/lib/queries";
-import { lockTeacherStudents } from "@/lib/student-links";
+import { lockTeacherStudents, teacherLinkFor } from "@/lib/student-links";
 import { applyLessonStatus } from "@/lib/lesson-status";
 import { getGroupForTeacher } from "@/lib/groups";
 
@@ -218,6 +218,7 @@ export async function createLessonAction(
     for (const studentId of active)
     await pushNotification(tx, {
       userId: studentId,
+      teacherLink: await teacherLinkFor(tx, studentId, teacher.id),
       type: "lesson_scheduled",
       title:
         dates.length > 1
@@ -495,7 +496,8 @@ export async function rescheduleLessonAction(_prev: RescheduleState, formData: F
     for (const sid of studentIds) {
       await pushNotification(tx, {
         userId: sid,
-        type: "lesson_scheduled",
+        teacherLink: await teacherLinkFor(tx, sid, teacher.id),
+      type: "lesson_scheduled",
         title: lessonsCount > 1 ? "Расписание изменилось" : `Занятие перенесено на ${formatMsk(newStart)}`,
         body:
           lessonsCount > 1

@@ -1,3 +1,4 @@
+import type { StudentLinkTransaction } from "./student-links";
 /**
  * Push-уведомления в мобильное приложение через Expo Push Service
  * (https://docs.expo.dev/push-notifications/sending-notifications/).
@@ -37,11 +38,12 @@ interface ExpoTicket {
 /** Отправить push на все устройства пользователя. Никогда не бросает; true — Expo принял хотя бы одно. */
 export async function sendPushToUser(
   userId: string,
-  msg: { title: string; body: string; link?: string }
+  msg: { title: string; body: string; link?: string },
+  connection: StudentLinkTransaction | typeof db = db
 ): Promise<boolean> {
   if (process.env.PUSH_DISABLED === "1") return false;
   try {
-    const tokens = await db.select().from(schema.pushTokens).where(eq(schema.pushTokens.userId, userId));
+    const tokens = await connection.select().from(schema.pushTokens).where(eq(schema.pushTokens.userId, userId));
     if (tokens.length === 0) return false;
     const messages = tokens.map((t) => ({
       to: t.token,
@@ -65,7 +67,7 @@ export async function sendPushToUser(
     const dead = (json.data ?? [])
       .map((ticket, i) => (ticket.details?.error === "DeviceNotRegistered" ? tokens[i]?.token : null))
       .filter((t): t is string => !!t);
-    if (dead.length) await db.delete(schema.pushTokens).where(inArray(schema.pushTokens.token, dead));
+    if (dead.length) await connection.delete(schema.pushTokens).where(inArray(schema.pushTokens.token, dead));
     return (json.data ?? []).some((t) => t.status === "ok");
   } catch (e) {
     console.error("[push] не удалось отправить:", e);

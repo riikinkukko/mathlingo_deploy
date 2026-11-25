@@ -1,3 +1,4 @@
+import { passwordCredentialVersion } from "@/lib/auth";
 import { createWebLink, safeNext } from "@/lib/mobile/web-link";
 import { json, readJson, requireUser } from "@/lib/mobile/api";
 
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
   if (user instanceof Response) return user;
   const body = await readJson<{ next?: unknown }>(req, 2_000);
   const next = safeNext(body?.next ?? `/${user.role.toLowerCase()}`);
-  const t = await createWebLink(user.id, next, authenticatedAt);
+  const t = await createWebLink(user.id, next, authenticatedAt, passwordCredentialVersion(user.passwordHash));
   const base = (process.env.NEXT_PUBLIC_APP_URL || new URL(req.url).origin).replace(/\/$/, "");
   return json({ url: `${base}/auth/app?t=${encodeURIComponent(t)}` });
 }

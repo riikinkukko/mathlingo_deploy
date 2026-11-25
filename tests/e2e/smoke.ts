@@ -1,3 +1,4 @@
+import { issueStudentHandoff } from "../../lib/student-credential-handoff";
 /**
  * Смоук-тест страниц: входит за каждую роль, открывает основные экраны на
  * телефоне и проверяет, что страница открылась без ошибки и без
@@ -112,10 +113,12 @@ async function checkUnlink() {
     st.p.on("dialog", (dialog) => dialog.accept());
     const detach = t.p.getByRole("button", { name: "Отвязать ученика" });
     await detach.click();
-    await t.p.getByRole("alert").filter({ hasText: "задать свой пароль" }).waitFor();
+    await t.p.getByRole("alert").filter({ hasText: "одноразовым кодом поддержки" }).waitFor();
 
     await st.p.goto(BASE + "/student/profile");
-    await st.p.locator('input[name="currentPassword"]').fill(password);
+    const code = await issueStudentHandoff({ id: "e2e-owner", isAdmin: true, isPlatformOwner: true }, student.id);
+    assert.ok(code);
+    await st.p.locator('input[name="handoffCode"]').fill(code);
     await st.p.locator('input[name="password"]').fill(personalPassword);
     await Promise.all([
       st.p.waitForURL("**/login"),

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { issueStudentHandoff } from "@/lib/student-credential-handoff";
 import { requireAdmin } from "@/lib/auth";
 import { setUserPlanManually } from "@/lib/queries";
 
@@ -27,4 +28,15 @@ export async function revokeProAction(formData: FormData) {
   await setUserPlanManually(userId, "free", null);
   revalidatePath("/admin");
   revalidatePath(`/admin/user/${userId}`);
+}
+
+export async function issueStudentHandoffAction(
+  _state: { code?: string; error?: string }, formData: FormData,
+): Promise<{ code?: string; error?: string }> {
+  const owner = await requireAdmin();
+  if (!owner.isPlatformOwner || formData.get("identityVerified") !== "on") {
+    return { error: "Подтвердите личность ученика и независимый канал передачи." };
+  }
+  const code = await issueStudentHandoff(owner, String(formData.get("studentId") ?? ""));
+  return code ? { code } : { error: "Передача доступа для этого аккаунта недоступна." };
 }

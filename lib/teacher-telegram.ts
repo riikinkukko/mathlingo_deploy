@@ -11,7 +11,7 @@
 // Что именно слать, репетитор выбирает на странице «Настройки»
 // (users.tg_notify_homework / tg_notify_lessons / tg_daily_digest).
 // Относительные импорты: часть кода работает в воркере бота (tsx, вне Next.js).
-import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, eq, getTableColumns, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import {
@@ -30,7 +30,7 @@ import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
-import { lockStudent } from "./student-links";
+import { activeTeacherLinks, lockStudent, withActiveTeacherDeliveries, withUnchangedTeacherRoster } from "./student-links";
 import { debtText, hasDebt } from "./money";
 import { reportButton, startTelegramReport } from "./lesson-report";
 
@@ -207,7 +207,7 @@ function lessonKeyboard(lessonId: string): InlineKeyboard {
 }
 
 /** Раз в несколько минут из воркера бота. Возвращает число отправленных вопросов. */
-export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<number> {
+export async function sendLessonStatusPrompts(now: Date = new Date(), send = sendTelegramMessage): Promise<number> {
   if (isQuietHours(now)) return 0;
 
   const claimed = await db
@@ -223,7 +223,9 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
         gte(schema.scheduledLessons.startsAt, new Date(now.getTime() - PROMPT_MAX_AGE_MS))
       )
     )
-    .returning();
+    .returning({ ...getTableColumns(schema.scheduledLessons),
+      version: sql<string | null>`(select teacher_link_version from users where id = ${schema.scheduledLessons.studentId})`,
+    });
 
   let sent = 0;
   // Групповое занятие — один вопрос на всю группу, а не по сообщению на ученика.
@@ -234,28 +236,42 @@ export async function sendLessonStatusPrompts(now: Date = new Date()): Promise<n
       const first = rows[0];
       const teacher = await getUserById(first.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
-      const info = await groupLessonInfo(groupLessonId);
-      if (!info.names.length) continue;
-      const text =
-        groupPromptText(info.groupName, info.names, first.startsAt, first.durationMin, first.topic) +
-        `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
-        openLink(first.groupId ? `/teacher/groups/${first.groupId}` : "/teacher/schedule", "Отметить посещаемость →");
-      if (await sendTelegramMessage(teacher.telegramChatId, text, { replyMarkup: groupKeyboard(groupLessonId) })) sent++;
+      const links = rows.flatMap((row) => row.version ? [{ studentId: row.studentId, teacherId: row.teacherId, version: row.version }] : []);
+      if (links.length !== rows.length) continue;
+      const sentGroup = await withActiveTeacherDeliveries(links, async (tx) => {
+        const users = await tx.select({ name: schema.users.name, groupName: schema.studentGroups.name })
+          .from(schema.scheduledLessons).innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+          .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
+          .where(and(inArray(schema.scheduledLessons.id, rows.map((row) => row.id)),
+            isNull(schema.scheduledLessons.archivedAt), eq(schema.scheduledLessons.status, "planned")));
+        if (!users.length) return false;
+        const names = users.map((row) => row.name.split(" ")[0]).sort((a, b) => a.localeCompare(b, "ru"));
+        const body = groupPromptText(users[0].groupName, names, first.startsAt, first.durationMin, first.topic) +
+          `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
+          openLink(first.groupId ? `/teacher/groups/${first.groupId}` : "/teacher/schedule", "Отметить посещаемость →");
+        return send(teacher.telegramChatId!, body, { replyMarkup: groupKeyboard(groupLessonId) });
+      });
+      if (sentGroup) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось спросить про групповое занятие", groupLessonId, e);
     }
   }
   for (const lesson of claimed) {
-    if (lesson.groupLessonId) continue;
+    if (lesson.groupLessonId || !lesson.version) continue;
     try {
       const teacher = await getUserById(lesson.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
-      const student = await getUserById(lesson.studentId);
-      if (student?.teacherId !== lesson.teacherId || (await getScheduledLessonById(lesson.id))?.archivedAt) continue;
-      const text =
-        lessonPromptText(student?.name ?? "Ученик", lesson.startsAt, lesson.durationMin, lesson.topic) +
-        "\n\nОтметьте, было ли занятие, — от этого зависит баланс оплат.";
-      if (await sendTelegramMessage(teacher.telegramChatId, text, { replyMarkup: lessonKeyboard(lesson.id) })) sent++;
+      const link = { studentId: lesson.studentId, teacherId: lesson.teacherId, version: lesson.version };
+      if (await withActiveTeacherDeliveries([link], async (tx) => {
+        const [active] = await tx.select({ name: schema.users.name }).from(schema.scheduledLessons)
+          .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+          .where(and(eq(schema.scheduledLessons.id, lesson.id), isNull(schema.scheduledLessons.archivedAt),
+            eq(schema.scheduledLessons.status, "planned")));
+        if (!active) return false;
+        const body = lessonPromptText(active.name, lesson.startsAt, lesson.durationMin, lesson.topic) +
+          "\n\nОтметьте, было ли занятие, — от этого зависит баланс оплат.";
+        return send(teacher.telegramChatId!, body, { replyMarkup: lessonKeyboard(lesson.id) });
+      })) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось спросить про занятие", lesson.id, e);
     }
@@ -428,6 +444,7 @@ export async function buildTodayText(
       .where(
         and(
           eq(schema.scheduledLessons.teacherId, teacherId),
+          eq(schema.users.teacherId, teacherId), isNull(schema.scheduledLessons.archivedAt),
           or(eq(schema.scheduledLessons.status, "planned"), eq(schema.scheduledLessons.status, "done")),
           gte(schema.scheduledLessons.startsAt, dayStart),
           lt(schema.scheduledLessons.startsAt, dayEnd)
@@ -514,8 +531,10 @@ export async function sendTeacherDigests(now: Date = new Date()): Promise<number
   let sent = 0;
   for (const t of claimed) {
     try {
+      const links = await activeTeacherLinks(t.id);
       const r = await buildTodayText(t.id, now, { greeting: true });
-      if (r && t.chatId && (await sendTelegramMessage(t.chatId, r.text, { replyMarkup: r.replyMarkup }))) sent++;
+      if (r && t.chatId && (await withUnchangedTeacherRoster(t.id, links, () =>
+        sendTelegramMessage(t.chatId!, r.text, { replyMarkup: r.replyMarkup })))) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось отправить сводку", t.id, e);
     }
@@ -530,7 +549,9 @@ export async function replyToday(chatId: string): Promise<void> {
     await sendTelegramMessage(chatId, "Команда /today — для репетиторов. Подключите Telegram в кабинете репетитора.");
     return;
   }
+  const links = await activeTeacherLinks(teacher.id);
   const r = await buildTodayText(teacher.id);
-  if (r) await sendTelegramMessage(chatId, r.text, { replyMarkup: r.replyMarkup });
+  if (r) await withUnchangedTeacherRoster(teacher.id, links, () =>
+    sendTelegramMessage(chatId, r.text, { replyMarkup: r.replyMarkup }));
   else await sendTelegramMessage(chatId, `<b>Сегодня, ${esc(mskDateLong(new Date()))}</b>\n\nЗанятий нет, проверять нечего 🎉`);
 }

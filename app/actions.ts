@@ -6,10 +6,11 @@ import { onAttemptReviewed } from "@/lib/mock-queries";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
-import { eq, and, inArray, isNotNull, sql } from "drizzle-orm";
+import { eq, and, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import {
+  passwordCredentialVersion,
   createSessionToken,
   setSessionCookie,
   clearSessionCookie,
@@ -40,6 +41,7 @@ import {
   clearLoginFailures,
   isAuthEmailRateLimited,
 } from "@/lib/queries";
+import { redeemStudentHandoff } from "@/lib/student-credential-handoff";
 import { performSubmitAttempt, performRevealSolution } from "@/lib/actions-core";
 import { checkRegistrationEmail, clientIpFromHeaders, passwordLogin, registerStudent } from "@/lib/auth-flows";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
@@ -67,7 +69,7 @@ import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 import { maxPointsForTask, parseReviewScore, resolveDecision, scoreLabel } from "@/lib/ege-points";
 import { createTeacherInvite, cancelTeacherInvite, respondToTeacherInvite, studentLimitError, needsEmailForMoreStudents, EMAIL_FOR_MORE_STUDENTS_TEXT } from "@/lib/teacher-invites";
-import { lockStudent, lockTeacherStudents, unlinkStudent } from "@/lib/student-links";
+import { lockStudent, lockTeacherStudents, teacherLinkFor, unlinkStudent } from "@/lib/student-links";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -83,7 +85,7 @@ async function isOwnStudent(teacherId: string, studentId: string): Promise<boole
 export async function loginAction(_prevState: unknown, formData: FormData) {
   const res = await passwordLogin(formData.get("email"), formData.get("password"), await getClientIp());
   if ("error" in res) return { error: res.error };
-  const token = await createSessionToken(res.user.id, res.user.role, res.authenticatedAt);
+  const token = await createSessionToken(res.user.id, res.user.role, res.authenticatedAt, passwordCredentialVersion(res.user.passwordHash));
   await setSessionCookie(token);
   redirect(`/${res.user.role.toLowerCase()}`);
 }
@@ -215,6 +217,7 @@ export async function reviewAttemptAction(
 
     await pushNotification(tx, {
       userId: attempt.studentId,
+      teacherLink: paidOrder ? undefined : await teacherLinkFor(tx, attempt.studentId, teacher.id),
       type: "review_decided",
       title: paidOrder
         ? decision === "approved"
@@ -628,6 +631,7 @@ export async function createHomeworkAction(formData: FormData) {
 
       await pushNotification(tx, {
         userId: sid,
+        teacherLink: await teacherLinkFor(tx, sid, teacher.id),
         type: "assignment_created",
         title: KIND_LABEL[kind] ?? "Новое задание",
         body: title,
@@ -899,9 +903,13 @@ export async function saveOnboardingAction(formData: FormData) {
 // ---------- Подтверждение email и сброс пароля ----------
 
 export async function verifyEmailAction(token: string): Promise<{ success: boolean }> {
-  const userId = await consumeAuthToken(token, "email_verification");
+  const signup = await consumeAuthToken(token, "student_signup_verification");
+  const userId = signup ?? await consumeAuthToken(token, "email_verification");
   if (!userId) return { success: false };
-  await db.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, userId));
+  await db.update(schema.users).set({
+    emailVerifiedAt: new Date(),
+    ...(signup ? { independentCredentials: true, credentialHandoffPending: false } : {}),
+  }).where(eq(schema.users.id, userId));
   return { success: true };
 }
 
@@ -911,8 +919,11 @@ export async function verifyEmailAction(token: string): Promise<{ success: boole
 export async function resendVerificationEmailAction() {
   const user = await getSessionUser();
   if (!user || user.emailVerifiedAt) return;
-  if (await isAuthEmailRateLimited(user.id, "email_verification")) return;
-  const token = await createAuthToken(user.id, "email_verification", 24 * 3600 * 1000);
+  const [signup] = user.role === "STUDENT" ? await db.select({ id: schema.authTokens.id }).from(schema.authTokens)
+    .where(and(eq(schema.authTokens.userId, user.id), eq(schema.authTokens.type, "student_signup_verification"))).limit(1) : [];
+  const kind = signup ? "student_signup_verification" : "email_verification";
+  if (await isAuthEmailRateLimited(user.id, kind)) return;
+  const token = await createAuthToken(user.id, kind, 24 * 3600 * 1000);
   await sendVerificationEmail(user.email, token).catch((e) =>
     console.error("Не удалось повторно отправить письмо верификации:", e)
   );
@@ -948,51 +959,42 @@ export async function resetPasswordAction(_prevState: unknown, formData: FormDat
     return { error: "Пароль должен быть не короче 6 символов" };
   }
 
-  const userId = await consumeAuthToken(token, "password_reset");
-  if (!userId) {
-    return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
-  }
-
-  const account = await getUserById(userId);
-  if (account?.role === "STUDENT" && !account.independentCredentials &&
-    (Buffer.byteLength(password, "utf8") > 72 || await verifyPassword(password, account.passwordHash))) {
-    return { error: "Запросите новую ссылку и придумайте новый пароль не длиннее 72 байт." };
-  }
-  // passwordChangedAt — все сессии, открытые до сброса, перестают работать.
-  await db
-    .update(schema.users)
-    .set({
-      passwordHash: await hashPassword(password),
-      passwordChangedAt: new Date(),
-      credentialHandoffPending: sql`${schema.users.role} = 'STUDENT' and not ${schema.users.independentCredentials}`,
-    })
-    .where(eq(schema.users.id, userId));
-  const resetUser = await getUserById(userId);
-  if (resetUser) await clearLoginFailures(resetUser.email);
+  const resetTokens = schema.authTokens;
+  const [candidate] = await db.select({ userId: resetTokens.userId }).from(resetTokens)
+    .where(and(eq(resetTokens.token, token), eq(resetTokens.type, "password_reset")));
+  if (!candidate) return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
+  const passwordHash = await hashPassword(password);
+  const changed = await db.transaction(async (tx) => {
+    const [account] = await tx.select().from(schema.users)
+      .where(eq(schema.users.id, candidate.userId)).for("update");
+    if (!account) return null;
+    if (account.role === "STUDENT" && !account.independentCredentials &&
+      (Buffer.byteLength(password, "utf8") > 72 || await verifyPassword(password, account.passwordHash))) {
+      return null;
+    }
+    const [claimed] = await tx.update(resetTokens).set({ usedAt: sql`clock_timestamp()` }).where(and(
+      eq(resetTokens.token, token), eq(resetTokens.type, "password_reset"), eq(resetTokens.userId, account.id),
+      isNull(resetTokens.usedAt), gt(resetTokens.expiresAt, sql`clock_timestamp()`),
+    )).returning({ id: resetTokens.id });
+    if (!claimed) return null;
+    await tx.update(schema.users).set({
+      passwordHash, passwordChangedAt: sql`clock_timestamp()`, credentialHandoffPending: false,
+    }).where(eq(schema.users.id, account.id));
+    return account.email;
+  });
+  if (!changed) return { error: "Не удалось сменить пароль. Запросите новую ссылку и выберите новый пароль." };
+  await clearLoginFailures(changed);
   redirect("/login");
 }
 
 export async function takeStudentCredentialsAction(_state: { error?: string }, formData: FormData) {
   const user = await getSessionUser();
-  if (!user || user.role !== "STUDENT" || !isLoginOnlyEmail(user.email) || user.independentCredentials) {
-    return { error: "Смена пароля недоступна. Для входа по почте используйте «Забыли пароль?»." };
-  }
-  const current = String(formData.get("currentPassword") || "");
+  if (!user || user.role !== "STUDENT" || user.independentCredentials) return { error: "Передача доступа недоступна." };
+  const code = String(formData.get("handoffCode") || "").trim();
   const password = String(formData.get("password") || "");
-  if (Buffer.byteLength(password, "utf8") > 72 || password.length < 8) {
-    return { error: "Придумайте пароль от 8 символов, не длиннее 72 байт." };
+  if (!(await redeemStudentHandoff(user.id, code, password))) {
+    return { error: "Проверьте одноразовый код и придумайте новый пароль от 8 символов, не длиннее 72 байт." };
   }
-  if (!(await verifyPassword(current, user.passwordHash))) return { error: "Текущий пароль неверный." };
-  if (await verifyPassword(password, user.passwordHash)) return { error: "Придумайте новый пароль." };
-
-  const [changed] = await db.update(schema.users).set({
-    passwordHash: await hashPassword(password),
-    passwordChangedAt: new Date(),
-    credentialHandoffPending: true,
-  }).where(and(eq(schema.users.id, user.id), eq(schema.users.role, "STUDENT"),
-    eq(schema.users.passwordHash, user.passwordHash), eq(schema.users.independentCredentials, false)))
-    .returning({ id: schema.users.id });
-  if (!changed) return { error: "Пароль уже изменился. Войдите снова." };
   await clearLoginFailures(user.email);
   await clearSessionCookie();
   redirect("/login");

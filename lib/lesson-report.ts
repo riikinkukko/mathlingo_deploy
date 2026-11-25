@@ -4,7 +4,7 @@
 // Относительные импорты: часть кода работает в воркере бота (tsx, вне Next.js).
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
-import { lockStudent } from "./student-links";
+import { activeTeacherLinks, lockStudent, withUnchangedTeacherRoster, teacherLinkFor, withActiveTeacherDeliveries } from "./student-links";
 import * as schema from "./db/schema";
 import { genId, getScheduledLessonById, getUpcomingLessonsForStudent, getUserById, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
@@ -151,11 +151,14 @@ export async function createLessonReport(p: {
     const id = genId("l");
     await tx.insert(schema.lessonLogs).values({ id, teacherId: p.teacherId, studentId: p.studentId, date, topic, report, lessonId });
     const body = report.length > 120 ? report.slice(0, 120) + "…" : report;
-    await pushNotification(tx, { userId: p.studentId, type: "lesson_log_added", title: `Новая запись о занятии: ${topic}`, body, link: `/student` });
+    const teacherLink = await teacherLinkFor(tx, p.studentId, p.teacherId);
+    await pushNotification(tx, { userId: p.studentId, teacherLink,
+      type: "lesson_log_added", title: `Новая запись о занятии: ${topic}`, body, link: `/student` });
     for (const link of parents) {
       await pushNotification(tx, {
         userId: link.parentId,
-        type: "lesson_log_added",
+        teacherLink,
+      type: "lesson_log_added",
         title: `Новая запись о занятии: ${topic}`,
         body,
         link: `/parent/child/${p.studentId}`,
@@ -227,8 +230,8 @@ export async function startTelegramReport(teacherId: string, chatId: string, les
   if (!lesson || lesson.teacherId !== teacherId || lesson.archivedAt || (await getUserById(lesson.studentId))?.teacherId !== teacherId) return "Занятие не найдено";
   const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, lessonId)).limit(1);
   if (dup[0]) return "Отчёт об этом занятии уже есть";
-  await db.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));
   const student = await getUserById(lesson.studentId);
+  if (student?.teacherId !== teacherId || !student.teacherLinkVersion) return "Занятие не найдено";
   const draft = await buildReportDraft(teacherId, lesson.studentId, lessonId);
   const startsAt = new Date(lesson.startsAt);
   const text =
@@ -237,8 +240,15 @@ export async function startTelegramReport(teacherId: string, chatId: string, les
     (lesson.topic ? `Тема — «${esc(lesson.topic)}».` : `Первая строка станет темой занятия.`) +
     (draft.facts.length ? `\n\nДобавлю сам:\n${draft.facts.map((f) => `• ${esc(f)}`).join("\n")}` : "") +
     `\n\nОтчёт получат ученик и родители. /cancel — отменить.`;
-  await sendTelegramMessage(chatId, text);
-  return "Жду текст отчёта";
+  const sent = await withActiveTeacherDeliveries([{ studentId: student.id, teacherId, version: student.teacherLinkVersion }],
+    async (tx) => {
+      const [active] = await tx.select({ id: schema.scheduledLessons.id }).from(schema.scheduledLessons)
+        .where(and(eq(schema.scheduledLessons.id, lessonId), isNull(schema.scheduledLessons.archivedAt)));
+      if (!active) return false;
+      await tx.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));
+      return sendTelegramMessage(chatId, text);
+    });
+  return sent ? "Жду текст отчёта" : "Занятие не найдено";
 }
 
 /**
@@ -304,6 +314,7 @@ export async function sendReportReminders(now: Date = new Date()): Promise<numbe
   let sent = 0;
   for (const t of claimed) {
     try {
+      const links = await activeTeacherLinks(t.id);
       const today = (await getUnreportedLessons(t.id, { days: 1 })).filter((l) => mskDay(new Date(l.startsAt)) === day);
       if (!today.length || !t.chatId) continue;
       const lines = today.map((l) => `• ${esc(l.studentName)}, ${mskTime(new Date(l.startsAt))}${l.topic ? ` · ${esc(l.topic)}` : ""}`);
@@ -311,7 +322,7 @@ export async function sendReportReminders(now: Date = new Date()): Promise<numbe
       const text =
         `<b>Сегодня без отчёта: ${today.length}</b>\n${lines.join("\n")}\n\n` +
         `Пара строк о занятии — и ученик с родителями увидят, что прошли и над чем работать. Нажмите на имя и напишите отчёт прямо сюда.`;
-      if (await sendTelegramMessage(t.chatId, text, { replyMarkup: kb })) sent++;
+      if (await withUnchangedTeacherRoster(t.id, links, () => sendTelegramMessage(t.chatId!, text, { replyMarkup: kb }))) sent++;
     } catch (e) {
       console.error("[lesson-report] не удалось напомнить об отчётах", t.id, e);
     }

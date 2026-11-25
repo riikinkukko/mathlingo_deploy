@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: seedtester
           POSTGRES_PASSWORD: seed_test_local
@@ -116,6 +116,41 @@ jobs:
           [[ "$(run_psql -d "$source_db" -c "$fingerprint_sql")" == "$expected_fingerprint" ]]
           printf 'Restored rows and relationships: %s; inherited reset permit refused\n' "$expected_report"
 
+
+      - name: Verify upgrade from the previous PostgreSQL schema
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        shell: bash
+        run: |
+          upgrade_db="unlink_upgrade_test"
+          docker exec "$PG_CONTAINER" createdb -U seedtester "$upgrade_db"
+          upgrade_url="${TEST_DATABASE_URL%/*}/$upgrade_db"
+          printf '::add-mask::%s\n' "$upgrade_url"
+          export UPGRADE_MIGRATIONS="$RUNNER_TEMP/unlink-previous-drizzle"
+          cp -a drizzle "$UPGRADE_MIGRATIONS"
+          node -e 'const fs=require("node:fs"); const p=process.env.UPGRADE_MIGRATIONS+"/meta/_journal.json"; const j=JSON.parse(fs.readFileSync(p)); if(j.entries.pop()?.tag!=="0053_student_unlink") process.exit(1); fs.writeFileSync(p,JSON.stringify(j))'
+          cat > "$RUNNER_TEMP/unlink-upgrade.config.ts" <<'CONFIG'
+          export default { out: process.env.UPGRADE_MIGRATIONS, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL } };
+          CONFIG
+          DATABASE_URL="$upgrade_url" npx --no-install drizzle-kit migrate --config "$RUNNER_TEMP/unlink-upgrade.config.ts"
+          check_psql() {
+            docker exec -i "$PG_CONTAINER" psql -XAt -v ON_ERROR_STOP=1 -U seedtester -d "$upgrade_db" "$@"
+          }
+          check_psql <<'SQL'
+          INSERT INTO users(id, email, name, password_hash, role, teacher_id) VALUES
+            ('unlink_upgrade_teacher', 'teacher@fixture.invalid', 'Teacher', 'dummy', 'TEACHER', NULL),
+            ('unlink_upgrade_student', 'student@fixture.invalid', 'Student', 'dummy', 'STUDENT', 'unlink_upgrade_teacher'),
+            ('unlink_upgrade_orphan', 'orphan@fixture.invalid', 'Orphan', 'dummy', 'STUDENT', 'missing_fixture_teacher');
+          INSERT INTO teacher_invites(id, teacher_id, student_id, status)
+            VALUES ('fixture_invite', 'unlink_upgrade_teacher', 'unlink_upgrade_student', 'accepted');
+          SQL
+          DATABASE_URL="$upgrade_url" npx --no-install drizzle-kit migrate
+          [[ "$(check_psql -c "select teacher_id || ':' || independent_credentials::text from users where id = 'unlink_upgrade_student'")" == "unlink_upgrade_teacher:false" ]]
+          [[ "$(check_psql -c "select teacher_id from users where id = 'unlink_upgrade_orphan'")" == "missing_fixture_teacher" ]]
+          [[ "$(check_psql -c "select count(*) from teacher_invites where id = 'fixture_invite' and status = 'accepted'")" == "1" ]]
+          [[ "$(check_psql -c "select count(distinct teacher_link_version) from users where id like 'unlink_upgrade_%'")" == "3" ]]
+          echo "Previous-schema upgrade preserved accounts and links without asserting legacy ownership."
+
       - run: npm run test:db
       - run: npm test
       - run: npx --no-install tsc --noEmit
@@ -131,3 +166,23 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+
+  expo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CI: '1'
+      EXPO_OFFLINE: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npx --no-install tsc --noEmit
+        working-directory: mobile
+      - run: npx --no-install expo export --platform android --output-dir "$RUNNER_TEMP/android-unlink-bundle"
+        working-directory: mobile

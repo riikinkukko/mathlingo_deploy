@@ -3,20 +3,7 @@ ALTER TABLE "users"
   ADD COLUMN "independent_credentials" boolean NOT NULL DEFAULT false,
   ADD COLUMN "credential_handoff_pending" boolean NOT NULL DEFAULT false;
 --> statement-breakpoint
--- For an existing relationship, an accepted invitation shows that the login
--- existed before the relationship. Short logins still need a handoff.
-UPDATE "users" AS u
-SET "independent_credentials" = true
-WHERE u."role" = 'STUDENT'
-  AND lower(u."email") NOT LIKE '%@u.planimetrika.online'
-  AND (
-    u."teacher_id" IS NULL OR EXISTS (
-      SELECT 1 FROM "teacher_invites" AS i
-      WHERE i."student_id" = u."id" AND i."teacher_id" = u."teacher_id"
-        AND i."status" = 'accepted'
-    )
-  );
---> statement-breakpoint
+-- Existing accounts retain their credentials; independent control is verified separately.
 CREATE FUNCTION rotate_student_teacher_link_version() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN

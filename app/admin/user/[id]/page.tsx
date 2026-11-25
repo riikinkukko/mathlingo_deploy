@@ -1,3 +1,4 @@
+import IssueStudentHandoff from "@/components/IssueStudentHandoff";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getUserById, getPaymentsForUser, isEffectivelyPro } from "@/lib/queries";
@@ -11,7 +12,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function AdminUserPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  await requireAdmin();
+  const operator = await requireAdmin();
   const user = await getUserById(params.id);
   if (!user) notFound();
   const payments = await getPaymentsForUser(user.id);
@@ -70,6 +71,9 @@ export default async function AdminUserPage(props: { params: Promise<{ id: strin
           )}
         </div>
 
+        {operator.isPlatformOwner && user.role === "STUDENT" && !user.independentCredentials && (
+          <IssueStudentHandoff studentId={user.id} />
+        )}
         <h2 className="mb-3 font-display text-lg font-black text-ink">История платежей</h2>
         {payments.length === 0 ? (
           <p className="text-sm text-ink-soft">Платежей через ЮKassa пока не было.</p>

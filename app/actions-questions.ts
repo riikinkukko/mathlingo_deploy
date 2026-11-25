@@ -7,7 +7,7 @@ import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { pushNotification } from "@/lib/queries";
 import { excerpt, performAskTeacher } from "@/lib/questions-core";
-import { lockTeacherStudents } from "@/lib/student-links";
+import { lockTeacherStudents, teacherLinkFor } from "@/lib/student-links";
 
 /** «Не понял — спросить репетитора» из задачи (логика — lib/questions-core.ts). */
 export async function askTeacherAction(
@@ -49,6 +49,7 @@ export async function answerQuestionAction(_prev: AnswerQuestionState, formData:
     if (!updated) return false;
     await pushNotification(tx, {
       userId: q.studentId,
+      teacherLink: await teacherLinkFor(tx, q.studentId, teacher.id),
       type: "question_answered",
       title: `${teacher.name} ответил(а) на вопрос`,
       body: excerpt(answer, 200),

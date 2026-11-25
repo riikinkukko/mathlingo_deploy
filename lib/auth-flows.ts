@@ -126,7 +126,6 @@ export async function registerStudent(
     passwordHash: await hashPassword(password),
     role: "STUDENT" as Role,
     consentGivenAt: new Date(),
-    independentCredentials: true,
     // teacherId не задаём — это самостоятельный пользователь.
     plan: "free",
     // Полный запас с первого дня; подзарядка — после подтверждения почты.
@@ -135,7 +134,7 @@ export async function registerStudent(
   });
 
   // Письмо не уйдёт — регистрацию не срываем: подтвердить можно позже из профиля.
-  const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
+  const verificationToken = await createAuthToken(userId, "student_signup_verification", 24 * 3600 * 1000);
   await sendVerificationEmail(email, verificationToken).catch((e) =>
     console.error("Не удалось отправить письмо верификации:", e)
   );

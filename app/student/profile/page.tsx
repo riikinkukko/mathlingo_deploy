@@ -154,11 +154,7 @@ export default async function ProfilePage(
         />
         {/* Прогресс к экзамену: цель и пробники, неделя, карта номеров ЕГЭ. */}
         {(user.targetScore || mocks.length > 0) && <GoalCard targetScore={user.targetScore} mocks={mocks} readOnly />}
-        {user.teacherId && !user.independentCredentials && (
-          isLoginOnlyEmail(user.email)
-            ? <StudentCredentialHandoff />
-            : <a href="/forgot-password" className="card block p-4 font-bold">Задать свой пароль через почту</a>
-        )}
+        {!user.independentCredentials && !user.credentialHandoffPending && <StudentCredentialHandoff />}
         <section className="mb-4 rounded-[20px] border border-line-soft bg-white p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="font-display text-[16px] font-black text-ink">Эта неделя</h2>

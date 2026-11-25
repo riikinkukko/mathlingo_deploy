@@ -1,3 +1,4 @@
+import { withActiveTeacherDeliveries, type TeacherLink } from "./student-links";
 import { db } from "./db/client";
 import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
@@ -1400,7 +1401,7 @@ export async function pushNotification(
     link: string;
     /** false — только в приложении, без дубля в Telegram. */
     telegram?: boolean;
-    teacherLink?: { studentId: string; teacherId: string; version: string };
+    teacherLink?: TeacherLink;
   }
 ) {
   const notificationId = genId("n");
@@ -1427,7 +1428,8 @@ const COMMIT_CHECKS_MS = [150, 1000, 4000];
 export async function deliverWhenCommitted(
   notificationId: string,
   params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
-    teacherLink?: { studentId: string; teacherId: string; version: string } }
+    teacherLink?: TeacherLink },
+  transport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
   let committed = false;
   for (const wait of COMMIT_CHECKS_MS) {
@@ -1444,33 +1446,25 @@ export async function deliverWhenCommitted(
     }
   }
   if (!committed) return false;
-  if (params.teacherLink) {
-    const { studentId, teacherId, version } = params.teacherLink;
-    const [active] = await db.select({ id: schema.users.id }).from(schema.users).where(and(
-      eq(schema.users.id, studentId), eq(schema.users.teacherId, teacherId), eq(schema.users.teacherLinkVersion, version)
-    ));
-    if (!active) return false;
-  }
 
-  // Push в мобильное приложение. Ошибки sendPushToUser глушит сам.
-  void sendPushToUser(params.userId, { title: params.title, body: params.body, link: params.link });
-
-  if (params.telegram === false) return true;
-  const userRows = await db
-    .select({ telegramChatId: schema.users.telegramChatId })
-    .from(schema.users)
-    .where(eq(schema.users.id, params.userId))
-    .limit(1);
-  const chatId = userRows[0]?.telegramChatId;
-  if (chatId) {
+  async function send(connection: Tx) {
+    const payload = { title: params.title, body: params.body, link: params.link };
+    const chatId = params.telegram === false ? null : (await connection
+      .select({ telegramChatId: schema.users.telegramChatId })
+      .from(schema.users).where(eq(schema.users.id, params.userId)).limit(1))[0]?.telegramChatId;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-    const text = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${
-      appUrl ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""
-    }`;
-    // Ошибка (в т.ч. таймаут) логируется внутри sendTelegramMessage.
-    await sendTelegramMessage(chatId, text).catch(() => {});
+    const telegramText = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${appUrl
+      ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""}`;
+    // Both channels settle before releasing the student row. Never detach the push promise.
+    await Promise.allSettled([
+      transport.push(params.userId, payload, connection),
+      ...(chatId ? [transport.telegram(chatId, telegramText)] : []),
+    ]);
+    return true;
   }
-  return true;
+  return params.teacherLink
+    ? (await withActiveTeacherDeliveries([params.teacherLink], send)) ?? false
+    : send(db);
 }
 
 function escapeHtml(s: string): string {
@@ -1667,7 +1661,7 @@ export async function recordRegistrationAttempt(ip: string, role: "STUDENT" | "T
 const AUTH_EMAILS_PER_HOUR = 3;
 export async function isAuthEmailRateLimited(
   userId: string,
-  type: "email_verification" | "password_reset"
+  type: "email_verification" | "password_reset" | "student_signup_verification"
 ): Promise<boolean> {
   const since = new Date(Date.now() - 3600 * 1000);
   const rows = await db
@@ -1679,7 +1673,7 @@ export async function isAuthEmailRateLimited(
 
 export async function createAuthToken(
   userId: string,
-  type: "email_verification" | "password_reset",
+  type: "email_verification" | "password_reset" | "student_signup_verification",
   ttlMs: number
 ): Promise<string> {
   const token = secureToken(); // криптостойкий: 256 бит случайности
@@ -1700,7 +1694,7 @@ export async function createAuthToken(
  * пересланное/оставшееся в истории почты, было бы бессрочной уязвимостью). */
 export async function consumeAuthToken(
   token: string,
-  type: "email_verification" | "password_reset"
+  type: "email_verification" | "password_reset" | "student_signup_verification"
 ): Promise<string | null> {
   const rows = await db.select().from(schema.authTokens).where(eq(schema.authTokens.token, token)).limit(1);
   const row = rows[0];

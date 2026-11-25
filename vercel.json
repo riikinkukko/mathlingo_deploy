@@ -1,7 +1,8 @@
 {
   "git": {
     "deploymentEnabled": {
-      "fix/issue-1-safe-seed-reset": false
+      "fix/issue-1-safe-seed-reset": false,
+      "fix/issue-3-safe-student-unlink": false
     }
   }
 }

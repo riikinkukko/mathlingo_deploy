@@ -12,9 +12,9 @@ export function safeNext(raw: unknown): string {
   return s;
 }
 
-export async function createWebLink(userId: string, next: string, createdAt = new Date()): Promise<string> {
+export async function createWebLink(userId: string, next: string, createdAt = new Date(), credentialVersion?: string): Promise<string> {
   // Токен входа без пароля — криптостойкий (192 бита), а не genId (~48 бит).
-  const id = `al_${secureToken(24)}`;
+  const id = `al_${secureToken(24)}${credentialVersion ? `.${credentialVersion}` : ""}`;
   await db.insert(schema.appLoginTokens).values({ id, userId, next: safeNext(next), createdAt, expiresAt: new Date(createdAt.getTime() + TTL_MS) });
   return id;
 }

@@ -8,9 +8,9 @@ export default function StudentCredentialHandoff() {
   return (
     <form action={action} className="card space-y-3 p-4">
       <h2 className="font-display font-black">Пароль для самостоятельного входа</h2>
-      <p className="text-sm text-ink-soft">Придумай пароль, который знаешь только ты. После смены войди с новым паролем и своим коротким логином.</p>
-      <label className="block text-sm font-bold">Текущий пароль
-        <input className="input mt-1 w-full" name="currentPassword" type="password" autoComplete="current-password" required />
+      <p className="text-sm text-ink-soft">Получите одноразовый код у поддержки по проверенному каналу. Задайте свой пароль, затем войдите с ним.</p>
+      <label className="block text-sm font-bold">Одноразовый код
+        <input className="input mt-1 w-full" name="handoffCode" autoComplete="one-time-code" required />
       </label>
       <label className="block text-sm font-bold">Новый пароль
         <input className="input mt-1 w-full" name="password" type="password" autoComplete="new-password" minLength={8} maxLength={72} required />

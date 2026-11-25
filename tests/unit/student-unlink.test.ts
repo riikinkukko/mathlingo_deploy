@@ -1,3 +1,8 @@
+import { sendLessonStatusPrompts } from "../../lib/teacher-telegram";
+import { issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
+import { getBearerUser } from "../../lib/api-auth";
+import { POST as mobileLogin } from "../../app/api/m/auth/login/route";
+import { deliverWhenCommitted } from "../../lib/queries";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { and, eq, sql } from "drizzle-orm";
@@ -10,17 +15,16 @@ import { GET as homeworkDetail } from "../../app/api/m/homework/[id]/route";
 import { GET as parentData } from "../../app/api/m/parent/route";
 import { GET as attemptImage } from "../../app/api/attempt-image/[id]/route";
 import { GET as questionSketch } from "../../app/api/question-sketch/[id]/route";
-import { createSessionToken, hashPassword, runAsUser } from "../../lib/auth";
+import { createSessionToken, hashPassword, isSessionRevoked, passwordCredentialVersion, runAsUser, verifySessionToken } from "../../lib/auth";
 import { passwordLogin } from "../../lib/auth-flows";
 import { db } from "../../lib/db/client";
 import * as s from "../../lib/db/schema";
-import { getUserById, getStudentBalance, getQuestionsForTeacher, computeOverallStats, createAuthToken } from "../../lib/queries";
+import { getUserById, getStudentBalance, getQuestionsForTeacher, computeOverallStats } from "../../lib/queries";
 import { applyLessonStatus } from "../../lib/lesson-status";
 import { unlinkStudent, UNLINK_CLIENT_UPDATE, UNLINK_CREDENTIALS, UNLINK_DENIED } from "../../lib/student-links";
 import { cancelTeacherInvite, createTeacherInvite, respondToTeacherInvite } from "../../lib/teacher-invites";
 import { readTaskPhoto } from "../../lib/task-photos";
 import { resetStudentPasswordAction } from "../../app/actions-import";
-import { resetPasswordAction } from "../../app/actions";
 import { cleanup, makeHomework, makeUser, problems } from "../helpers";
 import type { User } from "../../lib/types";
 
@@ -206,16 +210,12 @@ test("teacher-issued credentials require the student's new password and login be
     fields.set("studentId", student.id);
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: false, error: UNLINK_CREDENTIALS });
     const shortLogin = email.endsWith("@u.planimetrika.online");
-    if (shortLogin) {
-      await db.update(s.users).set({ passwordHash: await hashPassword(password), credentialHandoffPending: true })
-        .where(eq(s.users.id, student.id));
-    } else {
-      const reset = new FormData();
-      reset.set("token", await createAuthToken(student.id, "password_reset", 60000));
-      reset.set("password", password);
-      await assert.rejects(resetPasswordAction(null, reset), (error: unknown) =>
-        (error as { digest?: string }).digest?.startsWith("NEXT_REDIRECT"));
-    }
+    assert.equal(await issueStudentHandoff({ id: teacher.id }, student.id), null);
+    assert.equal(await redeemStudentHandoff(student.id, "a".repeat(43), password), false);
+    const code = await issueStudentHandoff({ id: "owner", isAdmin: true, isPlatformOwner: true }, student.id);
+    assert.ok(code);
+    assert.equal(await redeemStudentHandoff(student.id, code, password), true);
+    assert.equal(await redeemStudentHandoff(student.id, code, "another-fixture-password"), false);
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: false, error: UNLINK_CREDENTIALS });
     const login = shortLogin ? email.split("@")[0] : email;
     assert.ok("error" in await passwordLogin(login, "issued-password", ""));
@@ -329,4 +329,110 @@ test("a password reset racing the handoff and detach cannot write a teacher-issu
   } finally {
     await connection.end();
   }
+});
+
+test("password login concurrently with handoff cannot renew a web or mobile session", async () => {
+  const teacher = await makeUser({ role: "TEACHER" });
+  const student = await makeUser({ teacherId: teacher.id, passwordHash: await hashPassword("issued-fixture") });
+  const code = await issueStudentHandoff({ id: "owner", isAdmin: true, isPlatformOwner: true }, student.id);
+  assert.ok(code);
+  const blocker = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await blocker.connect();
+  try {
+    await blocker.query("begin");
+    await blocker.query("select id from users where id = $1 for update", [student.id]);
+    const { rows: [{ pid }] } = await blocker.query("select pg_backend_pid() as pid");
+    const handoff = redeemStudentHandoff(student.id, code, "independent-fixture");
+    await waitForBlocked(blocker, pid);
+    const browserLogin = await passwordLogin(student.email, "issued-fixture", "");
+    assert.ok("user" in browserLogin);
+    const webToken = await createSessionToken(student.id, "STUDENT", browserLogin.authenticatedAt, passwordCredentialVersion(browserLogin.user.passwordHash));
+    const appLogin = await mobileLogin(new Request("http://local/api/m/auth/login", {
+      method: "POST", body: JSON.stringify({ email: student.email, password: "issued-fixture" }),
+    }));
+    assert.equal(appLogin.status, 200);
+    const { token: mobileToken } = await appLogin.json();
+    await blocker.query("commit");
+    assert.ok(await handoff);
+    const session = await verifySessionToken(webToken);
+    assert.ok(session);
+    assert.equal(isSessionRevoked(await readUser(student), session.issuedAt, session.authenticatedAt, session.credentialVersion), true);
+    assert.equal(await getBearerUser(new Request("http://local", { headers: { authorization: `Bearer ${mobileToken}` } })), null);
+    assert.ok("user" in await passwordLogin(student.email, "independent-fixture", ""));
+  } finally {
+    await blocker.end();
+  }
+});
+
+test("a committed unlink cancels pending push and Telegram; in-flight handoff holds the lock", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "synthetic-chat" });
+  const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
+  const id = `notify_${student.id}`;
+  await db.insert(s.notifications).values({ id, userId: teacher.id, type: "homework_completed", title: "fixture", body: "fixture", link: "/" });
+  const params = { userId: teacher.id, title: "fixture", body: "fixture", link: "/",
+    teacherLink: { studentId: student.id, teacherId: teacher.id, version: version(student) } };
+  let count = 0;
+  let entered!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => { entered = resolve; });
+  const paused = new Promise<void>((resolve) => { release = resolve; });
+  const delivery = deliverWhenCommitted(id, params, {
+    push: async () => { count++; entered(); await paused; return true; },
+    telegram: async () => { count++; await paused; return true; },
+  });
+  await started;
+  let ended = false;
+  const detach = unlinkStudent(teacher, student.id, version(student)).then((result) => { ended = true; return result; });
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(ended, false);
+  } finally {
+    release();
+  }
+  assert.ok(await delivery);
+  assert.deepEqual(await detach, { ok: true, changed: true });
+  assert.equal(count, 2);
+  assert.equal(await deliverWhenCommitted(id, params, {
+    push: async () => { count++; return true; },
+    telegram: async () => { count++; return true; },
+  }), false);
+  assert.equal(count, 2);
+});
+
+test("direct Telegram lesson prompt and unlink are serialized", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "synthetic-lesson-chat", tgNotifyLessons: true });
+  const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
+  const now = new Date("2027-01-05T12:00:00+03:00");
+  const id = `prompt_${student.id}`;
+  await db.insert(s.scheduledLessons).values({
+    id, teacherId: teacher.id, studentId: student.id,
+    startsAt: new Date(now.getTime() - 3600000), durationMin: 30, status: "planned",
+  });
+  let enter!: () => void;
+  let release!: () => void;
+  const started = new Promise<void>((resolve) => { enter = resolve; });
+  const paused = new Promise<void>((resolve) => { release = resolve; });
+  const send = sendLessonStatusPrompts(now, async () => { enter(); await paused; return true; });
+  await Promise.race([started, send.then(() => assert.fail("fixture did not send"))]);
+  const observer = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await observer.connect();
+  let detached = false;
+  const detach = unlinkStudent(teacher, student.id, version(student)).then((result) => { detached = true; return result; });
+  try {
+    const deadline = Date.now() + 4000;
+    let waiting = false;
+    while (!waiting && Date.now() < deadline) {
+      const result = await observer.query("select 1 from pg_stat_activity where wait_event_type = 'Lock' and query like '%for update%'");
+      waiting = !!result.rowCount;
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(waiting, true, "unlink should wait for the delivery transaction");
+    assert.equal(detached, false);
+  } finally {
+    release();
+    await observer.end();
+  }
+  assert.equal(await send, 1);
+  assert.deepEqual(await detach, { ok: true, changed: true });
+  assert.equal(await sendLessonStatusPrompts(now, async () => { assert.fail("stale message reached transport"); }), 0);
 });
