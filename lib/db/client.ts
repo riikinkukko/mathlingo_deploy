@@ -1,4 +1,4 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 
@@ -7,7 +7,7 @@ declare global {
   var __pgPool: Pool | undefined;
 }
 
-function getPool(): Pool {
+export function getPool(): Pool {
   // Кэшируем пул через globalThis ВСЕГДА, не только в dev. Причина отличается
   // по окружению, но эффект нужен в обоих:
   // - dev: Next.js пересоздаёт модули при каждом hot-reload — без кэша плодились
@@ -48,8 +48,8 @@ function getDb() {
 // hashPassword), а тот импортирует lib/queries.ts, который импортирует этот
 // самый файл. Без ленивой инициализации Pool создавался бы с пустым
 // DATABASE_URL ещё до того, как переменные окружения успевали загрузиться.
-export const db: ReturnType<typeof drizzle<typeof schema>> = new Proxy(
-  {} as ReturnType<typeof drizzle<typeof schema>>,
+export const db: NodePgDatabase<typeof schema> = new Proxy(
+  {} as NodePgDatabase<typeof schema>,
   {
     get(_target, prop, receiver) {
       return Reflect.get(getDb() as object, prop, receiver);

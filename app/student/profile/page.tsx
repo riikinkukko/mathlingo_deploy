@@ -70,10 +70,10 @@ export default async function ProfilePage(
   // по ссылке браузером. Код генерируется заново при каждом заходе на
   // профиль, пока Telegram не подключён — старый код от предыдущего
   // визита просто перезаписывается, это не проблема (он одноразовый).
-  const telegramLinkUrl =
-    !user.telegramChatId && isTelegramConfigured()
-      ? buildTelegramLinkUrl(await generateTelegramLinkCode(user.id))
-      : null;
+  const telegramCode = !user.telegramChatId && isTelegramConfigured()
+    ? await generateTelegramLinkCode(user.id, user.passwordHash)
+    : null;
+  const telegramLinkUrl = telegramCode ? buildTelegramLinkUrl(telegramCode) : null;
 
   const standalone = isStandaloneStudent(user);
   const pro = standalone && isEffectivelyPro(user);

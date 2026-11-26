@@ -1,3 +1,5 @@
+import { providerSignal } from "./student-links";
+
 /**
  * Тонкий клиент Telegram Bot API. Как и с ЮKassa — я не могу протестировать
  * этот файл end-to-end сам: нужен реальный токен бота от @BotFather,
@@ -77,7 +79,7 @@ export async function sendTelegramMessage(
         disable_web_page_preview: true,
         ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
       }),
-      signal: controller.signal,
+      signal: providerSignal(controller.signal),
     });
     if (!res.ok) {
       console.error("Telegram sendMessage вернул ошибку:", res.status, await res.text().catch(() => ""));
@@ -104,7 +106,7 @@ export async function callTelegram(method: string, body: object): Promise<boolea
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: providerSignal(controller.signal),
     });
     if (!res.ok) {
       console.error(`Telegram ${method} вернул ошибку:`, res.status, await res.text().catch(() => ""));

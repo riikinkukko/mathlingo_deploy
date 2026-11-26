@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import { db } from "./db/client";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { db, getPool } from "./db/client";
 import * as schema from "./db/schema";
 
 export type StudentLinkTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -72,7 +74,7 @@ export async function unlinkStudent(
     return { ok: false, error: UNLINK_DENIED };
   }
   const teacherId = actor.id;
-  return db.transaction(async (tx) => {
+  return withDeliveryLocks([studentId], false, (connection) => connection.transaction(async (tx) => {
     const student = await lockStudent(tx, studentId);
     const pair = and(eq(schema.studentUnlinks.teacherId, teacherId), eq(schema.studentUnlinks.studentId, studentId));
     if (linkVersion && student?.teacherLinkVersion !== linkVersion) {
@@ -106,7 +108,7 @@ export async function unlinkStudent(
     ));
     await tx.insert(schema.studentUnlinks).values({ linkVersion: student.teacherLinkVersion, teacherId, studentId });
     return { ok: true, changed: true };
-  });
+  }));
 }
 
 export type TeacherLink = { studentId: string; teacherId: string; version: string };
@@ -120,21 +122,65 @@ export async function teacherLinkFor(
   return { studentId, teacherId, version: row.version };
 }
 
-/** Serialize the final provider request with unlink. The provider owns delivery after handoff. */
+const deliveryScope = new AsyncLocalStorage<AbortSignal>();
+
+export function providerSignal(timeout: AbortSignal): AbortSignal {
+  const scope = deliveryScope.getStore();
+  return scope ? AbortSignal.any([timeout, scope]) : timeout;
+}
+
+/** A pinned PostgreSQL session coordinates delivery and unlink across processes. */
+async function withDeliveryLocks<T>(ids: string[], shared: boolean, work: (connection: typeof db) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  const connection = drizzle(client, { schema });
+  const lock = shared ? sql`pg_advisory_lock_shared` : sql`pg_advisory_lock`;
+  const unlock = shared ? sql`pg_advisory_unlock_shared` : sql`pg_advisory_unlock`;
+  const keys = [...new Set(ids)].sort().map((id) => sql`hashtextextended('student-delivery:' || ${id}::text, 0)`);
+  const held: typeof keys = [];
+  let discard = false;
+  const controller = new AbortController();
+  const onError = () => {
+    discard = true;
+    controller.abort();
+  };
+  client.on("error", onError);
+  try {
+    for (const key of keys) {
+      await connection.execute(sql`select ${lock}(${key})`);
+      held.push(key);
+    }
+    controller.signal.throwIfAborted();
+    return await deliveryScope.run(controller.signal, () => work(connection));
+  } finally {
+    try {
+      for (const key of held.reverse()) {
+        const result = await connection.execute<{ unlocked: boolean }>(sql`select ${unlock}(${key}) as unlocked`);
+        if (!result.rows[0]?.unlocked) discard = true;
+      }
+    } catch {
+      discard = true;
+    } finally {
+      client.removeListener("error", onError);
+      client.release(discard);
+    }
+  }
+}
+
 export async function withActiveTeacherDeliveries<T>(
-  links: readonly TeacherLink[], send: (tx: StudentLinkTransaction) => Promise<T>,
+  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>,
 ): Promise<T | undefined> {
-  return db.transaction(async (tx) => {
-    const ids = [...new Set(links.map(({ studentId }) => studentId))];
-    const students = ids.length ? await tx.select({
+  if (!links.length) return send(db);
+  const ids = [...new Set(links.map(({ studentId }) => studentId))];
+  return withDeliveryLocks(ids, true, async (connection) => {
+    const students = await connection.select({
       id: schema.users.id, teacherId: schema.users.teacherId, version: schema.users.teacherLinkVersion,
-    }).from(schema.users).where(inArray(schema.users.id, ids)).orderBy(schema.users.id).for("update") : [];
+    }).from(schema.users).where(and(eq(schema.users.role, "STUDENT"), inArray(schema.users.id, ids)));
     const current = new Map(students.map((student) => [student.id, student]));
     if (links.some((link) => {
       const student = current.get(link.studentId);
       return student?.teacherId !== link.teacherId || student.version !== link.version;
     })) return undefined;
-    return send(tx);
+    return send(connection);
   });
 }
 

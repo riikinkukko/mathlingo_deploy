@@ -41,7 +41,7 @@ import {
   clearLoginFailures,
   isAuthEmailRateLimited,
 } from "@/lib/queries";
-import { redeemStudentHandoff } from "@/lib/student-credential-handoff";
+import { completeStudentSignup, redeemStudentHandoff } from "@/lib/student-credential-handoff";
 import { performSubmitAttempt, performRevealSolution } from "@/lib/actions-core";
 import { checkRegistrationEmail, clientIpFromHeaders, passwordLogin, registerStudent } from "@/lib/auth-flows";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
@@ -903,14 +903,20 @@ export async function saveOnboardingAction(formData: FormData) {
 // ---------- Подтверждение email и сброс пароля ----------
 
 export async function verifyEmailAction(token: string): Promise<{ success: boolean }> {
-  const signup = await consumeAuthToken(token, "student_signup_verification");
-  const userId = signup ?? await consumeAuthToken(token, "email_verification");
+  const userId = await consumeAuthToken(token, "email_verification");
   if (!userId) return { success: false };
-  await db.update(schema.users).set({
-    emailVerifiedAt: new Date(),
-    ...(signup ? { independentCredentials: true, credentialHandoffPending: false } : {}),
-  }).where(eq(schema.users.id, userId));
+  await db.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, userId));
   return { success: true };
+}
+
+export async function completeStudentSignupAction(_state: { error?: string }, formData: FormData) {
+  const code = String(formData.get("token") || "");
+  const password = String(formData.get("password") || "");
+  if (!(await completeStudentSignup(code, password))) {
+    return { error: "Ссылка недействительна или пароль не подходит. Задайте новый пароль от 8 символов, не длиннее 72 байт." };
+  }
+  await clearSessionCookie();
+  redirect("/login");
 }
 
 /** Для уже залогиненного пользователя, у которого email ещё не

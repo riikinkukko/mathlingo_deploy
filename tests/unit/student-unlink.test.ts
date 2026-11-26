@@ -1,8 +1,12 @@
-import { sendLessonStatusPrompts } from "../../lib/teacher-telegram";
-import { issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
+import { savePushToken } from "../../lib/push";
+import { verifyEmailAction } from "../../app/actions";
+import { performSubmitAttempt } from "../../lib/actions-core";
+import { performAskTeacher } from "../../lib/questions-core";
+import { handleCallbackQuery, sendLessonStatusPrompts } from "../../lib/teacher-telegram";
+import { completeStudentSignup, getStudentSignupLink, issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
 import { getBearerUser } from "../../lib/api-auth";
 import { POST as mobileLogin } from "../../app/api/m/auth/login/route";
-import { deliverWhenCommitted } from "../../lib/queries";
+import { deliverWhenCommitted, generateTelegramLinkCode, linkTelegramAccountByCode, withNotificationDelivery } from "../../lib/queries";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { and, eq, sql } from "drizzle-orm";
@@ -16,7 +20,7 @@ import { GET as parentData } from "../../app/api/m/parent/route";
 import { GET as attemptImage } from "../../app/api/attempt-image/[id]/route";
 import { GET as questionSketch } from "../../app/api/question-sketch/[id]/route";
 import { createSessionToken, hashPassword, isSessionRevoked, passwordCredentialVersion, runAsUser, verifySessionToken } from "../../lib/auth";
-import { passwordLogin } from "../../lib/auth-flows";
+import { passwordLogin, registerStudent } from "../../lib/auth-flows";
 import { db } from "../../lib/db/client";
 import * as s from "../../lib/db/schema";
 import { getUserById, getStudentBalance, getQuestionsForTeacher, computeOverallStats } from "../../lib/queries";
@@ -424,6 +428,8 @@ test("direct Telegram lesson prompt and unlink are serialized", async () => {
   const detach = unlinkStudent(teacher, student.id, version(student));
   try {
     await waitForBlocked(observer, pid);
+    const activity = await observer.query("select xact_start from pg_stat_activity where pid = $1", [pid]);
+    assert.equal(activity.rows[0]?.xact_start, null);
   } finally {
     release();
     await Promise.allSettled([send, detach]);
@@ -432,4 +438,99 @@ test("direct Telegram lesson prompt and unlink are serialized", async () => {
   assert.equal(await send, 1);
   assert.deepEqual(await detach, { ok: true, changed: true });
   assert.equal(await sendLessonStatusPrompts(now, async () => { assert.fail("stale message reached transport"); }), 0);
+});
+
+test("the mailbox holder replaces the registrant's password and sessions before gaining independent control", async () => {
+  const teacher = await makeUser({ role: "TEACHER" });
+  const fixture = await makeUser();
+  const email = `${fixture.id}-new@test.local`;
+  const registered = await registerStudent({ name: "New student", email, password: "initial-fixture", consent: true }, "");
+  assert.ok("userId" in registered);
+  const student = await getUserById(registered.userId);
+  assert.ok(student);
+  try {
+    const linked = await relink(teacher, student);
+    const oldToken = await createSessionToken(student.id, student.role, undefined, passwordCredentialVersion(student.passwordHash));
+    const [signup] = await db.select().from(s.authTokens)
+      .where(and(eq(s.authTokens.userId, student.id), eq(s.authTokens.type, "student_signup_verification")));
+    assert.ok(signup);
+    const oldTelegramCode = await generateTelegramLinkCode(student.id);
+    const oldDevice = "ExponentPushToken[old-fixture-device]";
+    assert.equal(await savePushToken(student.id, oldDevice, "android", student.passwordHash), true);
+    assert.ok(await getStudentSignupLink(signup.token));
+    assert.deepEqual(await verifyEmailAction(signup.token), { success: false });
+    assert.deepEqual(await unlinkStudent(teacher, student.id, version(linked)), { ok: false, error: UNLINK_CREDENTIALS });
+    assert.equal(await completeStudentSignup(signup.token, "initial-fixture"), false);
+    assert.equal(await completeStudentSignup(signup.token, "mailbox-holder-fixture"), true);
+    assert.equal(await completeStudentSignup(signup.token, "other-fixture-password"), false);
+    assert.deepEqual(await unlinkStudent(teacher, student.id, version(linked)), { ok: false, error: UNLINK_CREDENTIALS });
+    const oldSession = await verifySessionToken(oldToken);
+    assert.ok(oldSession);
+    assert.equal(isSessionRevoked(await readUser(student), oldSession.issuedAt, oldSession.authenticatedAt, oldSession.credentialVersion), true);
+    assert.equal(await getBearerUser(new Request("http://local", { headers: { authorization: `Bearer ${oldToken}` } })), null);
+    assert.ok("error" in await passwordLogin(email, "initial-fixture", ""));
+    assert.equal(await linkTelegramAccountByCode(oldTelegramCode, "synthetic-old-chat"), false);
+    assert.equal(await savePushToken(student.id, oldDevice, "android", student.passwordHash), false);
+    assert.deepEqual(await db.select().from(s.pushTokens).where(eq(s.pushTokens.userId, student.id)), []);
+    assert.ok("user" in await passwordLogin(email, "mailbox-holder-fixture", ""));
+    assert.deepEqual(await unlinkStudent(teacher, student.id, version(linked)), { ok: true, changed: true });
+  } finally {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
+      await tx.delete(s.studentUnlinks).where(eq(s.studentUnlinks.studentId, student.id));
+      await tx.delete(s.users).where(eq(s.users.id, student.id));
+    });
+  }
+});
+
+test("real question and review producers cancel both transports on unlink and keep student history", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "producer-fixture" });
+  const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
+  const [problem] = await db.select().from(s.problems).where(and(eq(s.problems.answerType, "DETAILED"), sql`${s.problems.skillId} is not null`)).limit(1);
+  assert.ok(problem);
+  const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
+  await withNotificationDelivery((deliver) => deliveries.push(deliver), async () => {
+    assert.deepEqual(await performAskTeacher(student, problem.id, "Synthetic question", ""), { ok: true });
+    assert.deepEqual(await performSubmitAttempt(student, problem.id, "Synthetic solution", "lesson"), { kind: "pending" });
+  });
+  assert.equal(deliveries.length, 2);
+  assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: true, changed: true });
+  const linked = await relink(teacher, student);
+  assert.notEqual(version(linked), version(student));
+  let calls = 0;
+  const send = async () => { calls++; return true; };
+  for (const deliver of deliveries) assert.equal(await deliver({ push: send, telegram: send }), false);
+  assert.equal(calls, 0);
+  assert.equal((await db.select().from(s.attempts).where(eq(s.attempts.studentId, student.id))).length, 1);
+  assert.equal((await db.select().from(s.studentQuestions).where(eq(s.studentQuestions.studentId, student.id))).length, 1);
+});
+
+test("individual and group Telegram callbacks skip edits if unlink commits after attendance was saved", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "synthetic-callback" });
+  for (const group of [false, true]) {
+    const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
+    const lessonId = `callback_${student.id}`;
+    const groupLessonId = group ? `group_${student.id}` : null;
+    await db.insert(s.scheduledLessons).values({
+      id: lessonId, groupLessonId, teacherId: teacher.id, studentId: student.id,
+      startsAt: new Date(Date.now() - 3600000),
+    });
+    const telegramCalls: string[] = [];
+    await handleCallbackQuery({
+      id: "synthetic", data: group ? `lg:d:${groupLessonId}` : `ls:d:${lessonId}`,
+      message: { chat: { id: teacher.telegramChatId }, message_id: 42 },
+    }, {
+      markLesson: async (...args) => {
+        const result = await applyLessonStatus(...args);
+        assert.ok(result.ok);
+        assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: true, changed: true });
+        return result;
+      },
+      telegram: async (method) => { telegramCalls.push(method); return true; },
+    });
+    assert.deepEqual(telegramCalls, ["answerCallbackQuery"]);
+    const [lesson] = await db.select().from(s.scheduledLessons).where(eq(s.scheduledLessons.id, lessonId));
+    assert.equal(lesson.status, "done");
+    assert.ok(lesson.archivedAt);
+  }
 });

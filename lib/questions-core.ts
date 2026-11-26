@@ -98,6 +98,7 @@ export async function performAskTeacher(
     await pushNotification(tx, {
       userId: teacherId,
       type: "question_asked",
+      teacherLink: { studentId: user.id, teacherId, version: student.teacherLinkVersion },
       title: `${user.name}: не понял задачу${problem.egeTaskNumber ? ` (№${problem.egeTaskNumber})` : ""}`,
       body:
         (text ? excerpt(text, 160) : `«${excerpt(problem.text)}»${answer ? ` · ответ ученика: ${answer}` : ""}`) +

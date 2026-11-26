@@ -1,3 +1,4 @@
+import { lockStudent } from "./student-links";
 /**
  * Пробник ЕГЭ: работа с базой. Формат, баллы и сборка варианта — lib/mock-exam.ts.
  *
@@ -250,13 +251,14 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
     (await Promise.all(m.items.map((it) => getProblem(it.problemId)))).filter((p): p is NonNullable<typeof p> => !!p).map((p) => [p.id, p])
   );
   const images = await getMockImages(id);
-  const teacherId = user.teacherId ?? null;
 
   const part1Correct: Record<string, boolean> = {};
   const part2Attempts: Record<string, string> = {};
   let sentToTeacher = 0;
 
   await db.transaction(async (tx) => {
+    const current = await lockStudent(tx, user.id);
+    const teacherId = current?.teacherLinkVersion === user.teacherLinkVersion ? current?.teacherId : null;
     // Защита от двойной сдачи: помечаем сданным одной условной операцией.
     const claimed = await tx
       .update(schema.mockAttempts)
@@ -310,7 +312,7 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
     await tx.delete(schema.mockImages).where(eq(schema.mockImages.mockAttemptId, id));
 
     // Репетитор узнаёт о каждом сданном пробнике — и сразу видит итог первой части.
-    if (teacherId) {
+    if (teacherId && current) {
       const part1Total = m.items.filter((it) => isPart1(it.n)).length;
       const part1Ok = Object.values(part1Correct).filter(Boolean).length;
       const p2Text =
@@ -319,6 +321,7 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
           : "";
       await pushNotification(tx, {
         userId: teacherId,
+        teacherLink: { studentId: user.id, teacherId, version: current.teacherLinkVersion },
         type: sentToTeacher > 0 ? "review_pending" : "homework_completed",
         title: `${user.name} сдал(а) пробник, вариант ${m.variant}`,
         body: `Часть 1: ${part1Ok} из ${part1Total}.${p2Text}`,

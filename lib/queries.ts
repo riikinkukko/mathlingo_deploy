@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { withActiveTeacherDeliveries, type TeacherLink } from "./student-links";
 import { db } from "./db/client";
 import { sendPushToUser } from "./push";
@@ -1383,6 +1384,14 @@ export async function computeProblemStates(
 // ---------- Уведомления ----------
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
+type NotificationTransport = { push: typeof sendPushToUser; telegram: typeof sendTelegramMessage };
+type NotificationDelivery = (transport?: NotificationTransport) => Promise<boolean>;
+const notificationDelivery = new AsyncLocalStorage<(deliver: NotificationDelivery) => void>();
+
+export function withNotificationDelivery<T>(schedule: (deliver: NotificationDelivery) => void, work: () => T): T {
+  return notificationDelivery.run(schedule, work);
+}
+
 
 /** Кладёт уведомление. Принимает либо обычный db, либо активную транзакцию —
  * так вызывающий код может завернуть несколько связанных записей в одну
@@ -1419,7 +1428,9 @@ export async function pushNotification(
   // уходили сразу, и при откате транзакции человек получал уведомление о
   // том, чего нет. Запись внутри транзакции не видна другим соединениям до
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
-  void deliverWhenCommitted(notificationId, params).catch(() => {});
+  const schedule = notificationDelivery.getStore();
+  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, params, transport));
+  else void deliverWhenCommitted(notificationId, params).catch(() => {});
 }
 
 /** Паузы перед проверками «уведомление сохранено?» (мс). */
@@ -1429,7 +1440,7 @@ export async function deliverWhenCommitted(
   notificationId: string,
   params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
     teacherLink?: TeacherLink },
-  transport = { push: sendPushToUser, telegram: sendTelegramMessage },
+  transport: NotificationTransport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
   let committed = false;
   for (const wait of COMMIT_CHECKS_MS) {
@@ -1455,7 +1466,7 @@ export async function deliverWhenCommitted(
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
     const telegramText = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${appUrl
       ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""}`;
-    // Both channels settle before releasing the student row. Never detach the push promise.
+    // Both channels settle before releasing the delivery advisory lock.
     await Promise.allSettled([
       transport.push(params.userId, payload, connection),
       ...(chatId ? [transport.telegram(chatId, telegramText)] : []),
@@ -1694,7 +1705,7 @@ export async function createAuthToken(
  * пересланное/оставшееся в истории почты, было бы бессрочной уязвимостью). */
 export async function consumeAuthToken(
   token: string,
-  type: "email_verification" | "password_reset" | "student_signup_verification"
+  type: "email_verification" | "password_reset"
 ): Promise<string | null> {
   const rows = await db.select().from(schema.authTokens).where(eq(schema.authTokens.token, token)).limit(1);
   const row = rows[0];
@@ -1974,10 +1985,15 @@ export function isTelegramCodeFresh(code: string, now = Date.now()): boolean {
 
 /** Генерирует одноразовый код привязки и сохраняет на пользователе — вызов
  * со страницы профиля, перед показом t.me-ссылки. */
-export async function generateTelegramLinkCode(userId: string): Promise<string> {
+export async function generateTelegramLinkCode(userId: string): Promise<string>;
+export async function generateTelegramLinkCode(userId: string, authenticatedPasswordHash: string): Promise<string | null>;
+export async function generateTelegramLinkCode(userId: string, authenticatedPasswordHash?: string) {
   const code = randomCode();
-  await db.update(schema.users).set({ telegramLinkCode: code }).where(eq(schema.users.id, userId));
-  return code;
+  const [account] = await db.update(schema.users).set({ telegramLinkCode: code })
+    .where(and(eq(schema.users.id, userId),
+      authenticatedPasswordHash === undefined ? undefined : eq(schema.users.passwordHash, authenticatedPasswordHash)))
+    .returning({ id: schema.users.id });
+  return account ? code : null;
 }
 
 /** Вызывается из вебхука Telegram при получении "/start код" — находит
@@ -1986,14 +2002,11 @@ export async function generateTelegramLinkCode(userId: string): Promise<string> 
 export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
   // Код живёт сутки: старая ссылка из переписки или скриншота не привяжет чужой чат.
   if (typeof code !== "string" || !isTelegramCodeFresh(code)) return false;
-  const rows = await db.select().from(schema.users).where(eq(schema.users.telegramLinkCode, code)).limit(1);
-  const user = rows[0];
-  if (!user) return false;
-  await db
-    .update(schema.users)
+  const [linked] = await db.update(schema.users)
     .set({ telegramChatId: chatId, telegramLinkCode: null })
-    .where(eq(schema.users.id, user.id));
-  return true;
+    .where(eq(schema.users.telegramLinkCode, code))
+    .returning({ id: schema.users.id });
+  return !!linked;
 }
 
 export async function unlinkTelegramAccount(userId: string) {

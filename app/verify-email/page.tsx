@@ -1,4 +1,6 @@
 import { verifyEmailAction } from "@/app/actions";
+import { getStudentSignupLink } from "@/lib/student-credential-handoff";
+import StudentSignupPassword from "@/components/StudentSignupPassword";
 import Mascot from "@/components/Mascot";
 import PublicFooter from "@/components/PublicFooter";
 
@@ -6,14 +8,17 @@ export const metadata = { title: "Подтверждение email — План�
 
 export default async function VerifyEmailPage(props: { searchParams: Promise<{ token?: string }> }) {
   const searchParams = await props.searchParams;
-  const result = searchParams.token ? await verifyEmailAction(searchParams.token) : { success: false };
+  const token = searchParams.token ?? "";
+  const signup = await getStudentSignupLink(token);
+  const needsPassword = signup && !signup.usedAt && signup.expiresAt.getTime() > Date.now();
+  const result = token && !signup ? await verifyEmailAction(token) : { success: false };
 
   return (
     <div className="flex min-h-screen flex-col bg-paper pt-[var(--app-sat)]">
       <div className="flex flex-1 items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
           <Mascot mood={result.success ? "celebrating" : "idle"} size={96} />
-          {result.success ? (
+          {needsPassword ? <StudentSignupPassword token={token} /> : result.success ? (
             <>
               <h1 className="mt-2 font-display text-2xl font-black text-pine-dark">Email подтверждён!</h1>
               <p className="mt-1 text-sm text-ink-soft">Спасибо — теперь мы точно знаем, что этот адрес ваш.</p>
@@ -28,9 +33,9 @@ export default async function VerifyEmailPage(props: { searchParams: Promise<{ t
               </p>
             </>
           )}
-          <a href="/login" className="btn-primary mt-5 inline-block !px-8">
+          {!needsPassword && <a href="/login" className="btn-primary mt-5 inline-block !px-8">
             {result.success ? "Войти" : "На страницу входа"}
-          </a>
+          </a>}
         </div>
       </div>
       <PublicFooter />

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "./auth";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
@@ -7,6 +7,7 @@ import { secureToken } from "./secure-random";
 import { lockStudent } from "./student-links";
 
 const kind = "student_credential_handoff";
+const signupKind = "student_signup_verification";
 const digest = (code: string, linkVersion: string) =>
   createHash("sha256").update(linkVersion).update(":").update(code).digest("hex");
 
@@ -31,26 +32,49 @@ export async function issueStudentHandoff(
   });
 }
 
+export async function getStudentSignupLink(code: string) {
+  if (!/^[\w-]{43}$/.test(code)) return undefined;
+  const [token] = await db.select({
+    userId: schema.authTokens.userId, usedAt: schema.authTokens.usedAt, expiresAt: schema.authTokens.expiresAt,
+  }).from(schema.authTokens)
+    .where(and(eq(schema.authTokens.type, signupKind), eq(schema.authTokens.token, code)));
+  return token;
+}
+
+export async function completeStudentSignup(code: string, password: string) {
+  const token = await getStudentSignupLink(code);
+  if (!token || token.usedAt || token.expiresAt.getTime() <= Date.now()) return false;
+  return changeStudentCredentials(token.userId, code, password, signupKind);
+}
+
 export async function redeemStudentHandoff(studentId: string, code: string, password: string) {
+  return changeStudentCredentials(studentId, code, password, kind);
+}
+
+async function changeStudentCredentials(studentId: string, code: string, password: string, tokenType: typeof kind | typeof signupKind) {
   if (!/^[\w-]{43}$/.test(code) || password.length < 8 || Buffer.byteLength(password, "utf8") > 72) return false;
   const passwordHash = await hashPassword(password);
   return db.transaction(async (tx) => {
     const student = await lockStudent(tx, studentId);
     if (!student || student.independentCredentials || await verifyPassword(password, student.passwordHash)) return false;
     const [claimed] = await tx.update(schema.authTokens).set({ usedAt: sql`clock_timestamp()` }).where(and(
-      eq(schema.authTokens.userId, student.id), eq(schema.authTokens.type, kind),
-      eq(schema.authTokens.token, digest(code, student.teacherLinkVersion)), isNull(schema.authTokens.usedAt),
+      eq(schema.authTokens.userId, student.id), eq(schema.authTokens.type, tokenType),
+      eq(schema.authTokens.token, tokenType === signupKind ? code : digest(code, student.teacherLinkVersion)), isNull(schema.authTokens.usedAt),
       gt(schema.authTokens.expiresAt, sql`clock_timestamp()`),
     )).returning({ id: schema.authTokens.id });
     if (!claimed) return false;
 
     await tx.update(schema.authTokens).set({ usedAt: sql`clock_timestamp()` }).where(and(
-      eq(schema.authTokens.userId, student.id), eq(schema.authTokens.type, "password_reset"),
+      eq(schema.authTokens.userId, student.id),
+      inArray(schema.authTokens.type, ["password_reset", signupKind, kind]),
       isNull(schema.authTokens.usedAt),
     ));
     await tx.update(schema.users).set({
       passwordHash, passwordChangedAt: sql`clock_timestamp()`, credentialHandoffPending: true,
+      telegramChatId: null, telegramLinkCode: null,
+      ...(tokenType === signupKind ? { emailVerifiedAt: sql`clock_timestamp()` } : {}),
     }).where(eq(schema.users.id, student.id));
+    await tx.delete(schema.pushTokens).where(eq(schema.pushTokens.userId, student.id));
     return true;
   });
 }

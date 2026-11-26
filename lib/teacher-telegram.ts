@@ -30,7 +30,7 @@ import { getInactiveStudents, nudgeStudent } from "./nudge";
 import type { User } from "./types";
 import { collapseGroupLessons, groupTitle } from "./lesson-collapse";
 import { countDistinctLessons } from "./groups";
-import { activeTeacherLinks, lockStudent, withActiveTeacherDeliveries, withUnchangedTeacherRoster, type StudentLinkTransaction } from "./student-links";
+import { activeTeacherLinks, lockStudent, withActiveTeacherDeliveries, withUnchangedTeacherRoster } from "./student-links";
 import { debtText, hasDebt } from "./money";
 import { reportButton, startTelegramReport } from "./lesson-report";
 
@@ -209,7 +209,7 @@ function lessonKeyboard(lessonId: string): InlineKeyboard {
 /** Раз в несколько минут из воркера бота. Возвращает число отправленных вопросов. */
 export async function sendLessonStatusPrompts(
   now: Date = new Date(),
-  send: (chatId: string, text: string, options: { replyMarkup: InlineKeyboard }, tx: StudentLinkTransaction) => Promise<boolean> = sendTelegramMessage,
+  send: (chatId: string, text: string, options: { replyMarkup: InlineKeyboard }, tx: typeof db) => Promise<boolean> = sendTelegramMessage,
 ): Promise<number> {
   if (isQuietHours(now)) return 0;
 
@@ -283,20 +283,6 @@ export async function sendLessonStatusPrompts(
 }
 
 /** Название группы и имена учеников группового занятия. */
-async function groupLessonInfo(groupLessonId: string) {
-  const rows = await db
-    .select({ name: schema.users.name, groupName: schema.studentGroups.name })
-    .from(schema.scheduledLessons)
-    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
-    .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
-    .where(and(eq(schema.scheduledLessons.groupLessonId, groupLessonId),
-      eq(schema.users.teacherId, schema.scheduledLessons.teacherId), isNull(schema.scheduledLessons.archivedAt)));
-  return {
-    groupName: rows[0]?.groupName ?? null,
-    names: rows.map((r) => r.name.split(" ")[0]).sort((a, b) => a.localeCompare(b, "ru")),
-  };
-}
-
 async function findTeacherByChat(chatId: string) {
   const rows = await db
     .select({ id: schema.users.id })
@@ -307,11 +293,11 @@ async function findTeacherByChat(chatId: string) {
 }
 
 /** Нажатие кнопки под сообщением бота (callback_query). */
-export async function handleCallbackQuery(cq: any): Promise<void> {
+export async function handleCallbackQuery(cq: any, { telegram = callTelegram, markLesson = applyLessonStatus } = {}): Promise<void> {
   const data: string = cq?.data ?? "";
   const chatId: string | undefined = cq?.message?.chat?.id?.toString();
   const messageId: number | undefined = cq?.message?.message_id;
-  const answer = (text: string) => callTelegram("answerCallbackQuery", { callback_query_id: cq.id, text });
+  const answer = (text: string) => telegram("answerCallbackQuery", { callback_query_id: cq.id, text });
 
   const nd = /^nd:(.+)$/.exec(data);
   if (nd && chatId) {
@@ -321,12 +307,11 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
       return;
     }
     const r = await nudgeStudent(t.id, nd[1]);
-    const first = (r.studentName ?? "").split(" ")[0];
     await answer(
       r.ok
-        ? `Напомнили: ${first}${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
+        ? `Напоминание отправлено${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
         : r.reason === "too_soon"
-          ? `Уже напоминали за последние сутки: ${first}`
+          ? `Уже напоминали за последние сутки`
           : "Ученик не найден"
     );
     return;
@@ -341,33 +326,39 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
     }
     const status: LessonMark = g[1] === "d" ? "done" : "cancelled";
     const rows = await db
-      .select({ id: schema.scheduledLessons.id, teacherId: schema.scheduledLessons.teacherId, status: schema.scheduledLessons.status, startsAt: schema.scheduledLessons.startsAt, durationMin: schema.scheduledLessons.durationMin, topic: schema.scheduledLessons.topic, groupId: schema.scheduledLessons.groupId })
+      .select({ lesson: schema.scheduledLessons, name: schema.users.name,
+        groupName: schema.studentGroups.name, version: schema.users.teacherLinkVersion })
       .from(schema.scheduledLessons)
-      .where(eq(schema.scheduledLessons.groupLessonId, g[2]));
-    if (rows.length === 0 || rows[0].teacherId !== t.id) {
-      await answer("Занятие не найдено — возможно, его удалили");
+      .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+      .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
+      .where(and(eq(schema.scheduledLessons.groupLessonId, g[2]), eq(schema.scheduledLessons.teacherId, t.id),
+        eq(schema.users.teacherId, t.id), isNull(schema.scheduledLessons.archivedAt)));
+    if (!rows.length) {
+      await answer("Занятие не найдено");
       return;
     }
     // Только неотмеченные строки: если в кабинете уже отметили посещаемость,
     // кнопка из чата её не перезапишет.
     let changed = 0;
-    for (const r of rows) {
-      const res = await applyLessonStatus(t.id, r.id, status, { onlyIfPlanned: true });
+    for (const { lesson } of rows) {
+      const res = await markLesson(t.id, lesson.id, status, { onlyIfPlanned: true });
       if (res.ok) changed++;
     }
     const mark = status === "done" ? "✅ Отмечено: были все" : "✖️ Отмечено: занятия не было";
-    if (messageId) {
-      const info = await groupLessonInfo(g[2]);
-      await callTelegram("editMessageText", {
+    const links = rows.map(({ lesson, version }) => ({ studentId: lesson.studentId, teacherId: t.id, version }));
+    if (messageId) await withActiveTeacherDeliveries(links, async () => {
+      const { lesson, groupName } = rows[0];
+      const names = rows.map((row) => row.name.split(" ")[0]).sort((a, b) => a.localeCompare(b, "ru"));
+      await telegram("editMessageText", {
         chat_id: chatId,
         message_id: messageId,
         text:
-          groupPromptText(info.groupName, info.names, rows[0].startsAt, rows[0].durationMin, rows[0].topic) +
+          groupPromptText(groupName, names, lesson.startsAt, lesson.durationMin, lesson.topic) +
           `\n\n<b>${changed ? mark : "Уже было отмечено раньше"}</b>`,
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
-    }
+    });
     await answer(changed ? mark : "Уже было отмечено раньше");
     return;
   }
@@ -395,7 +386,16 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
   }
 
   const status: LessonMark = m[1] === "d" ? "done" : "cancelled";
-  const res = await applyLessonStatus(teacher.id, m[2], status, { onlyIfPlanned: true });
+  const [active] = await db.select({
+    studentId: schema.users.id, name: schema.users.name, version: schema.users.teacherLinkVersion,
+  }).from(schema.scheduledLessons).innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
+    .where(and(eq(schema.scheduledLessons.id, m[2]), eq(schema.scheduledLessons.teacherId, teacher.id),
+      eq(schema.users.teacherId, teacher.id), isNull(schema.scheduledLessons.archivedAt)));
+  if (!active) {
+    await answer("Занятие не найдено");
+    return;
+  }
+  const res = await markLesson(teacher.id, m[2], status, { onlyIfPlanned: true });
   if (!res.ok && res.reason === "not_found") {
     await answer("Занятие не найдено — возможно, его удалили");
     return;
@@ -403,25 +403,24 @@ export async function handleCallbackQuery(cq: any): Promise<void> {
 
   const lesson = res.lesson!;
   const finalStatus = res.ok ? status : lesson.status;
-  const student = await getUserById(lesson.studentId);
   const mark = finalStatus === "done" ? "✅ Отмечено: было" : finalStatus === "cancelled" ? "✖️ Отмечено: не было" : "";
   const extra =
     res.ok && status === "done" ? openLink(`/teacher/student/${lesson.studentId}?log=${lesson.id}#journal`, "Или записать отчёт в кабинете →") : "";
 
-  if (messageId) {
+  if (messageId) await withActiveTeacherDeliveries([{ studentId: active.studentId, teacherId: teacher.id, version: active.version }], async () => {
     // Убираем кнопки и пишем итог — чтобы по чату было видно, что уже отмечено.
-    await callTelegram("editMessageText", {
+    await telegram("editMessageText", {
       chat_id: chatId,
       message_id: messageId,
       text:
-        lessonPromptText(student?.name ?? "Ученик", new Date(lesson.startsAt), lesson.durationMin, lesson.topic) +
+        lessonPromptText(active.name, new Date(lesson.startsAt), lesson.durationMin, lesson.topic) +
         `\n\n<b>${mark}</b>${extra}`,
       parse_mode: "HTML",
       disable_web_page_preview: true,
       // После «Было» — сразу кнопка отчёта: следующее сообщение станет отчётом.
       ...(res.ok && status === "done" ? { reply_markup: { inline_keyboard: [[reportButton(lesson.id)]] } } : {}),
     });
-  }
+  });
   await answer(res.ok ? mark : `Уже было отмечено раньше`);
 }
 

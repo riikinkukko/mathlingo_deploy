@@ -217,7 +217,7 @@ export async function respondToTeacherInvite(
 
     const [linked] = await tx.update(schema.users).set({ teacherId: teacher.id })
       .where(and(eq(schema.users.id, studentId), isNull(schema.users.teacherId), eq(schema.users.role, "STUDENT")))
-      .returning({ id: schema.users.id });
+      .returning({ version: schema.users.teacherLinkVersion });
     if (!linked) return { ok: false, message: "У тебя уже есть репетитор в Планиметрике." };
     // Older records for this pair may predate unlink tracking. Never reactivate them.
     await archiveTeacherStudentState(tx, teacher.id, studentId);
@@ -229,6 +229,7 @@ export async function respondToTeacherInvite(
     await pushNotification(tx, {
       userId: teacher.id,
       type: "teacher_invite",
+      teacherLink: { studentId, teacherId: teacher.id, version: linked.version },
       title: `${student.name} принял(а) приглашение`,
       body: "Ученик теперь в вашем списке — можно задавать домашку и планировать занятия.",
       link: `/teacher/student/${student.id}`,
