@@ -559,6 +559,7 @@ test("a teacher-created parent request cannot expose student data after detach",
     assert.ok("error" in await passwordLogin(email, proposed, ""));
     assert.equal((await parentData(oldSession)).status, 404);
     assert.equal(await issueParentAccess(teacher, student.id, parent.id), null);
+    assert.equal(await issueParentAccess({ ...teacher, isAdmin: true, isPlatformOwner: true }, student.id, parent.id), null);
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: true, changed: true });
     assert.equal((await parentData(oldSession)).status, 404);
     assert.ok("user" in await passwordLogin(fixture.email, "legacy-teacher-known", ""));
@@ -566,7 +567,8 @@ test("a teacher-created parent request cannot expose student data after detach",
     const [pending] = await db.select().from(s.parentLinkRequests).where(eq(s.parentLinkRequests.parentId, parent.id));
     assert.equal(pending.verifiedAt, null);
     const oldRecovery = await createAuthToken(parent.id, "password_reset", 60_000);
-    const issued = await issueParentAccess({ isAdmin: true, isPlatformOwner: true }, student.id, parent.id);
+    assert.equal(await issueParentAccess({ ...teacher, isAdmin: true, isPlatformOwner: true }, student.id, parent.id), null);
+    const issued = await issueParentAccess({ id: "fixture-operator", isAdmin: true, isPlatformOwner: true }, student.id, parent.id);
     assert.ok(issued);
     const confirmations = await Promise.all([
       confirmParentAccess(issued.code, "independent-parent-fixture"),

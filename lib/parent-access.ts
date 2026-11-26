@@ -4,18 +4,24 @@ import { hashPassword, verifyPassword } from "./auth";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { secureToken } from "./secure-random";
-import { withDeliveryLocks } from "./student-links";
+import { lockStudent, withDeliveryLocks } from "./student-links";
 
 const prefix = "parent_link:";
 const digest = (code: string) => createHash("sha256").update(code).digest("hex");
 
 export async function issueParentAccess(
-  operator: { isAdmin?: boolean; isPlatformOwner?: boolean },
+  operator: { id: string; isAdmin?: boolean; isPlatformOwner?: boolean },
   studentId: string,
   parentId: string,
 ) {
   if (!operator.isAdmin || !operator.isPlatformOwner) return null;
   return db.transaction(async (tx) => {
+    const student = await lockStudent(tx, studentId);
+    if (!student || student.teacherId === operator.id) return null;
+    const [formerTeacher] = await tx.select({ id: schema.studentUnlinks.linkVersion })
+      .from(schema.studentUnlinks).where(and(eq(schema.studentUnlinks.studentId, studentId),
+        eq(schema.studentUnlinks.teacherId, operator.id))).limit(1);
+    if (formerTeacher) return null;
     const [parent] = await tx.select().from(schema.users)
       .where(and(eq(schema.users.id, parentId), eq(schema.users.role, "PARENT"))).for("update");
     if (!parent) return null;
