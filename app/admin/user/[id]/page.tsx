@@ -1,8 +1,11 @@
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/lib/db/client";
+import { parentLinkRequests, users } from "@/lib/db/schema";
 import IssueStudentHandoff from "@/components/IssueStudentHandoff";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getUserById, getPaymentsForUser, isEffectivelyPro } from "@/lib/queries";
-import { grantProAction, revokeProAction } from "../../actions";
+import { grantProAction, revokeProAction, sendParentConfirmationAction } from "../../actions";
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Ожидает оплаты",
@@ -16,6 +19,11 @@ export default async function AdminUserPage(props: { params: Promise<{ id: strin
   const user = await getUserById(params.id);
   if (!user) notFound();
   const payments = await getPaymentsForUser(user.id);
+  const pendingParents = operator.isPlatformOwner && user.role === "STUDENT"
+    ? await db.select({ id: users.id, email: users.email }).from(parentLinkRequests)
+      .innerJoin(users, eq(users.id, parentLinkRequests.parentId))
+      .where(and(eq(parentLinkRequests.studentId, user.id), isNull(parentLinkRequests.verifiedAt)))
+    : [];
   const pro = isEffectivelyPro(user);
 
   return (
@@ -74,6 +82,16 @@ export default async function AdminUserPage(props: { params: Promise<{ id: strin
         {operator.isPlatformOwner && user.role === "STUDENT" && !user.independentCredentials && (
           <IssueStudentHandoff studentId={user.id} />
         )}
+        {pendingParents.map((parent) => (
+          <form className="card mb-4 space-y-2 p-4 text-sm" action={sendParentConfirmationAction} key={parent.id}>
+            <h2 className="font-bold">Подтвердить родителя {parent.email}</h2>
+            <input type="hidden" name="studentId" value={user.id} />
+            <input type="hidden" name="parentId" value={parent.id} />
+            <label className="block"><input type="checkbox" name="parentVerified" required /> Личность родителя и его контроль над этим email проверены независимо от репетитора</label>
+            <label className="block"><input type="checkbox" name="studentConsent" required /> Связь согласована с учеником или его законным представителем через проверенный канал</label>
+            <button className="btn-primary" type="submit">Отправить ссылку родителю</button>
+          </form>
+        ))}
         <h2 className="mb-3 font-display text-lg font-black text-ink">История платежей</h2>
         {payments.length === 0 ? (
           <p className="text-sm text-ink-soft">Платежей через ЮKassa пока не было.</p>

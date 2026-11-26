@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { issueStudentHandoff } from "@/lib/student-credential-handoff";
+import { issueParentAccess } from "@/lib/parent-access";
+import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { requireAdmin } from "@/lib/auth";
 import { setUserPlanManually } from "@/lib/queries";
 
@@ -39,4 +41,21 @@ export async function issueStudentHandoffAction(
   }
   const code = await issueStudentHandoff(owner, String(formData.get("studentId") ?? ""));
   return code ? { code } : { error: "Передача доступа для этого аккаунта недоступна." };
+}
+
+export async function sendParentConfirmationAction(form: FormData) {
+  const owner = await requireAdmin();
+  const studentId = String(form.get("studentId") ?? "");
+  if (!owner.isPlatformOwner || !studentId || form.get("parentVerified") !== "on" ||
+      form.get("studentConsent") !== "on" || !isEmailConfigured()) return;
+  const pending = await issueParentAccess(owner, studentId, String(form.get("parentId") ?? ""));
+  if (!pending) return;
+  const url = new URL("/parent-confirm", process.env.NEXT_PUBLIC_APP_URL || "https://planimetrika.online");
+  url.searchParams.set("token", pending.code);
+  await sendEmail({
+    to: pending.email,
+    subject: "Подтверждение родительского доступа — Планиметрика",
+    html: `<p>Чтобы подтвердить доступ, <a href="${url.toString()}">задайте новый пароль</a>. Ссылка действует 30 минут.</p>`,
+  });
+  revalidatePath(`/admin/user/${studentId}`);
 }

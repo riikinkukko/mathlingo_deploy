@@ -27,7 +27,7 @@ test("недельный отчёт: темы занятий за неделю �
   const teacher = await makeUser({ role: "TEACHER" });
   const child = await makeUser({ teacherId: teacher.id, name: "Маша Иванова" });
   const parent = await makeUser({ role: "PARENT", tgWeeklyReport: true });
-  await db.insert(schema.parentLinks).values({ parentId: parent.id, studentId: child.id });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId: parent.id, studentId: child.id });
   await db.insert(schema.lessonLogs).values({
     id: `tl_${parent.id}`,
     teacherId: teacher.id,

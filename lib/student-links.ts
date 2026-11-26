@@ -130,7 +130,7 @@ export function providerSignal(timeout: AbortSignal): AbortSignal {
 }
 
 /** A pinned PostgreSQL session coordinates delivery and unlink across processes. */
-async function withDeliveryLocks<T>(ids: string[], shared: boolean, work: (connection: typeof db) => Promise<T>): Promise<T> {
+export async function withDeliveryLocks<T>(ids: string[], shared: boolean, work: (connection: typeof db) => Promise<T>): Promise<T> {
   const client = await getPool().connect();
   const connection = drizzle(client, { schema });
   const lock = shared ? sql`pg_advisory_lock_shared` : sql`pg_advisory_lock`;
@@ -166,12 +166,20 @@ async function withDeliveryLocks<T>(ids: string[], shared: boolean, work: (conne
   }
 }
 
+export type DeliveryRecipient = { id: string; passwordHash: string };
+
 export async function withActiveTeacherDeliveries<T>(
-  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>,
+  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient,
 ): Promise<T | undefined> {
-  if (!links.length) return send(db);
-  const ids = [...new Set(links.map(({ studentId }) => studentId))];
-  return withDeliveryLocks(ids, true, async (connection) => {
+  if (!links.length && !recipient) return send(db);
+  const ids = links.map(({ studentId }) => studentId);
+  return withDeliveryLocks(recipient ? [...ids, recipient.id] : ids, true, async (connection) => {
+    if (recipient) {
+      const [current] = await connection.select({ id: schema.users.id }).from(schema.users)
+        .where(and(eq(schema.users.id, recipient.id), eq(schema.users.passwordHash, recipient.passwordHash)));
+      if (!current) return undefined;
+    }
+    if (!ids.length) return send(connection);
     const students = await connection.select({
       id: schema.users.id, teacherId: schema.users.teacherId, version: schema.users.teacherLinkVersion,
     }).from(schema.users).where(and(eq(schema.users.role, "STUDENT"), inArray(schema.users.id, ids)));

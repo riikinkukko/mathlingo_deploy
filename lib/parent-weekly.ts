@@ -1,3 +1,4 @@
+import { withActiveTeacherDeliveries } from "./student-links";
 // Недельный отчёт родителю: по воскресеньям вечером (19:00–23:00 МСК), по
 // каждому ребёнку отдельное уведомление — в приложении и в Telegram (если
 // привязан; отправку делает pushNotification). Отключается родителем на его
@@ -221,7 +222,7 @@ export async function sendParentWeeklyReports(now: Date = new Date()): Promise<n
         or(isNull(schema.users.weeklyReportSentOn), sql`${schema.users.weeklyReportSentOn} <> ${key}`)
       )
     )
-    .returning({ id: schema.users.id, email: schema.users.email, chatId: schema.users.telegramChatId });
+    .returning({ id: schema.users.id, passwordHash: schema.users.passwordHash });
 
   let sent = 0;
   for (const p of claimed) {
@@ -241,8 +242,14 @@ export async function sendParentWeeklyReports(now: Date = new Date()): Promise<n
         sent++;
       }
       // Без Telegram отчёт видно только на сайте — поэтому дублируем письмом.
-      if (!p.chatId && p.email && reports.length > 0 && isEmailConfigured()) {
-        await sendEmail({ to: p.email, subject: reports[0].title, html: weeklyEmailHtml(reports) });
+      if (reports.length > 0 && isEmailConfigured()) {
+        await withActiveTeacherDeliveries([], async (connection) => {
+          const [current] = await connection.select({ email: schema.users.email, chatId: schema.users.telegramChatId })
+            .from(schema.users).where(eq(schema.users.id, p.id));
+          if (current && !current.chatId) {
+            await sendEmail({ to: current.email, subject: reports[0].title, html: weeklyEmailHtml(reports) });
+          }
+        }, p);
       }
     } catch (e) {
       console.error("[parent-weekly] не удалось отправить отчёт", p.id, e);

@@ -107,7 +107,7 @@ async function main() {
     },
     { id: parentId, ...base, name: "Ольга Смирнова", email: EMAILS.parent, role: "PARENT", createdAt: ago(34) },
   ]);
-  await db.insert(schema.parentLinks).values({ parentId, studentId: s1 });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId, studentId: s1 });
 
   // ---------- Решения ----------
   type A = typeof schema.attempts.$inferInsert;

@@ -59,15 +59,20 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Deploy via SSH
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          # Вся логика — в scripts/deploy.sh (он приходит с git pull, так что
-          # всегда свежий): миграция или сборка не прошли → сайт остаётся на
-          # прежней рабочей версии, а не ложится с 502.
+          envs: RELEASE_SHA
           script: |
+            set -eu
             cd /var/www/planimetrika
-            git pull origin master
-            bash scripts/deploy.sh
+            git fetch origin master
+            git merge-base --is-ancestor "$RELEASE_SHA" origin/master
+            release_script="$(mktemp)"
+            trap 'rm -f "$release_script"' EXIT
+            git show "$RELEASE_SHA:scripts/deploy.sh" > "$release_script"
+            bash "$release_script" "$RELEASE_SHA"

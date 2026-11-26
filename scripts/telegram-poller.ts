@@ -21,6 +21,7 @@
  */
 import { config } from "dotenv";
 import path from "path";
+import { writeFile } from "node:fs/promises";
 config({ path: path.resolve(__dirname, "../.env.local") });
 
 // TELEGRAM_API_BASE — только для локального теста с фейковым сервером Telegram.
@@ -75,7 +76,7 @@ async function main() {
   // Напоминания о занятиях — отдельным циклом, параллельно опросу Telegram.
   // Повторная отправка исключена на уровне БД (атомарная пометка reminded_at),
   // так что лишний экземпляр воркера не приведёт к двойным сообщениям.
-  (async function reminderLoop() {
+  async function reminderLoop() {
     for (;;) {
       try {
         const n = await sendDueLessonReminders();
@@ -104,7 +105,7 @@ async function main() {
       );
       await sleep(REMINDER_INTERVAL_MS);
     }
-  })();
+  }
 
   const del = await callApi(token, "deleteWebhook", { drop_pending_updates: false }, 15000).catch((e) => ({
     ok: false,
@@ -113,6 +114,10 @@ async function main() {
   console.log("[telegram-poller] deleteWebhook:", del.ok ? "ok" : del.description);
   console.log("[telegram-poller] Запущен, жду сообщения...");
 
+  const readyFile = process.env.TELEGRAM_READY_FILE;
+  const { db } = await import("../lib/db/client");
+  const { sql } = await import("drizzle-orm");
+  let ready = false;
   let offset = 0;
   for (;;) {
     try {
@@ -130,6 +135,12 @@ async function main() {
         }
         await sleep(5000);
         continue;
+      }
+      if (!ready) {
+        await db.execute(sql`select 1`);
+        if (readyFile) await writeFile(readyFile, String(process.pid), { mode: 0o600 });
+        ready = true;
+        void reminderLoop();
       }
       for (const update of data.result) {
         // offset сдвигаем ДО обработки: упавший апдейт не должен зациклить воркер.

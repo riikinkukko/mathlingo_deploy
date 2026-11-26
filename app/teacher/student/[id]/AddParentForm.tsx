@@ -16,7 +16,7 @@ function SubmitButton() {
 
 export default function AddParentForm({ studentId }: { studentId: string }) {
   const [state, formAction, formActionPending] = useActionState<
-    { error?: string; success?: boolean; password?: string },
+    { error?: string; success?: boolean },
     FormData
   >(addParentLinkAction, {});
   const keepFormAction = useKeepFormValues(formActionPending);
@@ -24,10 +24,9 @@ export default function AddParentForm({ studentId }: { studentId: string }) {
   return (
     <form action={formAction} onSubmit={keepFormAction} className="space-y-3">
       <input type="hidden" name="studentId" value={studentId} />
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <input className="input" name="name" placeholder="Имя родителя" required />
         <input className="input" name="email" type="email" placeholder="Email родителя" required />
-        <input className="input" name="password" placeholder="Пароль (необязательно)" />
       </div>
       <label className="flex items-start gap-2.5 text-[13px] leading-snug text-ink-soft">
         <input type="checkbox" name="consent" required className="mt-0.5 h-4 w-4 shrink-0 accent-pine" />
@@ -45,13 +44,7 @@ export default function AddParentForm({ studentId }: { studentId: string }) {
       )}
       {state?.success && (
         <p className="rounded-lg bg-pine-light px-3 py-2 text-sm text-pine-dark">
-          {state.password ? (
-            <>
-              Готово. Пароль для входа: <span className="font-mono font-semibold">{state.password}</span>
-            </>
-          ) : (
-            "Готово. Родитель увидит ученика в своём кабинете — пароль у него прежний."
-          )}
+          Запрос создан. Поддержка проверит связь и направит ссылку родителю.
         </p>
       )}
       <SubmitButton />

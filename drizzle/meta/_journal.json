@@ -379,6 +379,13 @@
       "when": 1795593600000,
       "tag": "0053_student_unlink",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1795593600001,
+      "tag": "0054_verified_parent_links",
+      "breakpoints": true
     }
   ]
 }

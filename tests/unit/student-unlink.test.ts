@@ -1,3 +1,6 @@
+import { issueParentAccess, confirmParentAccess } from "../../lib/parent-access";
+import { createAuthToken, consumeAuthToken } from "../../lib/queries";
+import { sendStudentEveningReminders } from "../../lib/student-reminders";
 import { savePushToken } from "../../lib/push";
 import { verifyEmailAction } from "../../app/actions";
 import { performSubmitAttempt } from "../../lib/actions-core";
@@ -90,7 +93,7 @@ test("mobile and web data survive a versioned unlink, and only the current pair 
     { id: otherGroup, teacherId: other.id, name: "Legacy membership" },
   ]);
   await db.insert(s.studentGroupMembers).values([firstGroup, secondGroup, otherGroup].map((groupId) => ({ groupId, studentId: student.id })));
-  await db.insert(s.parentLinks).values([parent, anotherParent].map((p) => ({ parentId: p.id, studentId: student.id })));
+  await db.insert(s.parentLinkRequests).values([parent, anotherParent].map((p) => ({ verifiedAt: new Date(), parentId: p.id, studentId: student.id })));
   const paymentId = `${student.id}_payment`;
   await db.insert(s.studentPayments).values({ id: paymentId, teacherId: teacher.id, studentId: student.id, amountRub: 2400, paidAt: "2026-11-10" });
   await db.insert(s.scheduledLessons).values([
@@ -533,4 +536,65 @@ test("individual and group Telegram callbacks skip edits if unlink commits after
     assert.equal(lesson.status, "done");
     assert.ok(lesson.archivedAt);
   }
+});
+
+test("a teacher-created parent request cannot expose student data after detach", async () => {
+  const teacher = await makeUser({ role: "TEACHER" });
+  const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
+  const fixture = await makeUser({ role: "PARENT" });
+  const email = fixture.email.replace("@", "-request@");
+  const proposed = "known-to-teacher-fixture";
+  const response = await action(teacher, "addParent", { studentId: student.id, name: "Parent", email, password: proposed, consent: "on" });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).result.password, undefined);
+  const [row] = await db.select().from(s.users).where(eq(s.users.email, email));
+  assert.ok(row);
+  try {
+    const parent = await getUserById(row.id);
+    assert.ok(parent);
+    const path = `/api/m/parent?view=child&id=${student.id}`;
+    const oldSession = await request(path, parent);
+    assert.ok("error" in await passwordLogin(email, proposed, ""));
+    assert.equal((await parentData(oldSession)).status, 404);
+    assert.equal(await issueParentAccess(teacher, student.id, parent.id), null);
+    assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: true, changed: true });
+    assert.equal((await parentData(oldSession)).status, 404);
+    const [pending] = await db.select().from(s.parentLinkRequests).where(eq(s.parentLinkRequests.parentId, parent.id));
+    assert.equal(pending.verifiedAt, null);
+    const oldRecovery = await createAuthToken(parent.id, "password_reset", 60_000);
+    const issued = await issueParentAccess({ isAdmin: true, isPlatformOwner: true }, student.id, parent.id);
+    assert.ok(issued);
+    const confirmations = await Promise.all([
+      confirmParentAccess(issued.code, "independent-parent-fixture"),
+      confirmParentAccess(issued.code, "independent-parent-fixture"),
+    ]);
+    assert.deepEqual(confirmations.sort(), [false, true]);
+    assert.equal((await parentData(oldSession)).status, 401);
+    assert.equal(await consumeAuthToken(oldRecovery, "password_reset"), null);
+    assert.ok("user" in await passwordLogin(email, "independent-parent-fixture", ""));
+    assert.equal((await parentData(await request(path, parent))).status, 200);
+  } finally {
+    await db.delete(s.users).where(eq(s.users.id, row.id));
+  }
+});
+
+test("evening reminders drop a Telegram recipient when account handoff commits before delivery", async () => {
+  const teacher = await makeUser({ role: "TEACHER" });
+  const student = await makeUser({ teacherId: teacher.id, telegramChatId: "handoff-fixture", passwordHash: await hashPassword("old-fixture-password") });
+  const code = await issueStudentHandoff({ id: "owner", isAdmin: true, isPlatformOwner: true }, student.id);
+  assert.ok(code);
+  let built = false;
+  const sent = await sendStudentEveningReminders(new Date("2026-11-26T19:30:00+03:00"), {
+    build: async (recipient) => {
+      if (recipient.id !== student.id) return null;
+      built = true;
+      assert.ok(await redeemStudentHandoff(student.id, code, "new-fixture-password"));
+      return { title: "Reminder", text: "Synthetic reminder", link: "/student" };
+    },
+    telegram: async () => assert.fail("revoked Telegram recipient reached the transport"),
+    push: async () => assert.fail("revoked account delivery reached the transport"),
+  });
+  assert.equal(built, true);
+  assert.equal(sent, 0);
+  assert.equal((await readUser(student)).telegramChatId, undefined);
 });

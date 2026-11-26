@@ -18,7 +18,7 @@ test("родитель в приложении: свои дети видны, ч
   const kid = await makeUser({ teacherId: t.id, name: "Ребёнок" });
   const other = await makeUser({ teacherId: t.id });
   const p = await makeUser({ role: "PARENT" });
-  await db.insert(schema.parentLinks).values({ parentId: p.id, studentId: kid.id });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId: p.id, studentId: kid.id });
   await db.insert(schema.mockScores).values({ id: `m_${kid.id}`, studentId: kid.id, teacherId: t.id, score: 70, takenAt: "2026-11-01", note: "секрет репетитора" } as never);
 
   const home = await (await GET(new Request("http://x/api/m/parent", { headers: await h(p) }))).json();

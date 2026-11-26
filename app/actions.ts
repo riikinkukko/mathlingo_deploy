@@ -1,5 +1,6 @@
 "use server";
 
+
 import { getTemplate, saveTemplate } from "@/lib/templates";
 import { onAttemptReviewed } from "@/lib/mock-queries";
 
@@ -41,13 +42,14 @@ import {
   clearLoginFailures,
   isAuthEmailRateLimited,
 } from "@/lib/queries";
+import { confirmParentAccess } from "@/lib/parent-access";
 import { completeStudentSignup, redeemStudentHandoff } from "@/lib/student-credential-handoff";
 import { performSubmitAttempt, performRevealSolution } from "@/lib/actions-core";
 import { checkRegistrationEmail, clientIpFromHeaders, passwordLogin, registerStudent } from "@/lib/auth-flows";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
 import { isYooKassaConfigured } from "@/lib/yookassa";
-import { generatePassword } from "@/lib/secure-random";
+import { generatePassword, secureToken } from "@/lib/secure-random";
 
 /** Реальный IP клиента (заголовки nginx) — см. lib/auth-flows.ts. */
 async function getClientIp(): Promise<string> {
@@ -413,7 +415,6 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   const studentId = String(formData.get("studentId") || "");
   const name = String(formData.get("name") || "").trim().slice(0, 80);
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
-  const password = String(formData.get("password") || "").trim().slice(0, 100) || generatePassword();
   const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
@@ -424,14 +425,13 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   // Родителя можно привязать только к СВОЕМУ ученику. Без этой проверки любой
   // репетитор мог создать "родителя" для чужого ученика и через его кабинет
   // видеть все данные этого ученика.
-  const passwordHash = await hashPassword(password);
+  const passwordHash = await hashPassword(secureToken());
   const result = await db.transaction(async (tx) => {
     const student = await lockStudent(tx, studentId);
     if (student?.teacherId !== teacher.id) return { error: "Ученик не найден" };
 
     let [parent] = await tx.select({ id: schema.users.id, role: schema.users.role })
       .from(schema.users).where(eq(schema.users.email, email));
-    let existingParent = false;
     if (parent) {
       // Существующий кабинет родителя можно привязать, только если этот родитель
       // уже привязан к другому ВАШЕМУ ученику (брат/сестра у того же репетитора).
@@ -441,15 +441,14 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
         parent.role === "PARENT"
           ? await tx
               .select({ id: schema.users.id })
-              .from(schema.parentLinks)
-              .innerJoin(schema.users, eq(schema.users.id, schema.parentLinks.studentId))
-              .where(and(eq(schema.parentLinks.parentId, parent.id), eq(schema.users.teacherId, teacher.id)))
+              .from(schema.parentLinkRequests)
+              .innerJoin(schema.users, eq(schema.users.id, schema.parentLinkRequests.studentId))
+              .where(and(eq(schema.parentLinkRequests.parentId, parent.id), eq(schema.users.teacherId, teacher.id)))
               .limit(1)
           : [];
       if (sibling.length === 0) {
         return { error: "Этот email уже используется в сервисе. Укажите другой email родителя." };
       }
-      existingParent = true;
     }
     if (!parent) {
       const id = genId("u");
@@ -459,20 +458,19 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
         email,
         passwordHash,
         role: "PARENT",
-        consentGivenAt: new Date(),
       });
       parent = { id, role: "PARENT" };
     }
 
     const alreadyLinked = await tx
       .select()
-      .from(schema.parentLinks)
-      .where(and(eq(schema.parentLinks.parentId, parent.id), eq(schema.parentLinks.studentId, studentId)))
+      .from(schema.parentLinkRequests)
+      .where(and(eq(schema.parentLinkRequests.parentId, parent.id), eq(schema.parentLinkRequests.studentId, studentId)))
       .limit(1);
     if (alreadyLinked.length === 0) {
-      await tx.insert(schema.parentLinks).values({ parentId: parent.id, studentId }).onConflictDoNothing();
+      await tx.insert(schema.parentLinkRequests).values({ parentId: parent.id, studentId }).onConflictDoNothing();
     }
-    return { success: true, password: existingParent ? undefined : password };
+    return { success: true };
   });
   if (result.success) revalidatePath(`/teacher/student/${studentId}`);
   return result;
@@ -907,6 +905,15 @@ export async function verifyEmailAction(token: string): Promise<{ success: boole
   if (!userId) return { success: false };
   await db.update(schema.users).set({ emailVerifiedAt: new Date() }).where(eq(schema.users.id, userId));
   return { success: true };
+}
+
+export async function confirmParentAccessAction(_state: { error?: string }, form: FormData) {
+  if (form.get("consent") !== "on" ||
+      !(await confirmParentAccess(String(form.get("token") ?? ""), String(form.get("password") ?? "")))) {
+    return { error: "Проверьте ссылку, согласие и выберите новый пароль от 8 символов." };
+  }
+  await clearSessionCookie();
+  redirect("/login");
 }
 
 export async function completeStudentSignupAction(_state: { error?: string }, formData: FormData) {

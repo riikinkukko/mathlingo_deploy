@@ -26,7 +26,7 @@ test("фото страницы сборника: видят репетитор,
   const st = await makeUser({ teacherId: t.id });
   const stranger = await makeUser();
   const parent = await makeUser({ role: "PARENT" });
-  await db.insert(schema.parentLinks).values({ parentId: parent.id, studentId: st.id });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId: parent.id, studentId: st.id });
 
   assert.ok("error" in (await saveTaskPhoto(st, PNG)), "ученик загружать не может");
   assert.ok("error" in (await saveTaskPhoto(t, "data:text/html;base64,PHA+")), "только картинки");

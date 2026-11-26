@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword } from "./auth";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { secureToken } from "./secure-random";
-import { lockStudent } from "./student-links";
+import { lockStudent, withDeliveryLocks } from "./student-links";
 
 const kind = "student_credential_handoff";
 const signupKind = "student_signup_verification";
@@ -54,7 +54,7 @@ export async function redeemStudentHandoff(studentId: string, code: string, pass
 async function changeStudentCredentials(studentId: string, code: string, password: string, tokenType: typeof kind | typeof signupKind) {
   if (!/^[\w-]{43}$/.test(code) || password.length < 8 || Buffer.byteLength(password, "utf8") > 72) return false;
   const passwordHash = await hashPassword(password);
-  return db.transaction(async (tx) => {
+  return withDeliveryLocks([studentId], false, (connection) => connection.transaction(async (tx) => {
     const student = await lockStudent(tx, studentId);
     if (!student || student.independentCredentials || await verifyPassword(password, student.passwordHash)) return false;
     const [claimed] = await tx.update(schema.authTokens).set({ usedAt: sql`clock_timestamp()` }).where(and(
@@ -76,5 +76,5 @@ async function changeStudentCredentials(studentId: string, code: string, passwor
     }).where(eq(schema.users.id, student.id));
     await tx.delete(schema.pushTokens).where(eq(schema.pushTokens.userId, student.id));
     return true;
-  });
+  }));
 }

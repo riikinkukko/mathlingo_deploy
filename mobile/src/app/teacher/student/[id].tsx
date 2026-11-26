@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { say } from "@/lib/alert";
-import { Share, View } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { errorText } from "@/lib/api";
 import { plural } from "@/lib/hooks";
@@ -148,16 +148,10 @@ function Overview({ d }: { d: TStudent }) {
           loading={busy === "addParent"}
           disabled={!parent.name || !parent.email || !parent.consent}
           onPress={async () => {
-            const r = (await run("addParent", { studentId: s.id, ...parent })) as { result?: { password?: string } } | null;
-            if (!r) return;
+            if (!(await run("addParent", { studentId: s.id, ...parent }))) return;
             setParentOpen(false);
             setParent({ name: "", email: "", consent: false });
-            const pw = r.result?.password;
-            say(
-              "Родитель добавлен",
-              pw ? `Вход: ${parent.email}\nПароль: ${pw}\n\nПередайте эти данные родителю.` : "Родитель уже был зарегистрирован — ученик привязан к его кабинету.",
-              pw ? [{ text: "Отправить", onPress: () => void Share.share({ message: `Вход в Планиметрику: planimetrika.online\nEmail: ${parent.email}\nПароль: ${pw}` }) }, { text: "Готово" }] : undefined
-            );
+            say("Запрос создан", "Поддержка проверит связь и направит ссылку родителю.");
           }}
         />
       </Sheet>

@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgView,
   text,
   boolean,
   integer,
@@ -363,9 +364,15 @@ export const promoRedemptions = pgTable(
   (t) => ({ oncePerUser: uniqueIndex("promo_redemptions_code_user_uq").on(t.code, t.userId) })
 );
 
-export const parentLinks = pgTable(
-  "parent_links",
+export const parentLinks = pgView("parent_links", {
+  parentId: text("parent_id").notNull(),
+  studentId: text("student_id").notNull(),
+}).existing();
+
+export const parentLinkRequests = pgTable(
+  "parent_link_requests",
   {
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     parentId: text("parent_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

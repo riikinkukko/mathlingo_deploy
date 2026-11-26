@@ -38,7 +38,7 @@ async function seedDatabase(tx: SeedTransaction, reset: boolean) {
     await tx.delete(schema.skills);
     await tx.delete(schema.subtopics);
     await tx.delete(schema.topics);
-    await tx.delete(schema.parentLinks);
+    await tx.delete(schema.parentLinkRequests);
     await tx.delete(schema.studentUnlinks);
     await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
     await tx.delete(schema.users);
@@ -8933,7 +8933,7 @@ async function writeSeedData(tx: SeedTransaction, built: DB, isFreshInstall: boo
     });
   }
   for (const l of built.parentLinks) {
-    await tx.insert(schema.parentLinks).values(l);
+    await tx.insert(schema.parentLinkRequests).values({ ...l, verifiedAt: new Date() });
   }
   for (const a of built.attempts) {
     await tx.insert(schema.attempts).values({

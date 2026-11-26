@@ -1,3 +1,4 @@
+import { withActiveTeacherDeliveries } from "./student-links";
 // Письма «возвращайся» самостоятельному ученику (без репетитора), если он
 // перестал заходить: через день, через 3 дня и через неделю после последней
 // задачи — не больше трёх писем на один перерыв. Вернулся и снова пропал —
@@ -125,6 +126,7 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
       stage: schema.users.comebackStage,
       sentAt: schema.users.comebackSentAt,
       chatId: schema.users.telegramChatId,
+      passwordHash: schema.users.passwordHash,
       tgReminders: schema.users.tgStudentReminders,
       lastAt: sql<Date | null>`(select max(a.created_at) from attempts a where a.student_id = ${schema.users.id})`,
       hasPush: sql<boolean>`exists(select 1 from push_tokens t where t.user_id = ${schema.users.id})`,
@@ -179,9 +181,14 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
         started: !!last,
       });
       const link = stage === 3 ? "/student/subjects" : lastSkill[0] ? `/student/skill/${lastSkill[0].skillId}` : "/student";
-      if (viaEmail) await sendEmail({ to: u.email, subject: m.subject, html: emailHtml(m, link, base) });
-      if (viaPush) await sendPushToUser(u.id, { title: m.subject, body: m.body, link });
-      sent++;
+      if (await withActiveTeacherDeliveries([], async (connection) => {
+        const [current] = await connection.select({ email: schema.users.email }).from(schema.users)
+          .where(and(eq(schema.users.id, u.id), isNull(schema.users.teacherId), isNull(schema.users.deletionRequestedAt)));
+        if (!current) return false;
+        if (viaEmail) await sendEmail({ to: current.email, subject: m.subject, html: emailHtml(m, link, base) });
+        if (viaPush) await sendPushToUser(u.id, { title: m.subject, body: m.body, link }, connection);
+        return true;
+      }, u)) sent++;
     } catch (e) {
       console.error("[comeback] письмо не ушло", u.id, e);
     }

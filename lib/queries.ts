@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import { withActiveTeacherDeliveries, type TeacherLink } from "./student-links";
+import { withActiveTeacherDeliveries, withDeliveryLocks, type DeliveryRecipient, type TeacherLink } from "./student-links";
 import { db } from "./db/client";
 import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
@@ -1428,9 +1428,12 @@ export async function pushNotification(
   // уходили сразу, и при откате транзакции человек получал уведомление о
   // том, чего нет. Запись внутри транзакции не видна другим соединениям до
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
+  const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash }).from(schema.users)
+    .where(and(eq(schema.users.id, params.userId), inArray(schema.users.role, ["STUDENT", "PARENT"])));
+  const delivery = { ...params, recipient };
   const schedule = notificationDelivery.getStore();
-  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, params, transport));
-  else void deliverWhenCommitted(notificationId, params).catch(() => {});
+  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport));
+  else void deliverWhenCommitted(notificationId, delivery).catch(() => {});
 }
 
 /** Паузы перед проверками «уведомление сохранено?» (мс). */
@@ -1439,7 +1442,7 @@ const COMMIT_CHECKS_MS = [150, 1000, 4000];
 export async function deliverWhenCommitted(
   notificationId: string,
   params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
-    teacherLink?: TeacherLink },
+    teacherLink?: TeacherLink; recipient?: DeliveryRecipient },
   transport: NotificationTransport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
   let committed = false;
@@ -1473,30 +1476,35 @@ export async function deliverWhenCommitted(
     ]);
     return true;
   }
-  return params.teacherLink
-    ? (await withActiveTeacherDeliveries([params.teacherLink], send)) ?? false
-    : send(db);
+  return (await withActiveTeacherDeliveries(params.teacherLink ? [params.teacherLink] : [], send, params.recipient)) ?? false;
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function getNotificationsForUser(userId: string, limit = 20): Promise<Notification[]> {
+function visibleNotification(userId: string, parent: boolean) {
+  return and(eq(schema.notifications.userId, userId), parent ? sql`exists (
+    select 1 from parent_links
+    where parent_id = ${userId} and '/parent/child/' || student_id = ${schema.notifications.link}
+  )` : undefined);
+}
+
+export async function getNotificationsForUser(userId: string, limit = 20, parent = false): Promise<Notification[]> {
   const rows = await db
     .select()
     .from(schema.notifications)
-    .where(eq(schema.notifications.userId, userId))
+    .where(visibleNotification(userId, parent))
     .orderBy(desc(schema.notifications.createdAt))
     .limit(limit);
   return rows.map(mapNotification);
 }
 
-export async function getUnreadNotificationCount(userId: string): Promise<number> {
+export async function getUnreadNotificationCount(userId: string, parent = false): Promise<number> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.notifications)
-    .where(and(eq(schema.notifications.userId, userId), eq(schema.notifications.read, false)));
+    .where(and(visibleNotification(userId, parent), eq(schema.notifications.read, false)));
   return count;
 }
 
@@ -2002,18 +2010,21 @@ export async function generateTelegramLinkCode(userId: string, authenticatedPass
 export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
   // Код живёт сутки: старая ссылка из переписки или скриншота не привяжет чужой чат.
   if (typeof code !== "string" || !isTelegramCodeFresh(code)) return false;
-  const [linked] = await db.update(schema.users)
-    .set({ telegramChatId: chatId, telegramLinkCode: null })
-    .where(eq(schema.users.telegramLinkCode, code))
-    .returning({ id: schema.users.id });
-  return !!linked;
+  const [candidate] = await db.select({ id: schema.users.id }).from(schema.users)
+    .where(eq(schema.users.telegramLinkCode, code)).limit(1);
+  if (!candidate) return false;
+  return withDeliveryLocks([candidate.id], false, async (connection) => {
+    const [linked] = await connection.update(schema.users)
+      .set({ telegramChatId: chatId, telegramLinkCode: null })
+      .where(and(eq(schema.users.id, candidate.id), eq(schema.users.telegramLinkCode, code)))
+      .returning({ id: schema.users.id });
+    return !!linked;
+  });
 }
 
 export async function unlinkTelegramAccount(userId: string) {
-  await db
-    .update(schema.users)
-    .set({ telegramChatId: null, telegramLinkCode: null })
-    .where(eq(schema.users.id, userId));
+  await withDeliveryLocks([userId], false, (connection) => connection.update(schema.users)
+    .set({ telegramChatId: null, telegramLinkCode: null }).where(eq(schema.users.id, userId)));
 }
 
 // ---------- Admin-панель: ручное управление подписками ----------
