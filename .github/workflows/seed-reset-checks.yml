@@ -7,6 +7,7 @@ on:
       - 'scripts/seed*.ts'
       - 'scripts/deploy.sh'
       - 'tests/integration/deploy.test.sh'
+      - 'tests/integration/telegram-ready.test.mjs'
       - 'scripts/seed-reset-permit.sql'
       - 'scripts/content/**'
       - 'lib/db/**'
@@ -161,6 +162,7 @@ jobs:
 
       - run: bash tests/integration/deploy.test.sh
       - run: npm run test:db
+      - run: npx --no-install tsx scripts/check-unlink-release.ts
       - run: npm test
       - run: npx --no-install tsc --noEmit
       - run: npm run build
@@ -175,6 +177,8 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+
+      - run: node tests/integration/telegram-ready.test.mjs
 
   expo:
     runs-on: ubuntu-24.04

@@ -10,8 +10,8 @@ export async function GET(req: Request) {
   const user = await requireUser(req);
   if (user instanceof Response) return user;
   const [notifications, unread] = await Promise.all([
-    getNotificationsForUser(user.id, 50, user.role === "PARENT"),
-    getUnreadNotificationCount(user.id, user.role === "PARENT"),
+    getNotificationsForUser(user.id, 50, user.role === "PARENT" ? user.passwordHash : undefined),
+    getUnreadNotificationCount(user.id, user.role === "PARENT" ? user.passwordHash : undefined),
   ]);
   return json({ notifications, unread });
 }

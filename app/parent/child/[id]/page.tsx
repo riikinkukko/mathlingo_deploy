@@ -47,7 +47,7 @@ export default async function ChildDetailPage(
   const searchParams = await props.searchParams;
   const params = await props.params;
   const parent = (await getSessionUser())!;
-  const isMyChild = await isParentOf(parent.id, params.id);
+  const isMyChild = await isParentOf(parent.id, params.id, parent.passwordHash);
   const child = await getUserById(params.id);
   if (!child || !isMyChild) notFound();
 

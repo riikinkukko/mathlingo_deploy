@@ -227,7 +227,7 @@ export async function sendParentWeeklyReports(now: Date = new Date()): Promise<n
   let sent = 0;
   for (const p of claimed) {
     try {
-      const children = await getChildrenOfParent(p.id);
+      const children = await getChildrenOfParent(p.id, p.passwordHash);
       const reports: { child: User; title: string; body: string }[] = [];
       for (const child of children) {
         const r = await buildChildWeekReport(child, now, week.start);

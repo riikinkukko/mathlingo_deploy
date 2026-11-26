@@ -522,11 +522,17 @@ export async function getStudentsOfTeacher(teacherId: string): Promise<User[]> {
   return rows.map(mapUser);
 }
 
-export async function getChildrenOfParent(parentId: string): Promise<User[]> {
+function parentSessionMatches(parentId: string, passwordHash?: string) {
+  return passwordHash === undefined ? undefined : sql`exists (
+    select 1 from users where id = ${parentId} and role = 'PARENT' and password_hash = ${passwordHash}
+  )`;
+}
+
+export async function getChildrenOfParent(parentId: string, passwordHash?: string): Promise<User[]> {
   const links = await db
     .select()
     .from(schema.parentLinks)
-    .where(eq(schema.parentLinks.parentId, parentId));
+    .where(and(eq(schema.parentLinks.parentId, parentId), parentSessionMatches(parentId, passwordHash)));
   const studentIds = links.map((l) => l.studentId);
   if (studentIds.length === 0) return [];
   const rows = await db.select().from(schema.users).where(inArray(schema.users.id, studentIds));
@@ -1483,28 +1489,28 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function visibleNotification(userId: string, parent: boolean) {
-  return and(eq(schema.notifications.userId, userId), parent ? sql`exists (
+function visibleNotification(userId: string, parentPasswordHash?: string) {
+  return and(eq(schema.notifications.userId, userId), parentSessionMatches(userId, parentPasswordHash), parentPasswordHash !== undefined ? sql`exists (
     select 1 from parent_links
     where parent_id = ${userId} and '/parent/child/' || student_id = ${schema.notifications.link}
   )` : undefined);
 }
 
-export async function getNotificationsForUser(userId: string, limit = 20, parent = false): Promise<Notification[]> {
+export async function getNotificationsForUser(userId: string, limit = 20, parentPasswordHash?: string): Promise<Notification[]> {
   const rows = await db
     .select()
     .from(schema.notifications)
-    .where(visibleNotification(userId, parent))
+    .where(visibleNotification(userId, parentPasswordHash))
     .orderBy(desc(schema.notifications.createdAt))
     .limit(limit);
   return rows.map(mapNotification);
 }
 
-export async function getUnreadNotificationCount(userId: string, parent = false): Promise<number> {
+export async function getUnreadNotificationCount(userId: string, parentPasswordHash?: string): Promise<number> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.notifications)
-    .where(and(visibleNotification(userId, parent), eq(schema.notifications.read, false)));
+    .where(and(visibleNotification(userId, parentPasswordHash), eq(schema.notifications.read, false)));
   return count;
 }
 
@@ -2532,11 +2538,11 @@ export function genId(prefix: string): string {
 
 // ---------- Прямые точечные запросы, которые раньше делали readDB() ----------
 
-export async function isParentOf(parentId: string, studentId: string): Promise<boolean> {
+export async function isParentOf(parentId: string, studentId: string, passwordHash?: string): Promise<boolean> {
   const rows = await db
     .select()
     .from(schema.parentLinks)
-    .where(and(eq(schema.parentLinks.parentId, parentId), eq(schema.parentLinks.studentId, studentId)))
+    .where(and(eq(schema.parentLinks.parentId, parentId), eq(schema.parentLinks.studentId, studentId), parentSessionMatches(parentId, passwordHash)))
     .limit(1);
   return rows.length > 0;
 }

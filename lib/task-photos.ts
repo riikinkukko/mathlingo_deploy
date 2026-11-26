@@ -40,7 +40,8 @@ export async function readTaskPhoto(user: User, id: string): Promise<{ mime: str
     const owner = user.role === "STUDENT"
       ? eq(H.studentId, user.id)
       : sql`exists (select 1 from ${schema.parentLinks}
-          where ${schema.parentLinks.parentId} = ${user.id} and ${schema.parentLinks.studentId} = ${H.studentId})`;
+          where ${schema.parentLinks.parentId} = ${user.id} and ${schema.parentLinks.studentId} = ${H.studentId}
+          and exists (select 1 from users where id = ${user.id} and password_hash = ${user.passwordHash}))`;
     const [assigned] = await db.select({ id: H.id }).from(H)
       .innerJoin(P, and(eq(P.photoId, id), sql`${H.problemIds} ? ${P.id}`))
       .where(and(or(eq(H.audience, "assigned"), isNull(H.audience)), owner)).limit(1);

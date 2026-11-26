@@ -1,5 +1,6 @@
 import { issueParentAccess, confirmParentAccess } from "../../lib/parent-access";
 import { createAuthToken, consumeAuthToken } from "../../lib/queries";
+import { parentChild } from "../../lib/mobile/parent-data";
 import { sendStudentEveningReminders } from "../../lib/student-reminders";
 import { savePushToken } from "../../lib/push";
 import { verifyEmailAction } from "../../app/actions";
@@ -541,7 +542,8 @@ test("individual and group Telegram callbacks skip edits if unlink commits after
 test("a teacher-created parent request cannot expose student data after detach", async () => {
   const teacher = await makeUser({ role: "TEACHER" });
   const student = await makeUser({ teacherId: teacher.id, independentCredentials: true });
-  const fixture = await makeUser({ role: "PARENT" });
+  const fixture = await makeUser({ role: "PARENT", passwordHash: await hashPassword("legacy-teacher-known") });
+  await db.insert(s.parentLinkRequests).values({ parentId: fixture.id, studentId: student.id });
   const email = fixture.email.replace("@", "-request@");
   const proposed = "known-to-teacher-fixture";
   const response = await action(teacher, "addParent", { studentId: student.id, name: "Parent", email, password: proposed, consent: "on" });
@@ -559,6 +561,8 @@ test("a teacher-created parent request cannot expose student data after detach",
     assert.equal(await issueParentAccess(teacher, student.id, parent.id), null);
     assert.deepEqual(await unlinkStudent(teacher, student.id, version(student)), { ok: true, changed: true });
     assert.equal((await parentData(oldSession)).status, 404);
+    assert.ok("user" in await passwordLogin(fixture.email, "legacy-teacher-known", ""));
+    assert.equal((await parentData(await request(path, fixture))).status, 404);
     const [pending] = await db.select().from(s.parentLinkRequests).where(eq(s.parentLinkRequests.parentId, parent.id));
     assert.equal(pending.verifiedAt, null);
     const oldRecovery = await createAuthToken(parent.id, "password_reset", 60_000);
@@ -570,6 +574,7 @@ test("a teacher-created parent request cannot expose student data after detach",
     ]);
     assert.deepEqual(confirmations.sort(), [false, true]);
     assert.equal((await parentData(oldSession)).status, 401);
+    assert.equal(await parentChild(parent, student.id), null);
     assert.equal(await consumeAuthToken(oldRecovery, "password_reset"), null);
     assert.ok("user" in await passwordLogin(email, "independent-parent-fixture", ""));
     assert.equal((await parentData(await request(path, parent))).status, 200);

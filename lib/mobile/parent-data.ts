@@ -26,7 +26,7 @@ import type { User } from "@/lib/types";
 import { collapseLessons } from "./teacher-data";
 
 export async function parentHome(parent: User) {
-  const children = await getChildrenOfParent(parent.id);
+  const children = await getChildrenOfParent(parent.id, parent.passwordHash);
   const items = await Promise.all(
     children.map(async (c) => {
       const [stats, homeworks, lessons] = await Promise.all([
@@ -56,7 +56,7 @@ export async function parentHome(parent: User) {
 }
 
 export async function parentChild(parent: User, childId: string) {
-  if (!(await isParentOf(parent.id, childId))) return null;
+  if (!(await isParentOf(parent.id, childId, parent.passwordHash))) return null;
   const child = await getUserById(childId);
   if (!child) return null;
   const [curriculum, progress, stats, homeworks, logs, mocks, weekly, upcoming] = await Promise.all([

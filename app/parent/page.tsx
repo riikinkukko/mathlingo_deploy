@@ -14,7 +14,7 @@ import TelegramConnectCard from "@/components/TelegramConnectCard";
 export default async function ParentDashboard(props: { searchParams: Promise<{ telegram?: string }> }) {
   const searchParams = await props.searchParams;
   const user = (await getSessionUser())!;
-  const children = await getChildrenOfParent(user.id);
+  const children = await getChildrenOfParent(user.id, user.passwordHash);
   // Один ребёнок (почти всегда) — сразу открываем его неделю, без лишнего экрана.
   if (children.length === 1) {
     redirect(`/parent/child/${children[0].id}${searchParams.telegram ? `?telegram=${encodeURIComponent(searchParams.telegram)}` : ""}`);
