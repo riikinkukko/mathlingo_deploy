@@ -726,8 +726,8 @@ test("Telegram revocation wins before attendance, nudge and report writes", asyn
   assert.equal(learner.nudgedAt, null);
 
   await db.update(s.users).set({ telegramChatId: "revoke-report" }).where(eq(s.users.id, teacher.id));
-  await startTelegramReport(teacher.id, { chatId: "revoke-report", version: (await readUser(teacher)).telegramBindingVersion! }, lessonId);
-  assert.equal(await handleTelegramReportText("revoke-report", "Synthetic report", new Date(),
+  await startTelegramReport(teacher.id, { chatId: "revoke-report", version: (await readUser(teacher)).telegramBindingVersion! }, lessonId, async () => 201);
+  assert.equal(await handleTelegramReportText("revoke-report", "Synthetic report", 201, new Date(),
     () => unlinkTelegramAccount(teacher.id)), true);
   assert.deepEqual(await db.select().from(s.lessonLogs).where(eq(s.lessonLogs.lessonId, lessonId)), []);
   const [row] = await db.select().from(s.users).where(eq(s.users.id, teacher.id));
@@ -895,8 +895,8 @@ test("same chat rebind invalidates in-flight writes, transport and old buttons",
     });
   }
 
-  await startTelegramReport(teacher.id, { chatId, version: teacher.telegramBindingVersion! }, lessonId, async () => true);
-  assert.equal(await handleTelegramReportText(chatId, "Synthetic report", new Date(), rebind, rejectSend), true);
+  await startTelegramReport(teacher.id, { chatId, version: teacher.telegramBindingVersion! }, lessonId, async () => 202);
+  assert.equal(await handleTelegramReportText(chatId, "Synthetic report", 202, new Date(), rebind, rejectSend), true);
   const [lesson] = await db.select().from(s.scheduledLessons).where(eq(s.scheduledLessons.id, lessonId));
   const [teacherRow] = await db.select().from(s.users).where(eq(s.users.id, teacher.id));
   const [studentRow] = await db.select().from(s.users).where(eq(s.users.id, student.id));

@@ -17,6 +17,12 @@ mkdir -p "$releases"
 exec 9>"$releases/deploy.lock"
 flock -n 9 || { echo "Другой выпуск выполняется" >&2; exit 1; }
 
+# An admitted recovery must close ingress even when PM2 cannot start.
+if [[ "$target" == --recover-only || -f "$journal" ]]; then
+  rm -f -- "$ingress_ready"
+  sync -f "$(dirname -- "$ingress_ready")"
+fi
+
 # Atomic, durable files on the same filesystem as the release directories.
 publish() {
   local file="$1"
@@ -41,7 +47,7 @@ safe_release() {
   local dir="$1"
   [[ "$dir" == "$releases/"* && -s "$dir/.next/BUILD_ID" && -s "$dir/.rollback-compatible" &&
      "$(realpath -- "$dir")" == "$dir" ]] &&
-    grep -Eq '^telegram-binding-v1 [0-9a-f]{40}$' "$dir/.rollback-compatible"
+    grep -Eq '^telegram-report-v2 [0-9a-f]{40}$' "$dir/.rollback-compatible"
 }
 
 pm2() { command pm2 "$@" 9>&-; }
@@ -114,7 +120,8 @@ activate() {
   launch="$(node -p 'require("node:crypto").randomUUID()')" || return 1
   rm -f -- "$dir/.telegram-ready" || return 1
   start_web "$dir" && wait_web "$dir" && start_bot "$dir" "$launch" &&
-    wait_bot "$dir" "$launch" && wait_web "$dir" && wait_bot "$dir" "$launch"
+    wait_bot "$dir" "$launch" && wait_web "$dir" && wait_bot "$dir" "$launch" || return 1
+  active_launch="$launch"
 }
 
 clear_journal() {
@@ -144,14 +151,14 @@ recover() {
   stop_pair && pm2 save --force || return 1
   if [[ -n "$restore" ]] && safe_release "$restore" &&
     (cd "$restore" && npx --no-install tsx scripts/check-unlink-release.ts) &&
-    activate "$restore" && pm2 save --force; then
+    activate "$restore" && pm2 save --force && wait_web "$restore" && wait_bot "$restore" "$active_launch"; then
     publish "$current" "$restore" && clear_journal && open_ingress "$restore" || return 1
     return 0
   fi
   if [[ "$restore" == "$next" && -n "$old" ]] && safe_release "$old" &&
     stop_pair && pm2 save --force &&
     (cd "$old" && npx --no-install tsx scripts/check-unlink-release.ts) &&
-    activate "$old" && pm2 save --force; then
+    activate "$old" && pm2 save --force && wait_web "$old" && wait_bot "$old" "$active_launch"; then
     publish "$current" "$old" && clear_journal && open_ingress "$old" || return 1
     return 0
   fi
@@ -165,7 +172,7 @@ on_exit() {
   local result=$?
   trap - EXIT
   trap '' INT TERM
-  if [[ -f "$journal" ]] && ! recover; then
+  if [[ "$target" != --recover-only && -f "$journal" ]] && ! recover; then
     if [[ -f "$journal" ]]; then
       echo "Восстановление не завершено. Журнал сохранён для повторного запуска." >&2
     fi
@@ -180,7 +187,6 @@ trap 'exit 143' TERM
 # A cold daemon writes its startup banner to stdout of the first command.
 pm2 ping >/dev/null
 if [[ "$target" == --recover-only ]]; then
-  close_ingress
   if [[ ! -f "$journal" ]]; then
     # Treat a normal boot as recovery too. Never trust or resurrect dump.pm2.
     boot_release=""
@@ -195,11 +201,14 @@ if [[ -f "$journal" ]]; then recover; fi
 previous=""
 if [[ -f "$current" ]]; then
   IFS= read -r previous < "$current"
-  safe_release "$previous" || { echo "Нет подтверждённого артефакта отката" >&2; exit 1; }
+  if ! safe_release "$previous"; then
+    # A first upgrade may replace a known prior protocol, but cannot restore it.
+    [[ "$previous" == "$releases/"* && "$(realpath -- "$previous")" == "$previous" ]] &&
+      grep -Eq '^telegram-binding-v1 [0-9a-f]{40}
 fi
 candidate="$(mktemp -d "$releases/$target.XXXXXX")"
 git -C "$root" archive "$target" | tar -x -C "$candidate"
-[[ -s "$candidate/drizzle/0056_telegram_binding_period.sql" && -s "$candidate/scripts/nginx/planimetrika-ingress.conf" ]] || {
+[[ -s "$candidate/drizzle/0057_telegram_report_prompt.sql" && -s "$candidate/scripts/nginx/planimetrika-ingress.conf" ]] || {
   echo "Артефакт не поддерживает текущий протокол Telegram и ingress" >&2
   exit 1
 }
@@ -217,9 +226,44 @@ pm2 save --force
 npx --no-install drizzle-kit migrate
 npx --no-install tsx scripts/check-unlink-release.ts
 activate "$candidate"
-publish "$candidate/.rollback-compatible" "telegram-binding-v1 $target"
+publish "$candidate/.rollback-compatible" "telegram-report-v2 $target"
 publish "$current" "$candidate"
 pm2 save --force
+wait_web "$candidate"
+wait_bot "$candidate" "$active_launch"
+clear_journal
+open_ingress "$candidate"
+echo "Веб и воркер проверены. Предыдущий артефакт: ${previous:-отсутствует}"
+ "$previous/.rollback-compatible" || {
+        echo "Некорректный указатель предыдущего релиза" >&2; exit 1;
+      }
+  fi
+fi
+candidate="$(mktemp -d "$releases/$target.XXXXXX")"
+git -C "$root" archive "$target" | tar -x -C "$candidate"
+[[ -s "$candidate/drizzle/0057_telegram_report_prompt.sql" && -s "$candidate/scripts/nginx/planimetrika-ingress.conf" ]] || {
+  echo "Артефакт не поддерживает текущий протокол Telegram и ingress" >&2
+  exit 1
+}
+for file in .env .env.local .env.production .env.production.local; do
+  [[ ! -f "$root/$file" ]] || ln -s "$root/$file" "$candidate/$file"
+done
+cd "$candidate"
+npm ci
+npm run build
+[[ -s .next/BUILD_ID ]]
+close_ingress
+publish "$journal" "$previous" "$candidate"
+stop_pair
+pm2 save --force
+npx --no-install drizzle-kit migrate
+npx --no-install tsx scripts/check-unlink-release.ts
+activate "$candidate"
+publish "$candidate/.rollback-compatible" "telegram-report-v2 $target"
+publish "$current" "$candidate"
+pm2 save --force
+wait_web "$candidate"
+wait_bot "$candidate" "$active_launch"
 clear_journal
 open_ingress "$candidate"
 echo "Веб и воркер проверены. Предыдущий артефакт: ${previous:-отсутствует}"

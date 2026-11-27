@@ -9,7 +9,7 @@ import { activeTeacherLinks, lockStudent, lockTelegramTeacher, withUnchangedTeac
 import * as schema from "./db/schema";
 import { genId, getScheduledLessonById, getUpcomingLessonsForStudent, getUserById, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
-import { sendTelegramMessage, escapeTelegramHtml as esc, type InlineKeyboard } from "./telegram";
+import { sendTelegramMessage, sendTelegramReportPrompt, escapeTelegramHtml as esc, type InlineKeyboard } from "./telegram";
 
 const TZ = "Europe/Moscow";
 const DAY = 86_400_000;
@@ -126,7 +126,7 @@ export async function createLessonReport(p: {
   topic: string;
   report: string;
   lessonId?: string | null;
-  telegram?: TelegramBinding & { askedAt: Date };
+  telegram?: TelegramBinding & { promptId: number };
 }): Promise<CreateReportResult> {
 
   const date = p.date.slice(0, 10);
@@ -152,8 +152,9 @@ export async function createLessonReport(p: {
     if (p.telegram) {
       const teacher = await lockTelegramTeacher(tx, p.teacherId, p.telegram);
       if (!teacher || teacher.tgReportLessonId !== p.lessonId ||
-          teacher.tgReportAskedAt?.getTime() !== p.telegram.askedAt.getTime()) return { ok: false, reason: "access" };
-      await tx.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null })
+          teacher.tgReportPromptId !== p.telegram.promptId || !teacher.tgReportAskedAt ||
+          Date.now() - teacher.tgReportAskedAt.getTime() > TG_REPORT_WAIT_MS) return { ok: false, reason: "access" };
+      await tx.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null, tgReportPromptId: null })
         .where(eq(schema.users.id, p.teacherId));
       const [duplicate] = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs)
         .where(eq(schema.lessonLogs.lessonId, p.lessonId!)).limit(1);
@@ -240,7 +241,7 @@ export function reportButton(lessonId: string, version: string, label = "✍️ 
 }
 
 /** Кнопка «Написать отчёт»: бот ждёт следующее сообщение как текст отчёта. */
-export async function startTelegramReport(teacherId: string, binding: TelegramBinding, lessonId: string, send = sendTelegramMessage): Promise<string> {
+export async function startTelegramReport(teacherId: string, binding: TelegramBinding, lessonId: string, send = sendTelegramReportPrompt): Promise<string> {
   const lesson = await getScheduledLessonById(lessonId);
   if (!lesson || lesson.teacherId !== teacherId || lesson.archivedAt || (await getUserById(lesson.studentId))?.teacherId !== teacherId) return "Занятие не найдено";
   const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, lessonId)).limit(1);
@@ -254,16 +255,18 @@ export async function startTelegramReport(teacherId: string, binding: TelegramBi
     `Напишите одним сообщением, что делали, что получилось и над чем поработать. ` +
     (lesson.topic ? `Тема — «${esc(lesson.topic)}».` : `Первая строка станет темой занятия.`) +
     (draft.facts.length ? `\n\nДобавлю сам:\n${draft.facts.map((f) => `• ${esc(f)}`).join("\n")}` : "") +
-    `\n\nОтчёт получат ученик и родители. /cancel — отменить.`;
+    `\n\nОтчёт получат ученик и родители. Ответьте на это сообщение. Для отмены ответьте /cancel.`;
   const sent = await withActiveTeacherDeliveries([{ studentId: student.id, teacherId, version: student.teacherLinkVersion }],
     async (tx) => {
       const [active] = await tx.select({ id: schema.scheduledLessons.id }).from(schema.scheduledLessons)
         .where(and(eq(schema.scheduledLessons.id, lessonId), isNull(schema.scheduledLessons.archivedAt)));
       if (!active) return false;
-      await tx.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));
-      await send(binding.chatId, text);
+      const promptId = await send(binding.chatId, text);
+      if (!promptId) return false;
+      await tx.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date(), tgReportPromptId: promptId })
+        .where(eq(schema.users.id, teacherId));
       return true;
-    }, { id: teacherId, telegram: binding });
+    }, { id: teacherId, telegram: binding }, undefined, { exclusive: true });
   return sent ? "Жду текст отчёта" : "Занятие не найдено";
 }
 
@@ -271,35 +274,37 @@ export async function startTelegramReport(teacherId: string, binding: TelegramBi
  * Обычное сообщение репетитора в боте. true — сообщение было отчётом (или
  * /cancel) и обработано; false — бот ничего не ждал.
  */
-export async function handleTelegramReportText(chatId: string, text: string, now: Date = new Date(), beforeWrite: () => Promise<void> = async () => {}, send = sendTelegramMessage): Promise<boolean> {
-  const rows = await db
-    .select({ id: schema.users.id, lessonId: schema.users.tgReportLessonId, askedAt: schema.users.tgReportAskedAt, version: schema.users.telegramBindingVersion })
-    .from(schema.users)
-    .where(and(eq(schema.users.telegramChatId, chatId), eq(schema.users.role, "TEACHER"), isNotNull(schema.users.tgReportLessonId)))
-    .limit(1);
-  const t = rows[0];
+export async function handleTelegramReportText(chatId: string, text: string, promptId: number, now: Date = new Date(), beforeWrite: () => Promise<void> = async () => {}, send = sendTelegramMessage): Promise<boolean> {
+  if (!Number.isSafeInteger(promptId) || promptId <= 0 || promptId > 2147483647) return false;
+  const [teacher] = await db.select({ id: schema.users.id, version: schema.users.telegramBindingVersion })
+    .from(schema.users).where(and(eq(schema.users.telegramChatId, chatId), eq(schema.users.role, "TEACHER"))).limit(1);
+  if (!teacher) return false;
+  const binding = { chatId, version: teacher.version };
+  const t = await withActiveTeacherDeliveries([], async (connection) => {
+    const [active] = await connection.select({ id: schema.users.id, lessonId: schema.users.tgReportLessonId, askedAt: schema.users.tgReportAskedAt })
+      .from(schema.users).where(and(eq(schema.users.id, teacher.id), eq(schema.users.tgReportPromptId, promptId)));
+    return active;
+  }, { id: teacher.id, telegram: binding });
   if (!t?.lessonId) return false;
-  const binding = { chatId, version: t.version };
+
   const reply = (body: string) => withActiveTeacherDeliveries([], () => send(chatId, body), { id: t.id, telegram: binding });
-  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null })
-    .where(and(eq(schema.users.id, t.id), eq(schema.users.telegramChatId, chatId), eq(schema.users.telegramBindingVersion, t.version),
-      eq(schema.users.tgReportLessonId, t.lessonId!), t.askedAt
-        ? eq(schema.users.tgReportAskedAt, t.askedAt) : isNull(schema.users.tgReportAskedAt)));
+  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null, tgReportPromptId: null })
+    .where(and(eq(schema.users.id, t.id), eq(schema.users.telegramChatId, chatId), eq(schema.users.telegramBindingVersion, binding.version),
+      eq(schema.users.tgReportLessonId, t.lessonId!), eq(schema.users.tgReportPromptId, promptId)))
+    .returning({ id: schema.users.id });
   if (!t.askedAt || now.getTime() - t.askedAt.getTime() > TG_REPORT_WAIT_MS) {
     await clear();
     return false;
   }
   if (/^\/cancel(@\w+)?$/.test(text.trim())) {
-    await clear();
-    await reply("Хорошо, отчёт не отправляю.");
+    if ((await clear()).length) await reply("Хорошо, отчёт не отправляю.");
     return true;
   }
   if (text.startsWith("/")) return false;
 
   const lesson = await getScheduledLessonById(t.lessonId);
   if (!lesson) {
-    await clear();
-    await reply("Занятие не найдено — возможно, его удалили.");
+    if ((await clear()).length) await reply("Занятие не найдено — возможно, его удалили.");
     return true;
   }
   const body = text.trim();
@@ -308,7 +313,8 @@ export async function handleTelegramReportText(chatId: string, text: string, now
   const draft = await buildReportDraft(t.id, lesson.studentId, lesson.id);
   const report = draft.facts.length ? `${body}\n\n${draft.facts.join("\n")}` : body;
   await beforeWrite();
-  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id, telegram: { ...binding, askedAt: t.askedAt } });
+  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id, telegram: { ...binding, promptId } });
+  if (!res.ok && res.reason === "access") return true;
   await reply(
     res.ok ? "✅ Отчёт отправлен ученику и родителям." : res.reason === "exists" ? "Отчёт об этом занятии уже есть." : "Не получилось сохранить отчёт — напишите его в кабинете."
   );

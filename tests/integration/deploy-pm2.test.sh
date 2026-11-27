@@ -10,6 +10,7 @@ ingress_port="$(node -e 'const s=require("node:net").createServer();s.listen(0,"
 export FIXTURE_WEB_PORT="$(node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close();});')"
 export DEPLOY_HEALTH_URL="http://127.0.0.1:$FIXTURE_WEB_PORT/login"
 real_pm2="$(command -v pm2)"
+export REAL_FIXTURE_PM2="$real_pm2"
 cleanup() {
   local result=$?
   if ((result)); then
@@ -95,7 +96,7 @@ if (fs.existsSync(fixture) && process.cwd().endsWith(fs.readFileSync(fixture, "u
 require("node:http").createServer((req, res) => res.end(process.cwd())).listen(Number(process.env.FIXTURE_WEB_PORT), "127.0.0.1");
 JS
 mkdir -p "$APP_DIR/drizzle" "$APP_DIR/scripts/nginx"
-cp drizzle/0056_telegram_binding_period.sql "$APP_DIR/drizzle/"
+cp drizzle/0057_telegram_report_prompt.sql "$APP_DIR/drizzle/"
 cp scripts/nginx/planimetrika-ingress.conf "$APP_DIR/scripts/nginx/"
 git -C "$APP_DIR" init -q
 git -C "$APP_DIR" add .
@@ -132,6 +133,11 @@ fi
 /bin/mv "$@"
 if [[ "${INTERRUPT_ACTIVATION:-}" == after && "${@: -1}" == */current ]]; then kill -KILL "$PPID"; fi
 SH
+cat > "$sandbox/bin/pm2" <<'SH'
+#!/usr/bin/env bash
+if [[ "${FAIL_FIRST_PM2_PING:-}" == yes && "${1:-}" == ping ]]; then exit 70; fi
+exec "$REAL_FIXTURE_PM2" "$@"
+SH
 chmod +x "$sandbox/bin/"*
 current="$APP_DIR/.releases/current"
 journal="$APP_DIR/.releases/switching"
@@ -163,6 +169,11 @@ assert_pair() {
     }
   ' "$dir"
 }
+assert_pair "$before"
+if FAIL_FIRST_PM2_PING=yes bash "$script" --recover-only; then exit 1; fi
+assert_closed
+[[ "$(cat "$current")" == "$before" && ! -e "$journal" ]]
+bash "$script" --recover-only
 assert_pair "$before"
 
 if FAIL_COMPONENT=web bash "$script" "$sha"; then exit 1; fi

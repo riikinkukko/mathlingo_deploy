@@ -175,12 +175,12 @@ export type DeliveryRecipient = {
 };
 
 export async function withActiveTeacherDeliveries<T>(
-  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient, origin?: DeliveryRecipient,
+  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient, origin?: DeliveryRecipient, { exclusive = false } = {},
 ): Promise<T | undefined> {
   const recipients = [recipient, origin].filter((item): item is DeliveryRecipient => !!item);
   if (!links.length && !recipients.length) return send(db);
   const ids = links.map(({ studentId }) => studentId);
-  return withDeliveryLocks([...ids, ...recipients.map(({ id }) => id)], true, async (connection) => {
+  return withDeliveryLocks([...ids, ...recipients.map(({ id }) => id)], !exclusive, async (connection) => {
     for (const recipient of recipients) {
       const [current] = await connection.select({ id: schema.users.id }).from(schema.users)
         .where(and(eq(schema.users.id, recipient.id), recipient.passwordHash === undefined ? undefined : eq(schema.users.passwordHash, recipient.passwordHash),

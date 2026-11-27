@@ -9,7 +9,7 @@ mkdir -p "$APP_DIR/.next" "$MOCK" "$tmp/bin"
 export PATH="$tmp/bin:$PATH"
 printf 'bootstrap\n' > "$APP_DIR/.next/BUILD_ID"
 mkdir -p "$APP_DIR/drizzle" "$APP_DIR/scripts/nginx"
-cp drizzle/0056_telegram_binding_period.sql "$APP_DIR/drizzle/"
+cp drizzle/0057_telegram_report_prompt.sql "$APP_DIR/drizzle/"
 cp scripts/nginx/planimetrika-ingress.conf "$APP_DIR/scripts/nginx/"
 git -C "$APP_DIR" init -q
 git -C "$APP_DIR" add drizzle scripts/nginx

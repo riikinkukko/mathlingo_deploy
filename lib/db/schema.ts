@@ -217,6 +217,7 @@ export const users = pgTable("users", {
   // У РЕПЕТИТОРА: бот ждёт текст отчёта о занятии (lib/lesson-report.ts) —
   // следующее сообщение в Telegram станет отчётом. Ожидание истекает через 6 ч.
   tgReportLessonId: text("tg_report_lesson_id"),
+  tgReportPromptId: integer("tg_report_prompt_id"),
   tgReportAskedAt: timestamp("tg_report_asked_at", { withTimezone: true }),
   // День (МСК), когда вечером напомнили о занятиях без отчёта (не чаще раза в день).
   reportRemindedOn: text("report_reminded_on"),
@@ -904,3 +905,8 @@ export const appLoginTokens = pgTable("app_login_tokens", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const telegramUpdates = pgTable("telegram_updates", {
+  id: integer("id").primaryKey(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({ receivedAtIdx: index("telegram_updates_received_at_idx").on(t.receivedAt) }));
