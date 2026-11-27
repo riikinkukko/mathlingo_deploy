@@ -323,6 +323,7 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
         userId: teacherId,
         teacherLink: { studentId: user.id, teacherId, version: current.teacherLinkVersion },
         type: sentToTeacher > 0 ? "review_pending" : "homework_completed",
+        telegramPreference: "tgNotifyHomework",
         title: `${user.name} сдал(а) пробник, вариант ${m.variant}`,
         body: `Часть 1: ${part1Ok} из ${part1Total}.${p2Text}`,
         link: `/teacher/student/${user.id}/mock/${id}`,

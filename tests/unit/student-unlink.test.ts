@@ -1,3 +1,4 @@
+import { finishMock } from "../../lib/mock-queries";
 import { POST as mobileSettings } from "../../app/api/m/settings/route";
 import { nudgeStudent } from "../../lib/nudge";
 import { sendParentWeeklyReports } from "../../lib/parent-weekly";
@@ -782,4 +783,33 @@ test("claimed evening and queued weekly notifications honor a concurrent prefere
   assert.equal(deliveries.length, 1);
   assert.equal(await deliveries[0]({ push: async () => assert.fail("disabled weekly push"),
     telegram: async () => assert.fail("disabled weekly Telegram") }), false);
+});
+
+
+test("both mock completion notifications honor a Telegram opt-out after queueing", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "mock-preference", tgNotifyHomework: true });
+  const student = await makeUser({ teacherId: teacher.id });
+  const [problem] = await db.select({ id: s.problems.id }).from(s.problems).limit(1);
+  assert.ok(problem);
+  const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
+  for (const n of [1, 19]) {
+    const id = "mock-pref-" + student.id + "-" + n;
+    await db.insert(s.mockAttempts).values({
+      id, studentId: student.id, variant: 1, mode: "full",
+      items: [{ n, problemId: problem.id }], answers: { [problem.id]: "fixture answer" },
+    });
+    await withNotificationDelivery((deliver) => deliveries.push(deliver), async () => {
+      assert.deepEqual(await finishMock(student, id), { ok: true });
+    });
+  }
+  const notifications = await db.select({ type: s.notifications.type }).from(s.notifications)
+    .where(eq(s.notifications.userId, teacher.id));
+  assert.deepEqual(notifications.map(({ type }) => type).sort(), ["homework_completed", "review_pending"]);
+  await withRequest(() => runAsUser(teacher, () => saveTeacherTelegramPrefsAction(null, new FormData())));
+  assert.equal(deliveries.length, 2);
+  let pushes = 0;
+  for (const deliver of deliveries) {
+    await deliver({ push: async () => { pushes++; return true; }, telegram: async () => assert.fail("disabled mock Telegram delivery") });
+  }
+  assert.equal(pushes, 2);
 });
