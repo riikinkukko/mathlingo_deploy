@@ -132,15 +132,15 @@ recover() {
   if [[ -n "$restore" ]] && safe_release "$restore" &&
     (cd "$restore" && npx --no-install tsx scripts/check-unlink-release.ts) &&
     activate "$restore" && pm2 save --force; then
-    publish "$current" "$restore" && clear_journal
-    return
+    publish "$current" "$restore" && clear_journal || return 1
+    return 0
   fi
   if [[ "$restore" == "$next" && -n "$old" ]] && safe_release "$old" &&
     stop_pair && pm2 save --force &&
     (cd "$old" && npx --no-install tsx scripts/check-unlink-release.ts) &&
     activate "$old" && pm2 save --force; then
-    publish "$current" "$old" && clear_journal
-    return
+    publish "$current" "$old" && clear_journal || return 1
+    return 0
   fi
   stop_pair && pm2 save --force || return 1
   rm -f -- "$current" && clear_journal || return 1
@@ -153,7 +153,9 @@ on_exit() {
   trap - EXIT
   trap '' INT TERM
   if [[ -f "$journal" ]] && ! recover; then
-    echo "Восстановление не завершено. Журнал сохранён для повторного запуска." >&2
+    if [[ -f "$journal" ]]; then
+      echo "Восстановление не завершено. Журнал сохранён для повторного запуска." >&2
+    fi
     exit 1
   fi
   exit "$result"
@@ -162,6 +164,8 @@ trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+# A cold daemon writes its startup banner to stdout of the first command.
+pm2 ping >/dev/null
 if [[ "$target" == --recover-only ]]; then
   if [[ ! -f "$journal" ]]; then
     # Treat a normal boot as recovery too. Never trust or resurrect dump.pm2.

@@ -64,6 +64,7 @@ case "$1" in
     fi
     printf '%s\n' "$cwd" > "$MOCK/$name"
     ;;
+  ping) ;;
   save)
     if [[ -n "${INTERRUPT:-}" && "${POINT:-}" == before-save && -f "$MOCK/planimetrika-tg" && ! -e "$MOCK/interrupted" ]]; then
       touch "$MOCK/interrupted"; kill "-$INTERRUPT" "$PPID"

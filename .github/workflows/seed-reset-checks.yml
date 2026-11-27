@@ -184,6 +184,8 @@ jobs:
           echo "Previous-schema upgrade preserved accounts and links without asserting legacy ownership."
 
       - run: bash tests/integration/deploy.test.sh
+      - name: Recover interrupted release with isolated PM2
+        run: npm exec --yes --package=pm2@6.0.8 -- bash tests/integration/deploy-pm2.test.sh
       - run: npm run test:db
       - run: npx --no-install tsx scripts/check-unlink-release.ts
       - run: npm test
@@ -200,9 +202,6 @@ jobs:
             sleep 1
           done
           npm run test:e2e
-
-      - name: Recover interrupted release with isolated PM2
-        run: npm exec --yes --package=pm2@6.0.8 -- bash tests/integration/deploy-pm2.test.sh
 
       - name: Smoke-test worker launch and restoration with isolated PM2
         run: npm exec --yes --package=pm2@6.0.8 -- node tests/integration/telegram-ready.test.mjs
