@@ -93,11 +93,17 @@ cat > "$APP_DIR/scripts/web.cjs" <<'JS'
 const fs = require("node:fs");
 const fixture = process.env.FIXTURE + "/fail-web";
 if (fs.existsSync(fixture) && process.cwd().endsWith(fs.readFileSync(fixture, "utf8"))) process.exit(1);
-require("node:http").createServer((req, res) => res.end(process.cwd())).listen(Number(process.env.FIXTURE_WEB_PORT), "127.0.0.1");
+require("node:http").createServer((req, res) => {
+  const stale = process.env.FIXTURE + "/fail-web-stamp";
+  const wrong = fs.existsSync(stale) && process.cwd().endsWith(fs.readFileSync(stale, "utf8"));
+  res.end(req.url === "/api/internal/release-ready" ? (wrong ? "stale" : process.env.PLANIMETRIKA_RELEASE_LAUNCH) : process.cwd());
+}).listen(Number(process.env.FIXTURE_WEB_PORT), "127.0.0.1");
 JS
 mkdir -p "$APP_DIR/drizzle" "$APP_DIR/scripts/nginx"
 cp drizzle/0057_telegram_report_prompt.sql "$APP_DIR/drizzle/"
 cp scripts/nginx/planimetrika-ingress.conf "$APP_DIR/scripts/nginx/"
+mkdir -p "$APP_DIR/app/api/internal/release-ready"
+cp app/api/internal/release-ready/route.ts "$APP_DIR/app/api/internal/release-ready/"
 git -C "$APP_DIR" init -q
 git -C "$APP_DIR" add .
 git -C "$APP_DIR" -c user.name=Fixture -c user.email=fixture@test.local commit -qm fixture
@@ -157,6 +163,7 @@ assert_pair() {
   local dir="$1"
   [[ "$(cat "$current")" == "$dir" && ! -e "$journal" ]]
   [[ "$(external)" == "$dir" && "$(external other.test)" == other ]]
+  [[ "$(curl -sS -H "Host: planimetrika.test" -o /dev/null -w '%{http_code}' "http://127.0.0.1:$ingress_port/api/internal/release-ready")" == 404 ]]
   pm2 jlist | node -e '
     const fs=require("node:fs"), assert=require("node:assert/strict");
     const live=JSON.parse(fs.readFileSync(0,"utf8"));
@@ -176,8 +183,10 @@ assert_closed
 bash "$script" --recover-only
 assert_pair "$before"
 
-if FAIL_COMPONENT=web bash "$script" "$sha"; then exit 1; fi
-assert_pair "$before"
+for fail_web in web web-stamp; do
+  if FAIL_COMPONENT="$fail_web" bash "$script" "$sha"; then exit 1; fi
+  assert_pair "$before"
+done
 
 FAIL_COMPONENT=bot bash "$script" "$sha" &
 release_pid=$!

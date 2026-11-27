@@ -183,7 +183,8 @@ test("Telegram gateway correlates prompt replies and claims retries once", async
     await handleTelegramUpdate(message(10, "Earlier attempt in the current binding", nextPrompt));
     assert.equal(await currentPrompt(), finalPrompt);
     const reply = message(11, "Current report", finalPrompt);
-    await Promise.all([handleTelegramUpdate(reply), handleTelegramUpdate(reply)]);
+    await Promise.all([handleTelegramUpdate(reply), handleTelegramUpdate(reply),
+      handleTelegramUpdate({ ...reply, update_id: base + 12 })]);
     await handleTelegramUpdate(reopened);
     assert.equal(await currentPrompt(), null);
     const reports = await db.select().from(schema.lessonLogs).where(eq(schema.lessonLogs.studentId, student.id));
@@ -194,6 +195,6 @@ test("Telegram gateway correlates prompt replies and claims retries once", async
     globalThis.fetch = fetchBefore;
     if (tokenBefore === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
     else process.env.TELEGRAM_BOT_TOKEN = tokenBefore;
-    for (let i = 1; i <= 11; i++) await db.delete(schema.telegramUpdates).where(eq(schema.telegramUpdates.id, base + i));
+    for (let i = 1; i <= 12; i++) await db.delete(schema.telegramUpdates).where(eq(schema.telegramUpdates.id, base + i));
   }
 });

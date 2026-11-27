@@ -79,7 +79,7 @@ stop_pair() {
 }
 
 start_web() {
-  pm2 start npm --name "$web" --cwd "$1" -- run start -- --hostname 127.0.0.1 9>&-
+  PLANIMETRIKA_RELEASE_LAUNCH="$2" pm2 start npm --name "$web" --cwd "$1" -- run start -- --hostname 127.0.0.1 9>&-
 }
 
 start_bot() {
@@ -90,12 +90,14 @@ start_bot() {
 }
 
 wait_web() {
-  local dir="$1" i info
+  local dir="$1" launch="$2" i info ready_url
+  ready_url="$(node -p 'new URL("/api/internal/release-ready", process.argv[1]).href' "$health_url")" || return 1
   for ((i=0; i<checks; i++)); do
     if info="$(process_info "$web")" && node -e '
       const p=JSON.parse(process.argv[1]);
       process.exit(p[0]==="online" && p[1]===process.argv[2] && p[2]>0 ? 0 : 1);
-    ' "$info" "$dir" 2>/dev/null && curl -fsS --max-time 3 "$health_url" >/dev/null; then return 0; fi
+    ' "$info" "$dir" 2>/dev/null && curl -fsS --max-time 3 "$health_url" >/dev/null &&
+      [[ "$(curl -fsS --max-time 3 "$ready_url")" == "$launch" ]]; then return 0; fi
     sleep "$interval"
   done
   return 1
@@ -119,8 +121,8 @@ activate() {
   local dir="$1" launch
   launch="$(node -p 'require("node:crypto").randomUUID()')" || return 1
   rm -f -- "$dir/.telegram-ready" || return 1
-  start_web "$dir" && wait_web "$dir" && start_bot "$dir" "$launch" &&
-    wait_bot "$dir" "$launch" && wait_web "$dir" && wait_bot "$dir" "$launch" || return 1
+  start_web "$dir" "$launch" && wait_web "$dir" "$launch" && start_bot "$dir" "$launch" &&
+    wait_bot "$dir" "$launch" && wait_web "$dir" "$launch" && wait_bot "$dir" "$launch" || return 1
   active_launch="$launch"
 }
 
@@ -151,14 +153,14 @@ recover() {
   stop_pair && pm2 save --force || return 1
   if [[ -n "$restore" ]] && safe_release "$restore" &&
     (cd "$restore" && npx --no-install tsx scripts/check-unlink-release.ts) &&
-    activate "$restore" && pm2 save --force && wait_web "$restore" && wait_bot "$restore" "$active_launch"; then
+    activate "$restore" && pm2 save --force && wait_web "$restore" "$active_launch" && wait_bot "$restore" "$active_launch"; then
     publish "$current" "$restore" && clear_journal && open_ingress "$restore" || return 1
     return 0
   fi
   if [[ "$restore" == "$next" && -n "$old" ]] && safe_release "$old" &&
     stop_pair && pm2 save --force &&
     (cd "$old" && npx --no-install tsx scripts/check-unlink-release.ts) &&
-    activate "$old" && pm2 save --force && wait_web "$old" && wait_bot "$old" "$active_launch"; then
+    activate "$old" && pm2 save --force && wait_web "$old" "$active_launch" && wait_bot "$old" "$active_launch"; then
     publish "$current" "$old" && clear_journal && open_ingress "$old" || return 1
     return 0
   fi
@@ -204,37 +206,7 @@ if [[ -f "$current" ]]; then
   if ! safe_release "$previous"; then
     # A first upgrade may replace a known prior protocol, but cannot restore it.
     [[ "$previous" == "$releases/"* && "$(realpath -- "$previous")" == "$previous" ]] &&
-      grep -Eq '^telegram-binding-v1 [0-9a-f]{40}
-fi
-candidate="$(mktemp -d "$releases/$target.XXXXXX")"
-git -C "$root" archive "$target" | tar -x -C "$candidate"
-[[ -s "$candidate/drizzle/0057_telegram_report_prompt.sql" && -s "$candidate/scripts/nginx/planimetrika-ingress.conf" ]] || {
-  echo "Артефакт не поддерживает текущий протокол Telegram и ingress" >&2
-  exit 1
-}
-for file in .env .env.local .env.production .env.production.local; do
-  [[ ! -f "$root/$file" ]] || ln -s "$root/$file" "$candidate/$file"
-done
-cd "$candidate"
-npm ci
-npm run build
-[[ -s .next/BUILD_ID ]]
-close_ingress
-publish "$journal" "$previous" "$candidate"
-stop_pair
-pm2 save --force
-npx --no-install drizzle-kit migrate
-npx --no-install tsx scripts/check-unlink-release.ts
-activate "$candidate"
-publish "$candidate/.rollback-compatible" "telegram-report-v2 $target"
-publish "$current" "$candidate"
-pm2 save --force
-wait_web "$candidate"
-wait_bot "$candidate" "$active_launch"
-clear_journal
-open_ingress "$candidate"
-echo "Веб и воркер проверены. Предыдущий артефакт: ${previous:-отсутствует}"
- "$previous/.rollback-compatible" || {
+      grep -Eq '^telegram-binding-v1 [0-9a-f]{40}$' "$previous/.rollback-compatible" || {
         echo "Некорректный указатель предыдущего релиза" >&2; exit 1;
       }
   fi
@@ -262,7 +234,7 @@ activate "$candidate"
 publish "$candidate/.rollback-compatible" "telegram-report-v2 $target"
 publish "$current" "$candidate"
 pm2 save --force
-wait_web "$candidate"
+wait_web "$candidate" "$active_launch"
 wait_bot "$candidate" "$active_launch"
 clear_journal
 open_ingress "$candidate"

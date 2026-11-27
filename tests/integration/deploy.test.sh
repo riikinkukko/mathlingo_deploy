@@ -11,8 +11,10 @@ printf 'bootstrap\n' > "$APP_DIR/.next/BUILD_ID"
 mkdir -p "$APP_DIR/drizzle" "$APP_DIR/scripts/nginx"
 cp drizzle/0057_telegram_report_prompt.sql "$APP_DIR/drizzle/"
 cp scripts/nginx/planimetrika-ingress.conf "$APP_DIR/scripts/nginx/"
+mkdir -p "$APP_DIR/app/api/internal/release-ready"
+cp app/api/internal/release-ready/route.ts "$APP_DIR/app/api/internal/release-ready/"
 git -C "$APP_DIR" init -q
-git -C "$APP_DIR" add drizzle scripts/nginx
+git -C "$APP_DIR" add drizzle scripts/nginx app
 git -C "$APP_DIR" -c user.name=Fixture -c user.email=fixture@test.local commit -qm fixture
 sha="$(git -C "$APP_DIR" rev-parse HEAD)"
 
@@ -38,7 +40,8 @@ printf 'migrated\n' >> "$MOCK/migrations"
 MOCK_SCRIPT
 cat > "$tmp/bin/curl" <<'MOCK_SCRIPT'
 #!/usr/bin/env bash
-test -s "$MOCK/planimetrika"
+test -s "$MOCK/planimetrika" || exit 1
+if [[ "${*: -1}" == */api/internal/release-ready ]]; then cat "$MOCK/web-launch"; fi
 MOCK_SCRIPT
 cat > "$tmp/bin/pm2" <<'MOCK_SCRIPT'
 #!/usr/bin/env bash
@@ -56,6 +59,7 @@ case "$1" in
     [[ -s "$cwd/.next/BUILD_ID" ]]
     if [[ "$name" == planimetrika ]]; then
       [[ ! -e "$MOCK/planimetrika-tg" ]]
+      printf '%s\n' "$PLANIMETRIKA_RELEASE_LAUNCH" > "$MOCK/web-launch"
     else
       [[ "$(cat "$MOCK/planimetrika")" == "$cwd" ]]
       if [[ "${FAIL_BOT:-0}" == 1 && ! -e "$MOCK/failed" ]]; then
