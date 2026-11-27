@@ -216,3 +216,11 @@ export async function withUnchangedTeacherRoster<T>(
     return send();
   }, recipient);
 }
+
+/** Acquire after the student row, in the same transaction as the authorized write. */
+export async function lockTelegramTeacher(tx: StudentLinkTransaction, teacherId: string, chatId: string) {
+  const [teacher] = await tx.select().from(schema.users).where(and(
+    eq(schema.users.id, teacherId), eq(schema.users.role, "TEACHER"), eq(schema.users.telegramChatId, chatId),
+  )).for("no key update");
+  return teacher;
+}

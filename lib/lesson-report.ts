@@ -4,7 +4,7 @@
 // Относительные импорты: часть кода работает в воркере бота (tsx, вне Next.js).
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
-import { activeTeacherLinks, lockStudent, withUnchangedTeacherRoster, teacherLinkFor, withActiveTeacherDeliveries } from "./student-links";
+import { activeTeacherLinks, lockStudent, lockTelegramTeacher, withUnchangedTeacherRoster, teacherLinkFor, withActiveTeacherDeliveries } from "./student-links";
 import * as schema from "./db/schema";
 import { genId, getScheduledLessonById, getUpcomingLessonsForStudent, getUserById, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
@@ -125,6 +125,7 @@ export async function createLessonReport(p: {
   topic: string;
   report: string;
   lessonId?: string | null;
+  telegram?: { chatId: string; askedAt: Date };
 }): Promise<CreateReportResult> {
 
   const date = p.date.slice(0, 10);
@@ -143,8 +144,19 @@ export async function createLessonReport(p: {
       ));
       if (!l) return { ok: false, reason: "access" };
       const dup = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l.id)).limit(1);
-      if (dup[0]) return { ok: false, reason: "exists" };
+      if (dup[0] && !p.telegram) return { ok: false, reason: "exists" };
       lessonId = l.id;
+    }
+
+    if (p.telegram) {
+      const teacher = await lockTelegramTeacher(tx, p.teacherId, p.telegram.chatId);
+      if (!teacher || teacher.tgReportLessonId !== p.lessonId ||
+          teacher.tgReportAskedAt?.getTime() !== p.telegram.askedAt.getTime()) return { ok: false, reason: "access" };
+      await tx.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null })
+        .where(eq(schema.users.id, p.teacherId));
+      const [duplicate] = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs)
+        .where(eq(schema.lessonLogs.lessonId, p.lessonId!)).limit(1);
+      if (duplicate) return { ok: false, reason: "exists" };
     }
 
     const parents = await tx.select().from(schema.parentLinks).where(eq(schema.parentLinks.studentId, p.studentId));
@@ -256,7 +268,7 @@ export async function startTelegramReport(teacherId: string, chatId: string, les
  * Обычное сообщение репетитора в боте. true — сообщение было отчётом (или
  * /cancel) и обработано; false — бот ничего не ждал.
  */
-export async function handleTelegramReportText(chatId: string, text: string, now: Date = new Date()): Promise<boolean> {
+export async function handleTelegramReportText(chatId: string, text: string, now: Date = new Date(), beforeWrite: () => Promise<void> = async () => {}): Promise<boolean> {
   const rows = await db
     .select({ id: schema.users.id, lessonId: schema.users.tgReportLessonId, askedAt: schema.users.tgReportAskedAt })
     .from(schema.users)
@@ -265,7 +277,10 @@ export async function handleTelegramReportText(chatId: string, text: string, now
   const t = rows[0];
   if (!t?.lessonId) return false;
   const reply = (body: string) => withActiveTeacherDeliveries([], () => sendTelegramMessage(chatId, body), { id: t.id, telegram: { chatId } });
-  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null }).where(eq(schema.users.id, t.id));
+  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null })
+    .where(and(eq(schema.users.id, t.id), eq(schema.users.telegramChatId, chatId),
+      eq(schema.users.tgReportLessonId, t.lessonId!), t.askedAt
+        ? eq(schema.users.tgReportAskedAt, t.askedAt) : isNull(schema.users.tgReportAskedAt)));
   if (!t.askedAt || now.getTime() - t.askedAt.getTime() > TG_REPORT_WAIT_MS) {
     await clear();
     return false;
@@ -278,8 +293,8 @@ export async function handleTelegramReportText(chatId: string, text: string, now
   if (text.startsWith("/")) return false;
 
   const lesson = await getScheduledLessonById(t.lessonId);
-  await clear();
   if (!lesson) {
+    await clear();
     await reply("Занятие не найдено — возможно, его удалили.");
     return true;
   }
@@ -288,7 +303,8 @@ export async function handleTelegramReportText(chatId: string, text: string, now
   const topic = lesson.topic?.trim() || (firstLine.length > 80 ? firstLine.slice(0, 77) + "…" : firstLine);
   const draft = await buildReportDraft(t.id, lesson.studentId, lesson.id);
   const report = draft.facts.length ? `${body}\n\n${draft.facts.join("\n")}` : body;
-  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id });
+  await beforeWrite();
+  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id, telegram: { chatId, askedAt: t.askedAt } });
   await reply(
     res.ok ? "✅ Отчёт отправлен ученику и родителям." : res.reason === "exists" ? "Отчёт об этом занятии уже есть." : "Не получилось сохранить отчёт — напишите его в кабинете."
   );

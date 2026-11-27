@@ -6,6 +6,8 @@ on:
     paths:
       - 'scripts/seed*.ts'
       - 'scripts/deploy.sh'
+      - 'scripts/systemd/**'
+      - 'tests/integration/deploy-pm2.test.sh'
       - 'scripts/check-unlink-release.ts'
       - 'tests/integration/deploy.test.sh'
       - 'tests/integration/telegram-ready.test.mjs'
@@ -198,6 +200,9 @@ jobs:
             sleep 1
           done
           npm run test:e2e
+
+      - name: Recover interrupted release with isolated PM2
+        run: npm exec --yes --package=pm2@6.0.8 -- bash tests/integration/deploy-pm2.test.sh
 
       - name: Smoke-test worker launch and restoration with isolated PM2
         run: npm exec --yes --package=pm2@6.0.8 -- node tests/integration/telegram-ready.test.mjs

@@ -2,8 +2,8 @@
 set -Eeuo pipefail
 
 root="$(cd "${APP_DIR:-/var/www/planimetrika}" && pwd -P)"
-target="${1:?usage: deploy.sh <commit SHA>}"
-[[ "$target" =~ ^[0-9a-f]{40}$ ]] || exit 2
+target="${1:?usage: deploy.sh <commit SHA | --recover-only>}"
+[[ "$target" == --recover-only || "$target" =~ ^[0-9a-f]{40}$ ]] || exit 2
 web=planimetrika
 bot=planimetrika-tg
 releases="$root/.releases"
@@ -117,7 +117,7 @@ recover() {
   if [[ -f "$current" ]]; then
     IFS= read -r committed < "$current" || return 1
   fi
-  if [[ "$committed" == "$next" ]] && safe_release "$next"; then
+  if [[ -n "$next" && "$committed" == "$next" ]] && safe_release "$next"; then
     restore="$next"
   elif [[ "$committed" == "$old" ]]; then
     restore="$old"
@@ -145,6 +145,7 @@ recover() {
   stop_pair && pm2 save --force || return 1
   rm -f -- "$current" && clear_journal || return 1
   echo "Безопасная пара недоступна. Веб и воркер остановлены." >&2
+  return 1
 }
 
 on_exit() {
@@ -160,6 +161,17 @@ on_exit() {
 trap on_exit EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
+
+if [[ "$target" == --recover-only ]]; then
+  if [[ ! -f "$journal" ]]; then
+    # Treat a normal boot as recovery too. Never trust or resurrect dump.pm2.
+    boot_release=""
+    if [[ -f "$current" ]]; then IFS= read -r boot_release < "$current"; fi
+    publish "$journal" "$boot_release" ""
+  fi
+  recover
+  exit
+fi
 
 if [[ -f "$journal" ]]; then recover; fi
 previous=""

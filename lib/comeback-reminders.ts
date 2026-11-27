@@ -182,11 +182,12 @@ export async function sendComebackEmails(now: Date = new Date()): Promise<number
       });
       const link = stage === 3 ? "/student/subjects" : lastSkill[0] ? `/student/skill/${lastSkill[0].skillId}` : "/student";
       if (await withActiveTeacherDeliveries([], async (connection) => {
-        const [current] = await connection.select({ email: schema.users.email }).from(schema.users)
+        const [current] = await connection.select({ email: schema.users.email, chatId: schema.users.telegramChatId,
+          emailReminders: schema.users.emailReminders, tgReminders: schema.users.tgStudentReminders }).from(schema.users)
           .where(and(eq(schema.users.id, u.id), isNull(schema.users.teacherId), isNull(schema.users.deletionRequestedAt)));
         if (!current) return false;
-        if (viaEmail) await sendEmail({ to: current.email, subject: m.subject, html: emailHtml(m, link, base) });
-        if (viaPush) await sendPushToUser(u.id, { title: m.subject, body: m.body, link }, connection);
+        if (emailOk && current.emailReminders && !(current.chatId && current.tgReminders)) await sendEmail({ to: current.email, subject: m.subject, html: emailHtml(m, link, base) });
+        if (pushOk && current.tgReminders !== false) await sendPushToUser(u.id, { title: m.subject, body: m.body, link }, connection);
         return true;
       }, u)) sent++;
     } catch (e) {

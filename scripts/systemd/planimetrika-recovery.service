@@ -1,0 +1,16 @@
+[Unit]
+Description=Recover the Planimetrika release before opening ingress
+Wants=network-online.target
+After=network-online.target
+Before=nginx.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/var/www/planimetrika
+EnvironmentFile=/etc/planimetrika/recovery.env
+ExecStart=/usr/bin/bash /usr/local/lib/planimetrika/deploy.sh --recover-only
+TimeoutStartSec=600
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

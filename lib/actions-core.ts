@@ -196,12 +196,6 @@ export async function performSubmitAttempt(
       const skill = problem.skillId ? await getSkill(problem.skillId) : undefined;
       // В Telegram — по одному сообщению на решение только вне ДЗ: решения из
       // задания придут одним сообщением «сдал ДЗ, на проверке N».
-      const teacherRow = await db
-        .select({ tgNotifyHomework: schema.users.tgNotifyHomework })
-        .from(schema.users)
-        .where(eq(schema.users.id, user.teacherId))
-        .limit(1);
-      const telegram = source !== "assignment" && teacherRow[0]?.tgNotifyHomework !== false;
       const queued = await db.transaction(async (tx) => {
         const current = await lockStudent(tx, user.id);
         if (current?.teacherId !== teacherId || current.teacherLinkVersion !== user.teacherLinkVersion) return false;
@@ -224,7 +218,8 @@ export async function performSubmitAttempt(
           body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку${img ? " (с фото)" : ""}.`,
           // Сразу на эту работу в очереди «Проверка решений».
           link: `/teacher/reviews?id=${attemptId}`,
-          telegram,
+          telegram: source !== "assignment",
+          telegramPreference: "tgNotifyHomework",
         });
         return true;
       });

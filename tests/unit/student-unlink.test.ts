@@ -1,7 +1,10 @@
+import { nudgeStudent } from "../../lib/nudge";
+import { sendParentWeeklyReports } from "../../lib/parent-weekly";
+import { saveTeacherTelegramPrefsAction, setParentWeeklyReportAction, setStudentRemindersAction } from "../../app/actions-telegram";
 import { SignJWT } from "jose";
 import { getSessionSecret } from "../../lib/session-secret";
 import { GET as mobileNotifications } from "../../app/api/m/notifications/route";
-import { sendReportReminders } from "../../lib/lesson-report";
+import { handleTelegramReportText, sendReportReminders, startTelegramReport } from "../../lib/lesson-report";
 import { unlinkTelegramAccount } from "../../lib/queries";
 import { issueParentAccess, confirmParentAccess } from "../../lib/parent-access";
 import { createAuthToken, consumeAuthToken } from "../../lib/queries";
@@ -685,4 +688,89 @@ test("individual and group Telegram callbacks stop replying after the chat is di
     assert.equal(handled, true);
     assert.deepEqual(calls, []);
   }
+});
+
+test("Telegram revocation wins before attendance, nudge and report writes", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "revoke-attendance" });
+  const student = await makeUser({ teacherId: teacher.id });
+  const lessonId = `revocation_${student.id}`;
+  await db.insert(s.scheduledLessons).values({
+    id: lessonId, teacherId: teacher.id, studentId: student.id, startsAt: new Date(Date.now() - 3600000),
+  });
+  const call = (chat: string, data: string) => ({ id: "fixture", data, message: { chat: { id: chat }, message_id: 42 } });
+  const telegram = async (method: string) => { assert.equal(method, "answerCallbackQuery"); return true; };
+  let resume!: () => void;
+  let enter!: () => void;
+  const paused = new Promise<void>((resolve) => { resume = resolve; });
+  const entered = new Promise<void>((resolve) => { enter = resolve; });
+  const attendance = handleCallbackQuery(call("revoke-attendance", `ls:d:${lessonId}`), {
+    telegram,
+    markLesson: async (...args) => { enter(); await paused; return applyLessonStatus(...args); },
+  });
+  await entered;
+  try { await unlinkTelegramAccount(teacher.id); } finally { resume(); }
+  await attendance;
+  const [lesson] = await db.select().from(s.scheduledLessons).where(eq(s.scheduledLessons.id, lessonId));
+  assert.equal(lesson.status, "planned");
+
+  await db.update(s.users).set({ telegramChatId: "revoke-nudge" }).where(eq(s.users.id, teacher.id));
+  await handleCallbackQuery(call("revoke-nudge", `nd:${student.id}`), {
+    telegram,
+    nudge: async (...args) => { await unlinkTelegramAccount(teacher.id); return nudgeStudent(...args); },
+  });
+  const [learner] = await db.select().from(s.users).where(eq(s.users.id, student.id));
+  assert.equal(learner.nudgedAt, null);
+
+  await db.update(s.users).set({ telegramChatId: "revoke-report" }).where(eq(s.users.id, teacher.id));
+  await startTelegramReport(teacher.id, "revoke-report", lessonId);
+  assert.equal(await handleTelegramReportText("revoke-report", "Synthetic report", new Date(),
+    () => unlinkTelegramAccount(teacher.id)), true);
+  assert.deepEqual(await db.select().from(s.lessonLogs).where(eq(s.lessonLogs.lessonId, lessonId)), []);
+  const [row] = await db.select().from(s.users).where(eq(s.users.id, teacher.id));
+  assert.equal(row.tgReportLessonId, null);
+  assert.equal(row.tgReportAskedAt, null);
+});
+
+test("queued review notification rechecks homework preference without cancelling push", async () => {
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: "review-preference", tgNotifyHomework: true });
+  const student = await makeUser({ teacherId: teacher.id });
+  const [problem] = await db.select().from(s.problems).where(and(eq(s.problems.answerType, "DETAILED"), sql`${s.problems.skillId} is not null`)).limit(1);
+  assert.ok(problem);
+  const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
+  await withNotificationDelivery((deliver) => deliveries.push(deliver), async () => {
+    assert.deepEqual(await performSubmitAttempt(student, problem.id, "Synthetic solution", "lesson"), { kind: "pending" });
+  });
+  assert.equal(deliveries.length, 1);
+  const form = new FormData();
+  await withRequest(() => runAsUser(teacher, () => saveTeacherTelegramPrefsAction(null, form)));
+  let pushes = 0;
+  await deliveries[0]({ push: async () => { pushes++; return true; }, telegram: async () => assert.fail("disabled Telegram preference") });
+  assert.equal(pushes, 1);
+});
+
+test("claimed evening and queued weekly notifications honor a concurrent preference change", async () => {
+  const student = await makeUser({ telegramChatId: "evening-pref", tgStudentReminders: true });
+  const parent = await makeUser({ role: "PARENT", telegramChatId: "weekly-pref", tgWeeklyReport: true });
+  await db.insert(s.parentLinkRequests).values({ parentId: parent.id, studentId: student.id, verifiedAt: new Date() });
+  let eveningBuilt = false;
+  const empty = new FormData();
+  assert.equal(await sendStudentEveningReminders(new Date("2027-01-10T19:30:00+03:00"), {
+    build: async (recipient) => {
+      if (recipient.id !== student.id) return null;
+      eveningBuilt = true;
+      await runAsUser(student, () => setStudentRemindersAction(null, empty));
+      return { title: "Fixture", text: "Fixture", link: "/student" };
+    },
+    push: async () => assert.fail("disabled evening push"),
+    telegram: async () => assert.fail("disabled evening Telegram"),
+  }), 0);
+  assert.ok(eveningBuilt);
+  const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
+  await withNotificationDelivery((deliver) => deliveries.push(deliver), () =>
+    sendParentWeeklyReports(new Date("2027-01-10T20:00:00+03:00"), async (id) => {
+      if (id === parent.id) await runAsUser(parent, () => setParentWeeklyReportAction(null, empty));
+    }));
+  assert.equal(deliveries.length, 1);
+  assert.equal(await deliveries[0]({ push: async () => assert.fail("disabled weekly push"),
+    telegram: async () => assert.fail("disabled weekly Telegram") }), false);
 });

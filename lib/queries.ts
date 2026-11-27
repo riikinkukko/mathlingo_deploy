@@ -1416,6 +1416,9 @@ export async function pushNotification(
     link: string;
     /** false — только в приложении, без дубля в Telegram. */
     telegram?: boolean;
+    telegramPreference?: "tgNotifyHomework";
+    deliveryPreference?: "tgWeeklyReport";
+    recipient?: DeliveryRecipient;
     teacherLink?: TeacherLink;
   }
 ) {
@@ -1436,7 +1439,7 @@ export async function pushNotification(
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
   const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash }).from(schema.users)
     .where(eq(schema.users.id, params.userId));
-  const delivery = { ...params, recipient };
+  const delivery = { ...params, recipient: params.recipient ?? recipient };
   const schedule = notificationDelivery.getStore();
   if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport));
   else void deliverWhenCommitted(notificationId, delivery).catch(() => {});
@@ -1448,6 +1451,7 @@ const COMMIT_CHECKS_MS = [150, 1000, 4000];
 export async function deliverWhenCommitted(
   notificationId: string,
   params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
+    telegramPreference?: "tgNotifyHomework"; deliveryPreference?: "tgWeeklyReport";
     teacherLink?: TeacherLink; recipient?: DeliveryRecipient },
   transport: NotificationTransport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
@@ -1469,9 +1473,12 @@ export async function deliverWhenCommitted(
 
   async function send(connection: Tx) {
     const payload = { title: params.title, body: params.body, link: params.link };
-    const chatId = params.telegram === false ? null : (await connection
-      .select({ telegramChatId: schema.users.telegramChatId })
-      .from(schema.users).where(eq(schema.users.id, params.userId)).limit(1))[0]?.telegramChatId;
+    const [current] = await connection.select({ telegramChatId: schema.users.telegramChatId,
+      tgNotifyHomework: schema.users.tgNotifyHomework, tgWeeklyReport: schema.users.tgWeeklyReport,
+    }).from(schema.users).where(eq(schema.users.id, params.userId)).limit(1);
+    if (!current || (params.deliveryPreference && !current[params.deliveryPreference])) return false;
+    const chatId = params.telegram === false || (params.telegramPreference && !current[params.telegramPreference])
+      ? null : current.telegramChatId;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
     const telegramText = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${appUrl
       ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""}`;
@@ -2021,7 +2028,7 @@ export async function linkTelegramAccountByCode(code: string, chatId: string): P
   if (!candidate) return false;
   return withDeliveryLocks([candidate.id], false, async (connection) => {
     const [linked] = await connection.update(schema.users)
-      .set({ telegramChatId: chatId, telegramLinkCode: null })
+      .set({ telegramChatId: chatId, telegramLinkCode: null, tgReportLessonId: null, tgReportAskedAt: null })
       .where(and(eq(schema.users.id, candidate.id), eq(schema.users.telegramLinkCode, code)))
       .returning({ id: schema.users.id });
     return !!linked;
@@ -2030,7 +2037,7 @@ export async function linkTelegramAccountByCode(code: string, chatId: string): P
 
 export async function unlinkTelegramAccount(userId: string) {
   await withDeliveryLocks([userId], false, (connection) => connection.update(schema.users)
-    .set({ telegramChatId: null, telegramLinkCode: null }).where(eq(schema.users.id, userId)));
+    .set({ telegramChatId: null, telegramLinkCode: null, tgReportLessonId: null, tgReportAskedAt: null }).where(eq(schema.users.id, userId)));
 }
 
 // ---------- Admin-панель: ручное управление подписками ----------

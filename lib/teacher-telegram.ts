@@ -158,7 +158,7 @@ export async function notifyHomeworkIfFinished(student: User, problemId: string)
         title: `${student.name} сдал(а) «${hw.title}»`,
         body: parts.join(" · "),
         link,
-        telegram: teacher.tgNotifyHomework !== false,
+        telegramPreference: "tgNotifyHomework",
         teacherLink: { studentId: student.id, teacherId: teacher.id, version: current.teacherLinkVersion },
       });
     });
@@ -296,7 +296,7 @@ async function findTeacherByChat(chatId: string) {
 }
 
 /** Нажатие кнопки под сообщением бота (callback_query). */
-export async function handleCallbackQuery(cq: any, { telegram = callTelegram, markLesson = applyLessonStatus } = {}): Promise<void> {
+export async function handleCallbackQuery(cq: any, { telegram = callTelegram, markLesson = applyLessonStatus, nudge = nudgeStudent } = {}): Promise<void> {
   const data: string = cq?.data ?? "";
   const chatId: string | undefined = cq?.message?.chat?.id?.toString();
   const messageId: number | undefined = cq?.message?.message_id;
@@ -312,7 +312,7 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
       await answer("Этот Telegram не привязан к кабинету репетитора");
       return;
     }
-    const r = await nudgeStudent(t.id, nd[1]);
+    const r = await nudge(t.id, nd[1], new Date(), chatId);
     await answerBound(t.id, chatId,
       r.ok
         ? `Напоминание отправлено${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
@@ -347,7 +347,7 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
     // кнопка из чата её не перезапишет.
     let changed = 0;
     for (const { lesson } of rows) {
-      const res = await markLesson(t.id, lesson.id, status, { onlyIfPlanned: true });
+      const res = await markLesson(t.id, lesson.id, status, { onlyIfPlanned: true, telegramChatId: chatId });
       if (res.ok) changed++;
     }
     const mark = status === "done" ? "✅ Отмечено: были все" : "✖️ Отмечено: занятия не было";
@@ -401,7 +401,7 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
     await answer("Занятие не найдено");
     return;
   }
-  const res = await markLesson(teacher.id, m[2], status, { onlyIfPlanned: true });
+  const res = await markLesson(teacher.id, m[2], status, { onlyIfPlanned: true, telegramChatId: chatId });
   if (!res.ok && res.reason === "not_found") {
     await answer("Занятие не найдено — возможно, его удалили");
     return;

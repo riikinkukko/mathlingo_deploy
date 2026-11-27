@@ -6,7 +6,7 @@ import { db } from "./db/client";
 import * as schema from "./db/schema";
 import { getScheduledLessonById, getUserById, mapScheduledLesson } from "./queries";
 import { sendPaymentReminder } from "./payment-reminders";
-import { lockStudent } from "./student-links";
+import { lockStudent, lockTelegramTeacher } from "./student-links";
 import type { ScheduledLesson } from "./types";
 
 export type LessonMark = "done" | "cancelled" | "missed" | "planned";
@@ -24,13 +24,13 @@ export async function applyLessonStatus(
   teacherId: string,
   lessonId: string,
   status: LessonMark,
-  { onlyIfPlanned = false }: { onlyIfPlanned?: boolean } = {}
+  { onlyIfPlanned = false, telegramChatId }: { onlyIfPlanned?: boolean; telegramChatId?: string } = {}
 ): Promise<ApplyLessonStatusResult> {
   const lesson = await getScheduledLessonById(lessonId);
   if (!lesson || lesson.teacherId !== teacherId) return { ok: false, reason: "not_found" };
   const result = await db.transaction(async (tx): Promise<ApplyLessonStatusResult & { changed?: boolean }> => {
     const student = await lockStudent(tx, lesson.studentId);
-    if (student?.teacherId !== teacherId) return { ok: false, reason: "not_found" };
+    if (student?.teacherId !== teacherId || (telegramChatId && !await lockTelegramTeacher(tx, teacherId, telegramChatId))) return { ok: false, reason: "not_found" };
     const L = schema.scheduledLessons;
     const condition = and(eq(L.id, lessonId), eq(L.teacherId, teacherId), isNull(L.archivedAt));
     const [current] = await tx.select().from(L).where(condition).for("update");
