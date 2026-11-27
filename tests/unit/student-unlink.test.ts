@@ -1,6 +1,7 @@
+import { POST as mobileSettings } from "../../app/api/m/settings/route";
 import { nudgeStudent } from "../../lib/nudge";
 import { sendParentWeeklyReports } from "../../lib/parent-weekly";
-import { saveTeacherTelegramPrefsAction, setParentWeeklyReportAction, setStudentRemindersAction } from "../../app/actions-telegram";
+import { saveTeacherTelegramPrefsAction, setParentWeeklyReportAction } from "../../app/actions-telegram";
 import { SignJWT } from "jose";
 import { getSessionSecret } from "../../lib/session-secret";
 import { GET as mobileNotifications } from "../../app/api/m/notifications/route";
@@ -766,7 +767,7 @@ test("claimed evening and queued weekly notifications honor a concurrent prefere
     build: async (recipient) => {
       if (recipient.id !== student.id) return null;
       eveningBuilt = true;
-      await runAsUser(student, () => setStudentRemindersAction(null, empty));
+      assert.equal((await mobileSettings(await request("/api/m/settings", student, { reminders: false }))).status, 200);
       return { title: "Fixture", text: "Fixture", link: "/student" };
     },
     push: async () => assert.fail("disabled evening push"),
