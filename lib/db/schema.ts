@@ -1,5 +1,6 @@
 import {
   pgTable,
+  pgView,
   text,
   boolean,
   integer,
@@ -58,6 +59,9 @@ export const users = pgTable("users", {
   // Самоссылка: репетитор, который ведёт ученика. NULL — самостоятельный
   // пользователь (не чей-то ученик), для него имеют смысл plan/energy.
   teacherId: text("teacher_id"),
+  teacherLinkVersion: text("teacher_link_version").notNull().default(sql`gen_random_uuid()::text`),
+  independentCredentials: boolean("independent_credentials").notNull().default(false),
+  credentialHandoffPending: boolean("credential_handoff_pending").notNull().default(false),
   plan: planEnum("plan"),
   energy: integer("energy"),
   energyUpdatedAt: timestamp("energy_updated_at", { withTimezone: true }),
@@ -76,6 +80,7 @@ export const users = pgTable("users", {
   // linkCode — одноразовый код на время самой привязки, обнуляется сразу
   // после успешного связывания.
   telegramChatId: text("telegram_chat_id"),
+  telegramBindingVersion: text("telegram_binding_version").notNull().default(sql`gen_random_uuid()::text`),
   telegramLinkCode: text("telegram_link_code"),
   // Момент, когда пользователь принял Пользовательское соглашение и дал
   // согласие на обработку персональных данных (checkbox при регистрации,
@@ -212,6 +217,7 @@ export const users = pgTable("users", {
   // У РЕПЕТИТОРА: бот ждёт текст отчёта о занятии (lib/lesson-report.ts) —
   // следующее сообщение в Telegram станет отчётом. Ожидание истекает через 6 ч.
   tgReportLessonId: text("tg_report_lesson_id"),
+  tgReportPromptId: integer("tg_report_prompt_id"),
   tgReportAskedAt: timestamp("tg_report_asked_at", { withTimezone: true }),
   // День (МСК), когда вечером напомнили о занятиях без отчёта (не чаще раза в день).
   reportRemindedOn: text("report_reminded_on"),
@@ -360,9 +366,15 @@ export const promoRedemptions = pgTable(
   (t) => ({ oncePerUser: uniqueIndex("promo_redemptions_code_user_uq").on(t.code, t.userId) })
 );
 
-export const parentLinks = pgTable(
-  "parent_links",
+export const parentLinks = pgView("parent_links", {
+  parentId: text("parent_id").notNull(),
+  studentId: text("student_id").notNull(),
+}).existing();
+
+export const parentLinkRequests = pgTable(
+  "parent_link_requests",
   {
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
     parentId: text("parent_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -489,6 +501,15 @@ export const teacherInvites = pgTable("teacher_invites", {
 // групповое занятие и групповая домашка хранятся ПО СТРОКЕ НА УЧЕНИКА (с общим
 // groupLessonId / batchId). Так баланс оплат, напоминания, статусы домашки и
 // всё остальное работают как раньше, а индивидуальные задания не теряются.
+export const studentUnlinks = pgTable("student_unlinks", {
+  linkVersion: text("link_version").primaryKey(),
+  teacherId: text("teacher_id").notNull(),
+  studentId: text("student_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byPair: index("student_unlinks_pair_idx").on(t.teacherId, t.studentId),
+}));
+
 export const studentGroups = pgTable("student_groups", {
   id: text("id").primaryKey(),
   teacherId: text("teacher_id")
@@ -616,6 +637,7 @@ export const scheduledLessons = pgTable("scheduled_lessons", {
   // Когда репетитору ушёл вопрос «Занятие прошло — было или не было?» с
   // кнопками в Telegram. Ставится атомарно, как remindedAt.
   teacherPromptedAt: timestamp("teacher_prompted_at", { withTimezone: true }),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   // Групповое занятие: строка на каждого ученика, общий groupLessonId у одного
   // занятия (у серии — ещё и общий seriesId). Посещаемость — статус строки.
   groupId: text("group_id").references(() => studentGroups.id, { onDelete: "set null" }),
@@ -647,6 +669,7 @@ export const studentPayments = pgTable("student_payments", {
   // Сколько занятий покрывает оплата (0 — оплата не за занятия, просто учёт суммы).
   lessonsCount: integer("lessons_count").notNull().default(1),
   paidAt: date("paid_at", { mode: "string" }).notNull(), // YYYY-MM-DD
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
@@ -719,7 +742,7 @@ export const studentQuestions = pgTable("student_questions", {
   byStudent: index("student_questions_student_idx").on(t.studentId),
 }));
 
-export const notifications = pgTable("notifications", {
+export const notifications = pgTable("notification_records", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()
@@ -882,3 +905,8 @@ export const appLoginTokens = pgTable("app_login_tokens", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const telegramUpdates = pgTable("telegram_updates", {
+  id: integer("id").primaryKey(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+}, (t) => ({ receivedAtIdx: index("telegram_updates_received_at_idx").on(t.receivedAt) }));

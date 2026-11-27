@@ -1,9 +1,11 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+import { withActiveTeacherDeliveries, withDeliveryLocks, type DeliveryRecipient, type TeacherLink } from "./student-links";
 import { db } from "./db/client";
 import { sendPushToUser } from "./push";
 import * as schema from "./db/schema";
 import { randomBytes } from "crypto";
 import { convertRemainingDays } from "./teacher-plan";
-import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lt, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, desc, asc, sql, isNull, isNotNull, lt, lte, gte, type SQL } from "drizzle-orm";
 import { sendTelegramMessage } from "./telegram";
 import { settleStreak, loadStreakDays, mskDayKey, addDays, computeBestStreak } from "./streak";
 import { canonicalEmailSql } from "./email-rules";
@@ -46,12 +48,16 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     passwordHash: row.passwordHash,
     role: row.role,
     teacherId: row.teacherId ?? undefined,
+    teacherLinkVersion: row.teacherLinkVersion,
+    independentCredentials: row.independentCredentials,
+    credentialHandoffPending: row.credentialHandoffPending,
     plan: row.plan ?? undefined,
     energy: row.energy ?? undefined,
     energyUpdatedAt: row.energyUpdatedAt ? row.energyUpdatedAt.toISOString() : undefined,
     proUntil: row.proUntil ? row.proUntil.toISOString() : undefined,
     isAdmin: row.isAdmin,
     telegramChatId: row.telegramChatId ?? undefined,
+    telegramBindingVersion: row.telegramBindingVersion,
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
     emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : undefined,
@@ -517,11 +523,17 @@ export async function getStudentsOfTeacher(teacherId: string): Promise<User[]> {
   return rows.map(mapUser);
 }
 
-export async function getChildrenOfParent(parentId: string): Promise<User[]> {
+function parentSessionMatches(parentId: string, passwordHash?: string) {
+  return passwordHash === undefined ? undefined : sql`exists (
+    select 1 from users where id = ${parentId} and role = 'PARENT' and password_hash = ${passwordHash}
+  )`;
+}
+
+export async function getChildrenOfParent(parentId: string, passwordHash?: string): Promise<User[]> {
   const links = await db
     .select()
     .from(schema.parentLinks)
-    .where(eq(schema.parentLinks.parentId, parentId));
+    .where(and(eq(schema.parentLinks.parentId, parentId), parentSessionMatches(parentId, passwordHash)));
   const studentIds = links.map((l) => l.studentId);
   if (studentIds.length === 0) return [];
   const rows = await db.select().from(schema.users).where(inArray(schema.users.id, studentIds));
@@ -714,7 +726,7 @@ export async function getLessonLogsForStudent(studentId: string, teacherId?: str
 
 // ---------- Расписание занятий (этап 2) ----------
 
-function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): import("./types").ScheduledLesson {
+export function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): import("./types").ScheduledLesson {
   return {
     id: r.id,
     teacherId: r.teacherId,
@@ -726,6 +738,7 @@ function mapScheduledLesson(r: typeof schema.scheduledLessons.$inferSelect): imp
     seriesId: r.seriesId,
     groupId: r.groupId,
     groupLessonId: r.groupLessonId,
+    archivedAt: r.archivedAt?.toISOString() ?? null,
     createdAt: r.createdAt.toISOString(),
   };
 }
@@ -749,6 +762,8 @@ export async function getUnmarkedPastLessons(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         eq(schema.scheduledLessons.status, "planned"),
+        isNull(schema.scheduledLessons.archivedAt),
+        eq(schema.users.teacherId, teacherId),
         lte(schema.scheduledLessons.startsAt, new Date()),
         ...(studentId ? [eq(schema.scheduledLessons.studentId, studentId)] : [])
       )
@@ -767,12 +782,15 @@ export async function getUpcomingLessonsForTeacher(
   const planned = and(
     eq(schema.scheduledLessons.teacherId, teacherId),
     eq(schema.scheduledLessons.status, "planned"),
+    eq(schema.users.teacherId, teacherId),
+    isNull(schema.scheduledLessons.archivedAt),
     gte(schema.scheduledLessons.startsAt, new Date())
   );
   const lessonKey = sql<string>`coalesce(${schema.scheduledLessons.groupLessonId}, ${schema.scheduledLessons.id})`;
   const keys = await db
     .select({ key: lessonKey, first: sql`min(${schema.scheduledLessons.startsAt})` })
     .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
     .where(planned)
     .groupBy(lessonKey)
     .orderBy(sql`min(${schema.scheduledLessons.startsAt})`)
@@ -803,6 +821,7 @@ export async function getLessonsForTeacherRange(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        or(sql`${schema.scheduledLessons.status} <> 'planned'`, and(eq(schema.users.teacherId, teacherId), isNull(schema.scheduledLessons.archivedAt))),
         gte(schema.scheduledLessons.startsAt, from),
         sql`${schema.scheduledLessons.startsAt} < ${to}`
       )
@@ -828,6 +847,7 @@ export async function getTodayLessonsForTeacher(
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         sql`${schema.scheduledLessons.status} <> 'cancelled'`,
+        or(sql`${schema.scheduledLessons.status} <> 'planned'`, and(eq(schema.users.teacherId, teacherId), isNull(schema.scheduledLessons.archivedAt))),
         gte(schema.scheduledLessons.startsAt, start),
         sql`${schema.scheduledLessons.startsAt} < ${end}`
       )
@@ -857,10 +877,13 @@ export async function getUpcomingLessonsForStudent(
   const rows = await db
     .select({ lesson: schema.scheduledLessons, groupName: schema.studentGroups.name })
     .from(schema.scheduledLessons)
+    .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
     .leftJoin(schema.studentGroups, eq(schema.studentGroups.id, schema.scheduledLessons.groupId))
     .where(
       and(
         eq(schema.scheduledLessons.studentId, studentId),
+        eq(schema.users.teacherId, schema.scheduledLessons.teacherId),
+        isNull(schema.scheduledLessons.archivedAt),
         eq(schema.scheduledLessons.status, "planned"),
         gte(schema.scheduledLessons.startsAt, new Date()),
         teacherId ? eq(schema.scheduledLessons.teacherId, teacherId) : undefined
@@ -942,7 +965,7 @@ export async function getStudentBalances(
         lastPaidAt: sql<string | null>`max(${schema.studentPayments.paidAt})::text`,
       })
       .from(schema.studentPayments)
-      .where(eq(schema.studentPayments.teacherId, teacherId))
+      .where(and(eq(schema.studentPayments.teacherId, teacherId), isNull(schema.studentPayments.archivedAt)))
       .groupBy(schema.studentPayments.studentId),
     // Засчитанные занятия: «было» + «не пришёл», если у репетитора пропуск
     // оплачивается. Стоимость — зафиксированная при отметке цена, а если её
@@ -958,7 +981,7 @@ export async function getStudentBalances(
       from scheduled_lessons l
       join users u on u.id = l.student_id
       join users t on t.id = l.teacher_id
-      where l.teacher_id = ${teacherId}
+      where l.teacher_id = ${teacherId} and l.archived_at is null
       group by l.student_id
     `),
   ]);
@@ -1368,6 +1391,14 @@ export async function computeProblemStates(
 // ---------- Уведомления ----------
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
+type NotificationTransport = { push: typeof sendPushToUser; telegram: typeof sendTelegramMessage };
+type NotificationDelivery = (transport?: NotificationTransport) => Promise<boolean>;
+const notificationDelivery = new AsyncLocalStorage<(deliver: NotificationDelivery, userId: string) => void>();
+
+export function withNotificationDelivery<T>(schedule: (deliver: NotificationDelivery, userId: string) => void, work: () => T): T {
+  return notificationDelivery.run(schedule, work);
+}
+
 
 /** Кладёт уведомление. Принимает либо обычный db, либо активную транзакцию —
  * так вызывающий код может завернуть несколько связанных записей в одну
@@ -1386,6 +1417,12 @@ export async function pushNotification(
     link: string;
     /** false — только в приложении, без дубля в Telegram. */
     telegram?: boolean;
+    telegramPreference?: "tgNotifyHomework";
+    deliveryPreference?: "tgWeeklyReport";
+    recipient?: DeliveryRecipient;
+    teacherLink?: TeacherLink;
+    origin?: DeliveryRecipient;
+    telegramBindingVersion?: string;
   }
 ) {
   const notificationId = genId("n");
@@ -1403,7 +1440,13 @@ export async function pushNotification(
   // уходили сразу, и при откате транзакции человек получал уведомление о
   // том, чего нет. Запись внутри транзакции не видна другим соединениям до
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
-  void deliverWhenCommitted(notificationId, params).catch(() => {});
+  const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash,
+    telegramBindingVersion: schema.users.telegramBindingVersion }).from(schema.users)
+    .where(eq(schema.users.id, params.userId));
+  const delivery = { ...params, recipient: params.recipient ?? recipient, telegramBindingVersion: params.telegramBindingVersion ?? recipient?.telegramBindingVersion };
+  const schedule = notificationDelivery.getStore();
+  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport), params.userId);
+  else void deliverWhenCommitted(notificationId, delivery).catch(() => {});
 }
 
 /** Паузы перед проверками «уведомление сохранено?» (мс). */
@@ -1411,7 +1454,10 @@ const COMMIT_CHECKS_MS = [150, 1000, 4000];
 
 export async function deliverWhenCommitted(
   notificationId: string,
-  params: { userId: string; title: string; body: string; link: string; telegram?: boolean }
+  params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
+    telegramPreference?: "tgNotifyHomework"; deliveryPreference?: "tgWeeklyReport";
+    teacherLink?: TeacherLink; recipient?: DeliveryRecipient; origin?: DeliveryRecipient; telegramBindingVersion?: string },
+  transport: NotificationTransport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
   let committed = false;
   for (const wait of COMMIT_CHECKS_MS) {
@@ -1429,46 +1475,56 @@ export async function deliverWhenCommitted(
   }
   if (!committed) return false;
 
-  // Push в мобильное приложение. Ошибки sendPushToUser глушит сам.
-  void sendPushToUser(params.userId, { title: params.title, body: params.body, link: params.link });
-
-  if (params.telegram === false) return true;
-  const userRows = await db
-    .select({ telegramChatId: schema.users.telegramChatId })
-    .from(schema.users)
-    .where(eq(schema.users.id, params.userId))
-    .limit(1);
-  const chatId = userRows[0]?.telegramChatId;
-  if (chatId) {
+  async function send(connection: Tx) {
+    const payload = { title: params.title, body: params.body, link: params.link };
+    const [current] = await connection.select({ telegramChatId: schema.users.telegramChatId,
+      tgNotifyHomework: schema.users.tgNotifyHomework, tgWeeklyReport: schema.users.tgWeeklyReport,
+      telegramBindingVersion: schema.users.telegramBindingVersion,
+    }).from(schema.users).where(eq(schema.users.id, params.userId)).limit(1);
+    if (!current || (params.deliveryPreference && !current[params.deliveryPreference])) return false;
+    const chatId = params.telegram === false ||
+      (params.telegramBindingVersion && params.telegramBindingVersion !== current.telegramBindingVersion) ||
+      (params.telegramPreference && !current[params.telegramPreference])
+      ? null : current.telegramChatId;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
-    const text = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${
-      appUrl ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""
-    }`;
-    // Ошибка (в т.ч. таймаут) логируется внутри sendTelegramMessage.
-    await sendTelegramMessage(chatId, text).catch(() => {});
+    const telegramText = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${appUrl
+      ? `\n\n<a href="${appUrl}${params.link}">Открыть в приложении →</a>` : ""}`;
+    // Both channels settle before releasing the delivery advisory lock.
+    await Promise.allSettled([
+      transport.push(params.userId, payload, connection),
+      ...(chatId ? [transport.telegram(chatId, telegramText)] : []),
+    ]);
+    return true;
   }
-  return true;
+  return (await withActiveTeacherDeliveries(params.teacherLink ? [params.teacherLink] : [], send, params.recipient, params.origin)) ?? false;
 }
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export async function getNotificationsForUser(userId: string, limit = 20): Promise<Notification[]> {
+function visibleNotification(userId: string, parentPasswordHash?: string) {
+  return and(eq(schema.notifications.userId, userId), parentSessionMatches(userId, parentPasswordHash), parentPasswordHash !== undefined ? sql`exists (
+    select 1 from parent_links
+    where parent_id = ${userId} and '/parent/child/' || student_id = ${schema.notifications.link}
+  )` : undefined);
+}
+
+export async function getNotificationsForUser(userId: string, limit = 20, parentPasswordHash?: string): Promise<Notification[]> {
   const rows = await db
     .select()
     .from(schema.notifications)
-    .where(eq(schema.notifications.userId, userId))
+    .where(visibleNotification(userId, parentPasswordHash))
     .orderBy(desc(schema.notifications.createdAt))
     .limit(limit);
   return rows.map(mapNotification);
 }
 
-export async function getUnreadNotificationCount(userId: string): Promise<number> {
+export async function getUnreadNotificationCount(userId: string, parentPasswordHash?: string): Promise<number> {
   const [{ count }] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(schema.notifications)
-    .where(and(eq(schema.notifications.userId, userId), eq(schema.notifications.read, false)));
+    .where(and(visibleNotification(userId, parentPasswordHash), eq(schema.notifications.read, false)));
   return count;
 }
 
@@ -1644,7 +1700,7 @@ export async function recordRegistrationAttempt(ip: string, role: "STUDENT" | "T
 const AUTH_EMAILS_PER_HOUR = 3;
 export async function isAuthEmailRateLimited(
   userId: string,
-  type: "email_verification" | "password_reset"
+  type: "email_verification" | "password_reset" | "student_signup_verification"
 ): Promise<boolean> {
   const since = new Date(Date.now() - 3600 * 1000);
   const rows = await db
@@ -1656,7 +1712,7 @@ export async function isAuthEmailRateLimited(
 
 export async function createAuthToken(
   userId: string,
-  type: "email_verification" | "password_reset",
+  type: "email_verification" | "password_reset" | "student_signup_verification",
   ttlMs: number
 ): Promise<string> {
   const token = secureToken(); // криптостойкий: 256 бит случайности
@@ -1957,33 +2013,39 @@ export function isTelegramCodeFresh(code: string, now = Date.now()): boolean {
 
 /** Генерирует одноразовый код привязки и сохраняет на пользователе — вызов
  * со страницы профиля, перед показом t.me-ссылки. */
-export async function generateTelegramLinkCode(userId: string): Promise<string> {
+export async function generateTelegramLinkCode(userId: string): Promise<string>;
+export async function generateTelegramLinkCode(userId: string, authenticatedPasswordHash: string): Promise<string | null>;
+export async function generateTelegramLinkCode(userId: string, authenticatedPasswordHash?: string) {
   const code = randomCode();
-  await db.update(schema.users).set({ telegramLinkCode: code }).where(eq(schema.users.id, userId));
-  return code;
+  const [account] = await db.update(schema.users).set({ telegramLinkCode: code })
+    .where(and(eq(schema.users.id, userId),
+      authenticatedPasswordHash === undefined ? undefined : eq(schema.users.passwordHash, authenticatedPasswordHash)))
+    .returning({ id: schema.users.id });
+  return account ? code : null;
 }
 
 /** Вызывается из вебхука Telegram при получении "/start код" — находит
  * пользователя по коду, привязывает chatId, код обнуляет (одноразовый).
  * Возвращает true, если код найден и привязка прошла. */
-export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
+export async function linkTelegramAccountByCode(code: string, chatId: string, onLinked?: () => Promise<unknown>): Promise<boolean> {
   // Код живёт сутки: старая ссылка из переписки или скриншота не привяжет чужой чат.
   if (typeof code !== "string" || !isTelegramCodeFresh(code)) return false;
-  const rows = await db.select().from(schema.users).where(eq(schema.users.telegramLinkCode, code)).limit(1);
-  const user = rows[0];
-  if (!user) return false;
-  await db
-    .update(schema.users)
-    .set({ telegramChatId: chatId, telegramLinkCode: null })
-    .where(eq(schema.users.id, user.id));
-  return true;
+  const [candidate] = await db.select({ id: schema.users.id }).from(schema.users)
+    .where(eq(schema.users.telegramLinkCode, code)).limit(1);
+  if (!candidate) return false;
+  return withDeliveryLocks([candidate.id], false, async (connection) => {
+    const [linked] = await connection.update(schema.users)
+      .set({ telegramChatId: chatId, telegramLinkCode: null, tgReportLessonId: null, tgReportAskedAt: null })
+      .where(and(eq(schema.users.id, candidate.id), eq(schema.users.telegramLinkCode, code)))
+      .returning({ id: schema.users.id });
+    if (linked && onLinked) await onLinked();
+    return !!linked;
+  });
 }
 
 export async function unlinkTelegramAccount(userId: string) {
-  await db
-    .update(schema.users)
-    .set({ telegramChatId: null, telegramLinkCode: null })
-    .where(eq(schema.users.id, userId));
+  await withDeliveryLocks([userId], false, (connection) => connection.update(schema.users)
+    .set({ telegramChatId: null, telegramLinkCode: null, tgReportLessonId: null, tgReportAskedAt: null }).where(eq(schema.users.id, userId)));
 }
 
 // ---------- Admin-панель: ручное управление подписками ----------
@@ -2491,11 +2553,11 @@ export function genId(prefix: string): string {
 
 // ---------- Прямые точечные запросы, которые раньше делали readDB() ----------
 
-export async function isParentOf(parentId: string, studentId: string): Promise<boolean> {
+export async function isParentOf(parentId: string, studentId: string, passwordHash?: string): Promise<boolean> {
   const rows = await db
     .select()
     .from(schema.parentLinks)
-    .where(and(eq(schema.parentLinks.parentId, parentId), eq(schema.parentLinks.studentId, studentId)))
+    .where(and(eq(schema.parentLinks.parentId, parentId), eq(schema.parentLinks.studentId, studentId), parentSessionMatches(parentId, passwordHash)))
     .limit(1);
   return rows.length > 0;
 }
@@ -2534,7 +2596,7 @@ export interface StudentQuestionView {
   hasSketch: boolean;
 }
 
-async function selectQuestions(where: ReturnType<typeof eq>) {
+async function selectQuestions(where: SQL) {
   const rows = await db
     .select({
       q: {
@@ -2577,7 +2639,7 @@ async function selectQuestions(where: ReturnType<typeof eq>) {
 }
 
 export function getQuestionsForTeacher(teacherId: string) {
-  return selectQuestions(eq(schema.studentQuestions.teacherId, teacherId));
+  return selectQuestions(and(eq(schema.studentQuestions.teacherId, teacherId), eq(schema.users.teacherId, teacherId))!);
 }
 
 export function getQuestionsForStudent(studentId: string) {
@@ -2588,7 +2650,9 @@ export async function getOpenQuestionsCount(teacherId: string): Promise<number> 
   const rows = await db
     .select({ c: sql<number>`count(*)::int` })
     .from(schema.studentQuestions)
-    .where(and(eq(schema.studentQuestions.teacherId, teacherId), isNull(schema.studentQuestions.answeredAt)));
+    .innerJoin(schema.users, eq(schema.users.id, schema.studentQuestions.studentId))
+    .where(and(eq(schema.studentQuestions.teacherId, teacherId), eq(schema.users.teacherId, teacherId),
+      isNull(schema.studentQuestions.answeredAt)));
   return Number(rows[0]?.c ?? 0);
 }
 

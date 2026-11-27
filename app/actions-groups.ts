@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { lockTeacherStudents } from "@/lib/student-links";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId } from "@/lib/queries";
@@ -12,21 +13,8 @@ import { getGroupForTeacher } from "@/lib/groups";
 const MAX_NAME = 60;
 const MAX_MEMBERS = 40;
 
-/** Из формы — только свои ученики (studentIds можно подделать). */
-async function ownStudentIds(teacherId: string, raw: string[]): Promise<string[]> {
-  const ids = Array.from(new Set(raw.filter(Boolean))).slice(0, MAX_MEMBERS);
-  if (ids.length === 0) return [];
-  const rows = await db
-    .select({ id: schema.users.id })
-    .from(schema.users)
-    .where(
-      and(
-        inArray(schema.users.id, ids),
-        eq(schema.users.teacherId, teacherId),
-        eq(schema.users.role, "STUDENT")
-      )
-    );
-  return rows.map((r) => r.id);
+function requestedMembers(formData: FormData): string[] {
+  return Array.from(new Set(formData.getAll("studentIds").map(String).filter(Boolean))).slice(0, MAX_MEMBERS);
 }
 
 function revalidateGroups(groupId?: string) {
@@ -40,12 +28,12 @@ export async function createGroupAction(formData: FormData) {
   const teacher = await getSessionUser();
   if (!teacher || teacher.role !== "TEACHER") redirect("/login");
   const name = String(formData.get("name") || "").trim().slice(0, MAX_NAME);
-  const members = await ownStudentIds(teacher.id, formData.getAll("studentIds").map(String));
   if (!name) redirect("/teacher/groups?error=name");
-  if (members.length < 2) redirect("/teacher/groups?error=members");
 
   const id = genId("grp");
   await db.transaction(async (tx) => {
+    const members = await lockTeacherStudents(tx, teacher.id, requestedMembers(formData));
+    if (members.length < 2) redirect("/teacher/groups?error=members");
     await tx.insert(schema.studentGroups).values({ id, teacherId: teacher.id, name });
     await tx.insert(schema.studentGroupMembers).values(members.map((studentId) => ({ groupId: id, studentId })));
   });
@@ -61,13 +49,16 @@ export async function updateGroupAction(formData: FormData) {
   if (!group) redirect("/teacher/groups?error=1");
 
   const name = String(formData.get("name") || "").trim().slice(0, MAX_NAME) || group.name;
-  const members = await ownStudentIds(teacher.id, formData.getAll("studentIds").map(String));
-  if (members.length < 2) redirect(`/teacher/groups/${groupId}?error=members`);
 
   // Состав меняется только на будущее: прошлые занятия и выданные задания
   // остаются у тех учеников, у кого они были.
   await db.transaction(async (tx) => {
-    await tx.update(schema.studentGroups).set({ name }).where(eq(schema.studentGroups.id, groupId));
+    const members = await lockTeacherStudents(tx, teacher.id, requestedMembers(formData));
+    if (members.length < 2) redirect(`/teacher/groups/${groupId}?error=members`);
+    const [updated] = await tx.update(schema.studentGroups).set({ name })
+      .where(and(eq(schema.studentGroups.id, groupId), eq(schema.studentGroups.teacherId, teacher.id)))
+      .returning({ id: schema.studentGroups.id });
+    if (!updated) redirect("/teacher/groups?error=1");
     await tx.delete(schema.studentGroupMembers).where(eq(schema.studentGroupMembers.groupId, groupId));
     await tx.insert(schema.studentGroupMembers).values(members.map((studentId) => ({ groupId, studentId })));
   });

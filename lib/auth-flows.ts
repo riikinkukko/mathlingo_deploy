@@ -7,6 +7,7 @@
  * вызывающего.
  */
 import { db } from "./db/client";
+import { and, eq } from "drizzle-orm";
 import * as schema from "./db/schema";
 import { hashPassword, verifyPassword } from "./auth";
 import {
@@ -43,7 +44,8 @@ export async function passwordLogin(
   emailRaw: unknown,
   passwordRaw: unknown,
   clientIp: string
-): Promise<{ user: User } | { error: string }> {
+): Promise<{ user: User; authenticatedAt: number } | { error: string }> {
+  const authenticatedAt = Date.now();
   // Ученик без почты входит по логину («masha.sokolova.2665») — без домена.
   const email = loginToEmail(normalizeEmail(emailRaw));
   const password = String(passwordRaw ?? "");
@@ -58,8 +60,19 @@ export async function passwordLogin(
     await recordLoginFailure(clientIp, email);
     return { error: "Неверный email или пароль" };
   }
+  if (user.role === "STUDENT" && user.credentialHandoffPending) {
+    const [confirmed] = await db.update(schema.users)
+      .set({ independentCredentials: true, credentialHandoffPending: false })
+      .where(and(eq(schema.users.id, user.id), eq(schema.users.passwordHash, user.passwordHash),
+        eq(schema.users.credentialHandoffPending, true)))
+      .returning({ id: schema.users.id });
+    if (!confirmed) {
+      const current = await getUserByEmail(email);
+      if (!current || current.passwordHash !== user.passwordHash) return { error: "Неверный email или пароль" };
+    }
+  }
   await clearLoginFailures(email);
-  return { user };
+  return { user, authenticatedAt };
 }
 
 export async function checkRegistrationEmail(email: string): Promise<string | null> {
@@ -121,7 +134,7 @@ export async function registerStudent(
   });
 
   // Письмо не уйдёт — регистрацию не срываем: подтвердить можно позже из профиля.
-  const verificationToken = await createAuthToken(userId, "email_verification", 24 * 3600 * 1000);
+  const verificationToken = await createAuthToken(userId, "student_signup_verification", 24 * 3600 * 1000);
   await sendVerificationEmail(email, verificationToken).catch((e) =>
     console.error("Не удалось отправить письмо верификации:", e)
   );

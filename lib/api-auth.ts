@@ -18,6 +18,6 @@ export async function getBearerUser(req: Request): Promise<User | null> {
   const session = await verifySessionToken(token);
   if (!session) return null;
   const user = await getUserById(session.userId);
-  if (!user || isSessionRevoked(user, session.issuedAt)) return null;
+  if (!user || isSessionRevoked(user, session.issuedAt, session.authenticatedAt, session.credentialVersion)) return null;
   return user;
 }

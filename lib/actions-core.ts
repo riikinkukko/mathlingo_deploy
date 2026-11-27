@@ -1,3 +1,4 @@
+import { lockStudent } from "./student-links";
 import { questsJustCompleted } from "./daily-quests";
 import { db } from "./db/client";
 import { getPaidReviewPrice, isPaidReviewEnabled } from "./paid-review";
@@ -190,17 +191,14 @@ export async function performSubmitAttempt(
   }
 
   if (problem.answerType === "DETAILED") {
-    if (user.teacherId) {
+    if (user.teacherId && user.teacherLinkVersion) {
+      const teacherId = user.teacherId;
       const skill = problem.skillId ? await getSkill(problem.skillId) : undefined;
       // В Telegram — по одному сообщению на решение только вне ДЗ: решения из
       // задания придут одним сообщением «сдал ДЗ, на проверке N».
-      const teacherRow = await db
-        .select({ tgNotifyHomework: schema.users.tgNotifyHomework })
-        .from(schema.users)
-        .where(eq(schema.users.id, user.teacherId))
-        .limit(1);
-      const telegram = source !== "assignment" && teacherRow[0]?.tgNotifyHomework !== false;
-      await db.transaction(async (tx) => {
+      const queued = await db.transaction(async (tx) => {
+        const current = await lockStudent(tx, user.id);
+        if (current?.teacherId !== teacherId || current.teacherLinkVersion !== user.teacherLinkVersion) return false;
         const attemptId = genId("a");
         await tx.insert(schema.attempts).values({
           id: attemptId,
@@ -213,17 +211,22 @@ export async function performSubmitAttempt(
         });
         if (img) await tx.insert(schema.attemptImages).values({ attemptId, data: img });
         await pushNotification(tx, {
-          userId: user.teacherId!,
+          userId: teacherId,
           type: "review_pending",
+          teacherLink: { studentId: user.id, teacherId, version: current.teacherLinkVersion },
           title: `${user.name}: решение ждёт проверки`,
           body: `Развёрнутое решение по навыку «${skill?.title ?? ""}» отправлено на проверку${img ? " (с фото)" : ""}.`,
           // Сразу на эту работу в очереди «Проверка решений».
           link: `/teacher/reviews?id=${attemptId}`,
-          telegram,
+          telegram: source !== "assignment",
+          telegramPreference: "tgNotifyHomework",
         });
+        return true;
       });
-      await safeNotifyHomework(user, problemId, source);
-      return { kind: "pending" as const };
+      if (queued) {
+        await safeNotifyHomework(user, problemId, source);
+        return { kind: "pending" as const };
+      }
     }
 
     const selfId = genId("a");

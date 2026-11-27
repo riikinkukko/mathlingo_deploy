@@ -13,6 +13,6 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
   const photo = await readTaskPhoto(user, id);
   if (!photo) return new NextResponse("Не найдено", { status: 404 });
   return new NextResponse(new Uint8Array(photo.bytes), {
-    headers: { "Content-Type": photo.mime, "Cache-Control": "private, max-age=604800, immutable" },
+    headers: { "Content-Type": photo.mime, "Cache-Control": "private, no-store" },
   });
 }

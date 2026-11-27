@@ -1,13 +1,15 @@
+import { boundTelegramCallback, type TelegramBinding } from "./telegram-binding";
 // Отчёт после урока: черновик с фактами, сохранение (с уведомлениями ученику
 // и родителям), список проведённых занятий без отчёта, вечернее напоминание
 // и ответ отчётом прямо в Telegram.
 // Относительные импорты: часть кода работает в воркере бота (tsx, вне Next.js).
 import { and, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { db } from "./db/client";
+import { activeTeacherLinks, lockStudent, lockTelegramTeacher, withUnchangedTeacherRoster, teacherLinkFor, withActiveTeacherDeliveries } from "./student-links";
 import * as schema from "./db/schema";
 import { genId, getScheduledLessonById, getUpcomingLessonsForStudent, getUserById, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
-import { sendTelegramMessage, escapeTelegramHtml as esc, type InlineKeyboard } from "./telegram";
+import { sendTelegramMessage, sendTelegramReportPrompt, escapeTelegramHtml as esc, type InlineKeyboard } from "./telegram";
 
 const TZ = "Europe/Moscow";
 const DAY = 86_400_000;
@@ -124,41 +126,62 @@ export async function createLessonReport(p: {
   topic: string;
   report: string;
   lessonId?: string | null;
+  telegram?: TelegramBinding & { promptId: number };
 }): Promise<CreateReportResult> {
-  const student = await getUserById(p.studentId);
-  if (!student || student.role !== "STUDENT" || student.teacherId !== p.teacherId) return { ok: false, reason: "access" };
+
   const date = p.date.slice(0, 10);
   const topic = p.topic.trim().slice(0, 200);
   const report = cleanReport(p.report).slice(0, 5000);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !topic || !report) return { ok: false, reason: "empty" };
 
-  let lessonId: string | null = null;
-  if (p.lessonId) {
-    const l = await getScheduledLessonById(p.lessonId);
-    if (l && l.teacherId === p.teacherId && l.studentId === p.studentId) {
-      const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l.id)).limit(1);
-      if (dup[0]) return { ok: false, reason: "exists" };
+  return db.transaction(async (tx) => {
+    const student = await lockStudent(tx, p.studentId);
+    if (student?.teacherId !== p.teacherId) return { ok: false, reason: "access" };
+    let lessonId: string | null = null;
+    if (p.lessonId) {
+      const [l] = await tx.select().from(schema.scheduledLessons).where(and(
+        eq(schema.scheduledLessons.id, p.lessonId), eq(schema.scheduledLessons.teacherId, p.teacherId),
+        eq(schema.scheduledLessons.studentId, p.studentId), isNull(schema.scheduledLessons.archivedAt)
+      ));
+      if (!l) return { ok: false, reason: "access" };
+      const dup = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l.id)).limit(1);
+      if (dup[0] && !p.telegram) return { ok: false, reason: "exists" };
       lessonId = l.id;
     }
-  }
 
-  const parents = await db.select().from(schema.parentLinks).where(eq(schema.parentLinks.studentId, p.studentId));
-  const id = genId("l");
-  await db.transaction(async (tx) => {
+    if (p.telegram) {
+      const teacher = await lockTelegramTeacher(tx, p.teacherId, p.telegram);
+      if (!teacher || teacher.tgReportLessonId !== p.lessonId ||
+          teacher.tgReportPromptId !== p.telegram.promptId || !teacher.tgReportAskedAt ||
+          Date.now() - teacher.tgReportAskedAt.getTime() > TG_REPORT_WAIT_MS) return { ok: false, reason: "access" };
+      await tx.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null, tgReportPromptId: null })
+        .where(eq(schema.users.id, p.teacherId));
+      const [duplicate] = await tx.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs)
+        .where(eq(schema.lessonLogs.lessonId, p.lessonId!)).limit(1);
+      if (duplicate) return { ok: false, reason: "exists" };
+    }
+
+    const parents = await tx.select().from(schema.parentLinks).where(eq(schema.parentLinks.studentId, p.studentId));
+    const id = genId("l");
     await tx.insert(schema.lessonLogs).values({ id, teacherId: p.teacherId, studentId: p.studentId, date, topic, report, lessonId });
     const body = report.length > 120 ? report.slice(0, 120) + "…" : report;
-    await pushNotification(tx, { userId: p.studentId, type: "lesson_log_added", title: `Новая запись о занятии: ${topic}`, body, link: `/student` });
+    const teacherLink = await teacherLinkFor(tx, p.studentId, p.teacherId);
+    const origin = p.telegram ? { id: p.teacherId, telegram: p.telegram } : undefined;
+    await pushNotification(tx, { userId: p.studentId, teacherLink, origin,
+      type: "lesson_log_added", title: `Новая запись о занятии: ${topic}`, body, link: `/student` });
     for (const link of parents) {
       await pushNotification(tx, {
         userId: link.parentId,
-        type: "lesson_log_added",
+        teacherLink,
+        origin,
+      type: "lesson_log_added",
         title: `Новая запись о занятии: ${topic}`,
         body,
         link: `/parent/child/${p.studentId}`,
       });
     }
+    return { ok: true, id };
   });
-  return { ok: true, id };
 }
 
 export interface UnreportedLesson {
@@ -174,8 +197,8 @@ export interface UnreportedLesson {
  * Занятие считается с отчётом, если к нему привязан отчёт или есть запись
  * журнала этому ученику в тот же день (старые записи без привязки).
  */
-export async function getUnreportedLessons(teacherId: string, { days = 14, studentId }: { days?: number; studentId?: string } = {}): Promise<UnreportedLesson[]> {
-  const from = new Date(Date.now() - days * DAY);
+export async function getUnreportedLessons(teacherId: string, { days = 14, studentId, now = new Date() }: { days?: number; studentId?: string; now?: Date } = {}): Promise<UnreportedLesson[]> {
+  const from = new Date(now.getTime() - days * DAY);
   const rows = await db
     .select({ l: schema.scheduledLessons, name: schema.users.name })
     .from(schema.scheduledLessons)
@@ -184,9 +207,11 @@ export async function getUnreportedLessons(teacherId: string, { days = 14, stude
       and(
         eq(schema.scheduledLessons.teacherId, teacherId),
         eq(schema.scheduledLessons.status, "done"),
+        eq(schema.users.teacherId, teacherId),
+        isNull(schema.scheduledLessons.archivedAt),
         isNull(schema.scheduledLessons.groupLessonId),
         gte(schema.scheduledLessons.startsAt, from),
-        lte(schema.scheduledLessons.startsAt, new Date()),
+        lte(schema.scheduledLessons.startsAt, now),
         studentId ? eq(schema.scheduledLessons.studentId, studentId) : undefined
       )
     )
@@ -211,18 +236,18 @@ export async function getUnreportedLessons(teacherId: string, { days = 14, stude
 
 // ------------------------------------------------------------- Telegram
 
-export function reportButton(lessonId: string, label = "✍️ Написать отчёт здесь"): { text: string; callback_data: string } {
-  return { text: label, callback_data: `rp:${lessonId}` };
+export function reportButton(lessonId: string, version: string, label = "✍️ Написать отчёт здесь"): { text: string; callback_data: string } {
+  return { text: label, callback_data: boundTelegramCallback(`rp:${lessonId}`, version) };
 }
 
 /** Кнопка «Написать отчёт»: бот ждёт следующее сообщение как текст отчёта. */
-export async function startTelegramReport(teacherId: string, chatId: string, lessonId: string): Promise<string> {
+export async function startTelegramReport(teacherId: string, binding: TelegramBinding, lessonId: string, send = sendTelegramReportPrompt): Promise<string> {
   const lesson = await getScheduledLessonById(lessonId);
-  if (!lesson || lesson.teacherId !== teacherId) return "Занятие не найдено";
+  if (!lesson || lesson.teacherId !== teacherId || lesson.archivedAt || (await getUserById(lesson.studentId))?.teacherId !== teacherId) return "Занятие не найдено";
   const dup = await db.select({ id: schema.lessonLogs.id }).from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, lessonId)).limit(1);
   if (dup[0]) return "Отчёт об этом занятии уже есть";
-  await db.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date() }).where(eq(schema.users.id, teacherId));
   const student = await getUserById(lesson.studentId);
+  if (student?.teacherId !== teacherId || !student.teacherLinkVersion) return "Занятие не найдено";
   const draft = await buildReportDraft(teacherId, lesson.studentId, lessonId);
   const startsAt = new Date(lesson.startsAt);
   const text =
@@ -230,39 +255,56 @@ export async function startTelegramReport(teacherId: string, chatId: string, les
     `Напишите одним сообщением, что делали, что получилось и над чем поработать. ` +
     (lesson.topic ? `Тема — «${esc(lesson.topic)}».` : `Первая строка станет темой занятия.`) +
     (draft.facts.length ? `\n\nДобавлю сам:\n${draft.facts.map((f) => `• ${esc(f)}`).join("\n")}` : "") +
-    `\n\nОтчёт получат ученик и родители. /cancel — отменить.`;
-  await sendTelegramMessage(chatId, text);
-  return "Жду текст отчёта";
+    `\n\nОтчёт получат ученик и родители. Ответьте на это сообщение. Для отмены ответьте /cancel.`;
+  const sent = await withActiveTeacherDeliveries([{ studentId: student.id, teacherId, version: student.teacherLinkVersion }],
+    async (tx) => {
+      const [active] = await tx.select({ id: schema.scheduledLessons.id }).from(schema.scheduledLessons)
+        .where(and(eq(schema.scheduledLessons.id, lessonId), isNull(schema.scheduledLessons.archivedAt)));
+      if (!active) return false;
+      const promptId = await send(binding.chatId, text);
+      if (!promptId) return false;
+      await tx.update(schema.users).set({ tgReportLessonId: lessonId, tgReportAskedAt: new Date(), tgReportPromptId: promptId })
+        .where(eq(schema.users.id, teacherId));
+      return true;
+    }, { id: teacherId, telegram: binding }, undefined, { exclusive: true });
+  return sent ? "Жду текст отчёта" : "Занятие не найдено";
 }
 
 /**
  * Обычное сообщение репетитора в боте. true — сообщение было отчётом (или
  * /cancel) и обработано; false — бот ничего не ждал.
  */
-export async function handleTelegramReportText(chatId: string, text: string, now: Date = new Date()): Promise<boolean> {
-  const rows = await db
-    .select({ id: schema.users.id, lessonId: schema.users.tgReportLessonId, askedAt: schema.users.tgReportAskedAt })
-    .from(schema.users)
-    .where(and(eq(schema.users.telegramChatId, chatId), eq(schema.users.role, "TEACHER"), isNotNull(schema.users.tgReportLessonId)))
-    .limit(1);
-  const t = rows[0];
+export async function handleTelegramReportText(chatId: string, text: string, promptId: number, now: Date = new Date(), beforeWrite: () => Promise<void> = async () => {}, send = sendTelegramMessage): Promise<boolean> {
+  if (!Number.isSafeInteger(promptId) || promptId <= 0 || promptId > 2147483647) return false;
+  const [teacher] = await db.select({ id: schema.users.id, version: schema.users.telegramBindingVersion })
+    .from(schema.users).where(and(eq(schema.users.telegramChatId, chatId), eq(schema.users.role, "TEACHER"))).limit(1);
+  if (!teacher) return false;
+  const binding = { chatId, version: teacher.version };
+  const t = await withActiveTeacherDeliveries([], async (connection) => {
+    const [active] = await connection.select({ id: schema.users.id, lessonId: schema.users.tgReportLessonId, askedAt: schema.users.tgReportAskedAt })
+      .from(schema.users).where(and(eq(schema.users.id, teacher.id), eq(schema.users.tgReportPromptId, promptId)));
+    return active;
+  }, { id: teacher.id, telegram: binding });
   if (!t?.lessonId) return false;
-  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null }).where(eq(schema.users.id, t.id));
+
+  const reply = (body: string) => withActiveTeacherDeliveries([], () => send(chatId, body), { id: t.id, telegram: binding });
+  const clear = () => db.update(schema.users).set({ tgReportLessonId: null, tgReportAskedAt: null, tgReportPromptId: null })
+    .where(and(eq(schema.users.id, t.id), eq(schema.users.telegramChatId, chatId), eq(schema.users.telegramBindingVersion, binding.version),
+      eq(schema.users.tgReportLessonId, t.lessonId!), eq(schema.users.tgReportPromptId, promptId)))
+    .returning({ id: schema.users.id });
   if (!t.askedAt || now.getTime() - t.askedAt.getTime() > TG_REPORT_WAIT_MS) {
     await clear();
     return false;
   }
   if (/^\/cancel(@\w+)?$/.test(text.trim())) {
-    await clear();
-    await sendTelegramMessage(chatId, "Хорошо, отчёт не отправляю.");
+    if ((await clear()).length) await reply("Хорошо, отчёт не отправляю.");
     return true;
   }
   if (text.startsWith("/")) return false;
 
   const lesson = await getScheduledLessonById(t.lessonId);
-  await clear();
   if (!lesson) {
-    await sendTelegramMessage(chatId, "Занятие не найдено — возможно, его удалили.");
+    if ((await clear()).length) await reply("Занятие не найдено — возможно, его удалили.");
     return true;
   }
   const body = text.trim();
@@ -270,16 +312,19 @@ export async function handleTelegramReportText(chatId: string, text: string, now
   const topic = lesson.topic?.trim() || (firstLine.length > 80 ? firstLine.slice(0, 77) + "…" : firstLine);
   const draft = await buildReportDraft(t.id, lesson.studentId, lesson.id);
   const report = draft.facts.length ? `${body}\n\n${draft.facts.join("\n")}` : body;
-  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id });
-  await sendTelegramMessage(
-    chatId,
+  await beforeWrite();
+  const res = await createLessonReport({ teacherId: t.id, studentId: lesson.studentId, date: mskDay(new Date(lesson.startsAt)), topic, report, lessonId: lesson.id, telegram: { ...binding, promptId } });
+  if (!res.ok && res.reason === "access") return true;
+  await reply(
     res.ok ? "✅ Отчёт отправлен ученику и родителям." : res.reason === "exists" ? "Отчёт об этом занятии уже есть." : "Не получилось сохранить отчёт — напишите его в кабинете."
   );
   return true;
 }
 
 /** Вечером (20:30–23:00 МСК) — одно сообщение о сегодняшних занятиях без отчёта. */
-export async function sendReportReminders(now: Date = new Date()): Promise<number> {
+export async function sendReportReminders(
+  now: Date = new Date(), { send = sendTelegramMessage, beforeDispatch = async (_id: string) => {} } = {},
+): Promise<number> {
   const minutes = mskMinutes(now);
   if (minutes < REMIND_FROM_MIN || minutes >= REMIND_TO_MIN) return 0;
   const day = mskDay(now);
@@ -294,18 +339,21 @@ export async function sendReportReminders(now: Date = new Date()): Promise<numbe
         or(isNull(schema.users.reportRemindedOn), sql`${schema.users.reportRemindedOn} <> ${day}`)
       )
     )
-    .returning({ id: schema.users.id, chatId: schema.users.telegramChatId });
+    .returning({ id: schema.users.id, chatId: schema.users.telegramChatId, version: schema.users.telegramBindingVersion });
   let sent = 0;
   for (const t of claimed) {
     try {
-      const today = (await getUnreportedLessons(t.id, { days: 1 })).filter((l) => mskDay(new Date(l.startsAt)) === day);
+      const links = await activeTeacherLinks(t.id);
+      const today = (await getUnreportedLessons(t.id, { days: 1, now })).filter((l) => mskDay(new Date(l.startsAt)) === day);
       if (!today.length || !t.chatId) continue;
       const lines = today.map((l) => `• ${esc(l.studentName)}, ${mskTime(new Date(l.startsAt))}${l.topic ? ` · ${esc(l.topic)}` : ""}`);
-      const kb: InlineKeyboard = { inline_keyboard: today.slice(0, 8).map((l) => [reportButton(l.id, `✍️ ${l.studentName.split(" ")[0]}, ${mskTime(new Date(l.startsAt))}`)]) };
+      const kb: InlineKeyboard = { inline_keyboard: today.slice(0, 8).map((l) => [reportButton(l.id, t.version, `✍️ ${l.studentName.split(" ")[0]}, ${mskTime(new Date(l.startsAt))}`)]) };
       const text =
         `<b>Сегодня без отчёта: ${today.length}</b>\n${lines.join("\n")}\n\n` +
         `Пара строк о занятии — и ученик с родителями увидят, что прошли и над чем работать. Нажмите на имя и напишите отчёт прямо сюда.`;
-      if (await sendTelegramMessage(t.chatId, text, { replyMarkup: kb })) sent++;
+      await beforeDispatch(t.id);
+      if (await withUnchangedTeacherRoster(t.id, links, () => send(t.chatId!, text, { replyMarkup: kb }),
+        { id: t.id, telegram: { chatId: t.chatId, version: t.version, preference: "tgNotifyLessons" } })) sent++;
     } catch (e) {
       console.error("[lesson-report] не удалось напомнить об отчётах", t.id, e);
     }

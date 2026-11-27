@@ -1,3 +1,4 @@
+import { withActiveTeacherDeliveries } from "./student-links";
 // Недельный отчёт родителю: по воскресеньям вечером (19:00–23:00 МСК), по
 // каждому ребёнку отдельное уведомление — в приложении и в Telegram (если
 // привязан; отправку делает pushNotification). Отключается родителем на его
@@ -206,7 +207,7 @@ export async function buildChildWeekReport(child: User, now: Date = new Date(), 
 }
 
 /** Из воркера бота раз в несколько минут. Возвращает число отправленных отчётов. */
-export async function sendParentWeeklyReports(now: Date = new Date()): Promise<number> {
+export async function sendParentWeeklyReports(now: Date = new Date(), beforeQueue: (id: string) => Promise<void> = async () => {}): Promise<number> {
   const week = reportWeekFor(now);
   if (!week) return 0;
   const { key } = week;
@@ -221,18 +222,22 @@ export async function sendParentWeeklyReports(now: Date = new Date()): Promise<n
         or(isNull(schema.users.weeklyReportSentOn), sql`${schema.users.weeklyReportSentOn} <> ${key}`)
       )
     )
-    .returning({ id: schema.users.id, email: schema.users.email, chatId: schema.users.telegramChatId });
+    .returning({ id: schema.users.id, passwordHash: schema.users.passwordHash, telegramBindingVersion: schema.users.telegramBindingVersion });
 
   let sent = 0;
   for (const p of claimed) {
     try {
-      const children = await getChildrenOfParent(p.id);
+      const children = await getChildrenOfParent(p.id, p.passwordHash);
       const reports: { child: User; title: string; body: string }[] = [];
       for (const child of children) {
         const r = await buildChildWeekReport(child, now, week.start);
+        await beforeQueue(p.id);
         await pushNotification(db, {
           userId: p.id,
           type: "weekly_report",
+          deliveryPreference: "tgWeeklyReport",
+          telegramBindingVersion: p.telegramBindingVersion,
+          recipient: p,
           title: r.title,
           body: r.body,
           link: `/parent/child/${child.id}`,
@@ -241,8 +246,14 @@ export async function sendParentWeeklyReports(now: Date = new Date()): Promise<n
         sent++;
       }
       // Без Telegram отчёт видно только на сайте — поэтому дублируем письмом.
-      if (!p.chatId && p.email && reports.length > 0 && isEmailConfigured()) {
-        await sendEmail({ to: p.email, subject: reports[0].title, html: weeklyEmailHtml(reports) });
+      if (reports.length > 0 && isEmailConfigured()) {
+        await withActiveTeacherDeliveries([], async (connection) => {
+          const [current] = await connection.select({ email: schema.users.email, chatId: schema.users.telegramChatId })
+            .from(schema.users).where(and(eq(schema.users.id, p.id), eq(schema.users.tgWeeklyReport, true)));
+          if (current && !current.chatId) {
+            await sendEmail({ to: current.email, subject: reports[0].title, html: weeklyEmailHtml(reports) });
+          }
+        }, p);
       }
     } catch (e) {
       console.error("[parent-weekly] не удалось отправить отчёт", p.id, e);

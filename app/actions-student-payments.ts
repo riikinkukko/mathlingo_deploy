@@ -2,8 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { lockStudent, lockTeacherStudents } from "@/lib/student-links";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
 import { genId, getUserById, getStudentPaymentById } from "@/lib/queries";
@@ -74,15 +75,20 @@ export async function addStudentPaymentAction(
   const fields = parsePaymentFields(formData);
   if ("error" in fields) return { error: fields.error };
   // С ценой занятия «за сколько занятий» считаем сами — для истории оплат.
-  const student = await getUserById(studentId);
-  if (student?.lessonPriceRub) fields.lessonsCount = Math.min(100, Math.floor(fields.amountRub / student.lessonPriceRub));
+  const added = await db.transaction(async (tx) => {
+    const student = await lockStudent(tx, studentId);
+    if (student?.teacherId !== teacher.id) return false;
+    if (student.lessonPriceRub) fields.lessonsCount = Math.min(100, Math.floor(fields.amountRub / student.lessonPriceRub));
 
-  await db.insert(schema.studentPayments).values({
-    id: genId("sp"),
-    teacherId: teacher.id,
-    studentId,
-    ...fields,
+    await tx.insert(schema.studentPayments).values({
+      id: genId("sp"),
+      teacherId: teacher.id,
+      studentId,
+      ...fields,
+    });
+    return true;
   });
+  if (!added) return { error: "Ученик не найден" };
 
   revalidateAll(studentId);
   return { ok: true, at: Date.now() };
@@ -103,10 +109,14 @@ export async function updateStudentPaymentAction(
   const fields = parsePaymentFields(formData);
   if ("error" in fields) return { error: fields.error };
 
-  await db
-    .update(schema.studentPayments)
-    .set(fields)
-    .where(eq(schema.studentPayments.id, paymentId));
+  const changed = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, teacher.id, [payment.studentId])).length) return [];
+    return tx.update(schema.studentPayments).set(fields).where(and(
+      eq(schema.studentPayments.id, paymentId), eq(schema.studentPayments.teacherId, teacher.id),
+      isNull(schema.studentPayments.archivedAt)
+    )).returning({ id: schema.studentPayments.id });
+  });
+  if (!changed.length) return { error: "Оплата не найдена" };
 
   revalidateAll(payment.studentId);
   return { ok: true, at: Date.now() };
@@ -121,7 +131,14 @@ export async function deleteStudentPaymentAction(formData: FormData) {
   if (!teacher || teacher.role !== "TEACHER" || !payment || payment.teacherId !== teacher.id) redirect("/teacher/payments?error=1");
   const back = from === "student" ? `/teacher/student/${payment.studentId}` : "/teacher/payments";
 
-  await db.delete(schema.studentPayments).where(eq(schema.studentPayments.id, paymentId));
+  const removed = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, teacher.id, [payment.studentId])).length) return [];
+    return tx.delete(schema.studentPayments).where(and(
+      eq(schema.studentPayments.id, paymentId), eq(schema.studentPayments.teacherId, teacher.id),
+      isNull(schema.studentPayments.archivedAt)
+    )).returning({ id: schema.studentPayments.id });
+  });
+  if (!removed.length) redirect("/teacher/payments?error=1");
 
   revalidateAll(payment.studentId);
   redirect(from === "student" ? `${back}?tab=payments` : back);
@@ -142,10 +159,10 @@ export async function setPaymentRemindersAction(
   if (!(await ownsStudent(teacher.id, studentId))) return { error: "Ученик не найден" };
 
   const enabled = formData.get("enabled") === "on";
-  await db
-    .update(schema.users)
-    .set({ paymentRemindersEnabled: enabled })
-    .where(eq(schema.users.id, studentId));
+  const [updated] = await db.update(schema.users).set({ paymentRemindersEnabled: enabled })
+    .where(and(eq(schema.users.id, studentId), eq(schema.users.role, "STUDENT"), eq(schema.users.teacherId, teacher.id)))
+    .returning({ id: schema.users.id });
+  if (!updated) return { error: "Ученик не найден" };
   revalidatePath(`/teacher/student/${studentId}`);
   return { ok: true, at: Date.now() };
 }
@@ -209,10 +226,10 @@ export async function saveLessonPriceAction(_prev: PriceState, formData: FormDat
   const groupPrice = parsePrice(formData.get("groupLessonPriceRub"));
   if (price === "bad" || groupPrice === "bad") return { error: "Цена — целое число рублей до 100 000" };
   if (groupPrice !== null && price === null) return { error: "Сначала укажите цену индивидуального занятия" };
-  await db
-    .update(schema.users)
-    .set({ lessonPriceRub: price, groupLessonPriceRub: groupPrice })
-    .where(eq(schema.users.id, studentId));
+  const [updated] = await db.update(schema.users).set({ lessonPriceRub: price, groupLessonPriceRub: groupPrice })
+    .where(and(eq(schema.users.id, studentId), eq(schema.users.role, "STUDENT"), eq(schema.users.teacherId, teacher.id)))
+    .returning({ id: schema.users.id });
+  if (!updated) return { error: "Ученик не найден" };
   revalidateAll(studentId);
   return { ok: true, at: Date.now() };
 }

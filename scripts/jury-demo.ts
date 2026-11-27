@@ -70,7 +70,10 @@ async function main() {
     .from(schema.users)
     .where(inArray(schema.users.email, Object.values(EMAILS)));
   if (old.length) {
-    await db.delete(schema.users).where(inArray(schema.users.id, old.map((u) => u.id)));
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
+      await tx.delete(schema.users).where(inArray(schema.users.id, old.map((u) => u.id)));
+    });
     console.log(`Удалено прежних демо-аккаунтов: ${old.length}`);
   }
 
@@ -104,7 +107,7 @@ async function main() {
     },
     { id: parentId, ...base, name: "Ольга Смирнова", email: EMAILS.parent, role: "PARENT", createdAt: ago(34) },
   ]);
-  await db.insert(schema.parentLinks).values({ parentId, studentId: s1 });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId, studentId: s1 });
 
   // ---------- Решения ----------
   type A = typeof schema.attempts.$inferInsert;

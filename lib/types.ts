@@ -11,6 +11,9 @@ export interface User {
   // самостоятельный пользователь (зарегистрировался сам, не чей-то ученик),
   // на него распространяется система планов Free/Pro и энергии ниже.
   teacherId?: string;
+  teacherLinkVersion?: string;
+  independentCredentials?: boolean;
+  credentialHandoffPending?: boolean;
   // Только для самостоятельных учеников (role=STUDENT, teacherId не задан).
   // Ученики с репетитором эквивалентны Pro автоматически — план на них не
   // распространяется вовсе.
@@ -23,6 +26,7 @@ export interface User {
   // с оплатой. Не путать с ролью TEACHER — это отдельная, ортогональная вещь.
   isAdmin?: boolean;
   telegramChatId?: string;
+  telegramBindingVersion?: string;
   telegramLinkCode?: string;
   // Момент согласия на обработку персональных данных (152-ФЗ). Опционально
   // — у пользователей, созданных до введения этого поля, будет undefined.
@@ -279,6 +283,7 @@ export interface ScheduledLesson {
   durationMin: number;
   topic: string | null;
   status: LessonStatus;
+  archivedAt?: string | null;
   seriesId: string | null; // не null — занятие из еженедельной серии
   /** групповое занятие: у строк всех учеников одного занятия общий groupLessonId */
   groupId: string | null;

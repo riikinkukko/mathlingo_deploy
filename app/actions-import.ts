@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
@@ -84,16 +84,19 @@ export async function resetStudentPasswordAction(_prev: ResetPasswordState, form
   if (!teacher || teacher.role !== "TEACHER") return { error: "Доступ запрещён" };
   const studentId = String(formData.get("studentId") || "");
   const [st] = await db
-    .select({ id: schema.users.id, email: schema.users.email, teacherId: schema.users.teacherId })
+    .select({ id: schema.users.id, email: schema.users.email, linkVersion: schema.users.teacherLinkVersion })
     .from(schema.users)
-    .where(eq(schema.users.id, studentId))
+    .where(and(eq(schema.users.id, studentId), eq(schema.users.role, "STUDENT"), eq(schema.users.teacherId, teacher.id)))
     .limit(1);
-  if (!st || st.teacherId !== teacher.id) return { error: "Ученик не найден" };
+  if (!st) return { error: "Ученик не найден" };
   if (!isLoginOnlyEmail(st.email)) return { error: "Ученик входит по email — пусть нажмёт «Забыли пароль?» на странице входа." };
   const password = generatePassword();
-  await db
-    .update(schema.users)
+  const [updated] = await db.update(schema.users)
     .set({ passwordHash: await hashPassword(password), passwordChangedAt: new Date() })
-    .where(eq(schema.users.id, st.id));
+    .where(and(eq(schema.users.id, st.id), eq(schema.users.role, "STUDENT"), eq(schema.users.teacherId, teacher.id),
+      eq(schema.users.teacherLinkVersion, st.linkVersion), eq(schema.users.independentCredentials, false),
+      eq(schema.users.credentialHandoffPending, false)))
+    .returning({ id: schema.users.id });
+  if (!updated) return { error: "Связь изменилась или ученик уже задал свой пароль." };
   return { login: displayLogin(st.email), password };
 }

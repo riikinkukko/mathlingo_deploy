@@ -1,3 +1,4 @@
+import { readBoundTelegramCallback } from "../../lib/telegram-binding";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { eq, sql } from "drizzle-orm";
@@ -91,9 +92,10 @@ test("Telegram: одно сообщение на групповое заняти
     assert.equal(msgs.length, 1, "одно сообщение на группу");
     assert.match(msgs[0].body.text, /11Б/);
     assert.match(msgs[0].body.text, /Анна, Борис/);
-    assert.equal(msgs[0].body.reply_markup.inline_keyboard[0][0].callback_data, `lg:d:${gl}`);
+    const callback = msgs[0].body.reply_markup.inline_keyboard[0][0].callback_data;
+    assert.equal(readBoundTelegramCallback(callback, t.telegramBindingVersion!), `lg:d:${gl}`);
 
-    await handleCallbackQuery({ id: "cq", data: `lg:d:${gl}`, message: { chat: { id: 777 }, message_id: 1 } });
+    await handleCallbackQuery({ id: "cq", data: callback, message: { chat: { id: 777 }, message_id: 1 } });
     const st = await db.select({ s: schema.scheduledLessons.status }).from(schema.scheduledLessons).where(eq(schema.scheduledLessons.groupLessonId, gl));
     assert.deepEqual(st.map((r) => r.s), ["done", "done"]);
   } finally {

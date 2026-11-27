@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
-import { getUserById, pushNotification } from "@/lib/queries";
+import { pushNotification } from "@/lib/queries";
 import { excerpt, performAskTeacher } from "@/lib/questions-core";
+import { lockTeacherStudents, teacherLinkFor } from "@/lib/student-links";
 
 /** «Не понял — спросить репетитора» из задачи (логика — lib/questions-core.ts). */
 export async function askTeacherAction(
@@ -38,21 +39,25 @@ export async function answerQuestionAction(_prev: AnswerQuestionState, formData:
   const q = rows[0];
   if (!q || q.teacherId !== teacher.id) return { error: "Вопрос не найден" };
 
-  await db
-    .update(schema.studentQuestions)
-    .set({ answer, answeredAt: new Date() })
-    .where(eq(schema.studentQuestions.id, id));
-
-  const student = await getUserById(q.studentId);
-  if (student) {
-    await pushNotification(db, {
-      userId: student.id,
+  const changed = await db.transaction(async (tx) => {
+    if (!(await lockTeacherStudents(tx, teacher.id, [q.studentId])).length) return false;
+    const [updated] = await tx
+      .update(schema.studentQuestions)
+      .set({ answer, answeredAt: new Date() })
+      .where(and(eq(schema.studentQuestions.id, id), eq(schema.studentQuestions.teacherId, teacher.id)))
+      .returning({ id: schema.studentQuestions.id });
+    if (!updated) return false;
+    await pushNotification(tx, {
+      userId: q.studentId,
+      teacherLink: await teacherLinkFor(tx, q.studentId, teacher.id),
       type: "question_answered",
       title: `${teacher.name} ответил(а) на вопрос`,
       body: excerpt(answer, 200),
       link: `/student/questions#${id}`,
     });
-  }
+    return true;
+  });
+  if (!changed) return { error: "Вопрос не найден" };
   revalidatePath("/teacher/questions");
   revalidatePath("/teacher");
   revalidatePath("/student/questions");

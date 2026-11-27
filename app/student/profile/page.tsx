@@ -27,6 +27,8 @@ import { MAX_FREEZES, FREEZE_EVERY_DAYS, computeBestStreak } from "@/lib/streak"
 import { logoutAction, logoutEverywhereAction } from "@/app/actions";
 import DeleteAccountSection from "@/components/DeleteAccountSection";
 import VerifyEmailReminder from "@/components/VerifyEmailReminder";
+import StudentCredentialHandoff from "@/components/StudentCredentialHandoff";
+import { isLoginOnlyEmail } from "@/lib/email";
 import StudentShell from "@/components/StudentShell";
 import Mascot from "@/components/Mascot";
 import { IconCrown } from "@/components/icons";
@@ -68,10 +70,10 @@ export default async function ProfilePage(
   // по ссылке браузером. Код генерируется заново при каждом заходе на
   // профиль, пока Telegram не подключён — старый код от предыдущего
   // визита просто перезаписывается, это не проблема (он одноразовый).
-  const telegramLinkUrl =
-    !user.telegramChatId && isTelegramConfigured()
-      ? buildTelegramLinkUrl(await generateTelegramLinkCode(user.id))
-      : null;
+  const telegramCode = !user.telegramChatId && isTelegramConfigured()
+    ? await generateTelegramLinkCode(user.id, user.passwordHash)
+    : null;
+  const telegramLinkUrl = telegramCode ? buildTelegramLinkUrl(telegramCode) : null;
 
   const standalone = isStandaloneStudent(user);
   const pro = standalone && isEffectivelyPro(user);
@@ -152,6 +154,7 @@ export default async function ProfilePage(
         />
         {/* Прогресс к экзамену: цель и пробники, неделя, карта номеров ЕГЭ. */}
         {(user.targetScore || mocks.length > 0) && <GoalCard targetScore={user.targetScore} mocks={mocks} readOnly />}
+        {!user.independentCredentials && !user.credentialHandoffPending && <StudentCredentialHandoff />}
         <section className="mb-4 rounded-[20px] border border-line-soft bg-white p-4">
           <div className="flex items-baseline justify-between">
             <h2 className="font-display text-[16px] font-black text-ink">Эта неделя</h2>

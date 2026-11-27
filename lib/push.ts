@@ -1,10 +1,11 @@
+import { providerSignal, type StudentLinkTransaction } from "./student-links";
 /**
  * Push-уведомления в мобильное приложение через Expo Push Service
  * (https://docs.expo.dev/push-notifications/sending-notifications/).
  * Expo сам доставляет через FCM (Android) и APNs (iOS). Ошибки доставки не
  * ломают основное действие: отправка — фоном, с логированием.
  */
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
 
@@ -15,12 +16,18 @@ export function isExpoPushToken(token: unknown): token is string {
   return typeof token === "string" && token.length < 200 && TOKEN_RE.test(token);
 }
 
-export async function savePushToken(userId: string, token: string, platform: string) {
+export async function savePushToken(userId: string, token: string, platform: string, authenticatedPasswordHash?: string) {
   const p = platform === "ios" ? "ios" : "android";
-  await db
-    .insert(schema.pushTokens)
-    .values({ token, userId, platform: p })
-    .onConflictDoUpdate({ target: schema.pushTokens.token, set: { userId, platform: p, lastSeenAt: new Date() } });
+  return db.transaction(async (tx) => {
+    const [account] = await tx.select({ id: schema.users.id }).from(schema.users)
+      .where(and(eq(schema.users.id, userId),
+        authenticatedPasswordHash === undefined ? undefined : eq(schema.users.passwordHash, authenticatedPasswordHash)))
+      .for("update");
+    if (!account) return false;
+    await tx.insert(schema.pushTokens).values({ token, userId, platform: p })
+      .onConflictDoUpdate({ target: schema.pushTokens.token, set: { userId, platform: p, lastSeenAt: new Date() } });
+    return true;
+  });
 }
 
 export async function deletePushToken(userId: string, token: string) {
@@ -37,11 +44,12 @@ interface ExpoTicket {
 /** Отправить push на все устройства пользователя. Никогда не бросает; true — Expo принял хотя бы одно. */
 export async function sendPushToUser(
   userId: string,
-  msg: { title: string; body: string; link?: string }
+  msg: { title: string; body: string; link?: string },
+  connection: StudentLinkTransaction | typeof db = db
 ): Promise<boolean> {
   if (process.env.PUSH_DISABLED === "1") return false;
   try {
-    const tokens = await db.select().from(schema.pushTokens).where(eq(schema.pushTokens.userId, userId));
+    const tokens = await connection.select().from(schema.pushTokens).where(eq(schema.pushTokens.userId, userId));
     if (tokens.length === 0) return false;
     const messages = tokens.map((t) => ({
       to: t.token,
@@ -55,7 +63,7 @@ export async function sendPushToUser(
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(messages),
-      signal: AbortSignal.timeout(8000),
+      signal: providerSignal(AbortSignal.timeout(8000)),
     });
     if (!res.ok) {
       console.error("[push] Expo ответил", res.status);
@@ -65,7 +73,7 @@ export async function sendPushToUser(
     const dead = (json.data ?? [])
       .map((ticket, i) => (ticket.details?.error === "DeviceNotRegistered" ? tokens[i]?.token : null))
       .filter((t): t is string => !!t);
-    if (dead.length) await db.delete(schema.pushTokens).where(inArray(schema.pushTokens.token, dead));
+    if (dead.length) await connection.delete(schema.pushTokens).where(inArray(schema.pushTokens.token, dead));
     return (json.data ?? []).some((t) => t.status === "ok");
   } catch (e) {
     console.error("[push] не удалось отправить:", e);

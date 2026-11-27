@@ -41,8 +41,9 @@ test("ссылка входа на сайт: только относительн
   assert.equal(safeNext("https://evil.com"), "/");
   assert.equal(safeNext("/\\evil.com"), "/");
   const u = await makeUser();
-  const id = await createWebLink(u.id, "/student/profile");
-  assert.deepEqual(await consumeWebLink(id), { userId: u.id, next: "/student/profile" });
+  const createdAt = new Date();
+  const id = await createWebLink(u.id, "/student/profile", createdAt);
+  assert.deepEqual(await consumeWebLink(id), { userId: u.id, next: "/student/profile", createdAt });
   assert.equal(await consumeWebLink(id), null);
   const old = await createWebLink(u.id, "/");
   await db.update(schema.appLoginTokens).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(schema.appLoginTokens.id, old));

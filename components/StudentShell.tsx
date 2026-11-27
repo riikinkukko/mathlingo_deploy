@@ -55,7 +55,8 @@ export default async function StudentShell({
   const standalone = isStandaloneStudent(user);
   const energy = standalone ? Math.floor(getEffectiveEnergy(user)) : null;
   const isPro = !standalone || isEffectivelyPro(user);
-  const homeworkLabel = standalone ? "Пробники" : "Домашка";
+  const onlyMockTab = standalone && !allHw.some((hw) => hw.studentId === user.id);
+  const homeworkLabel = onlyMockTab ? "Пробники" : "Домашка";
 
   return (
     <div className="min-h-screen bg-paper">
@@ -90,7 +91,7 @@ export default async function StudentShell({
         isPro={isPro}
         notifications={notifications}
         unreadCount={unreadCount}
-        standalone={standalone}
+        standalone={onlyMockTab}
       />
 
       <div className="pb-24 lg:ml-[236px] lg:pb-8">
@@ -111,7 +112,7 @@ export default async function StudentShell({
         reviewCount={dueReviewCount}
         mistakesCount={unresolvedMistakesCount}
         homeworkLabel={homeworkLabel}
-        standalone={standalone}
+        standalone={onlyMockTab}
       />
     </div>
   );

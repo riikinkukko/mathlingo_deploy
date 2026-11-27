@@ -44,8 +44,12 @@ export async function attempt(studentId: string, problemId: string, isCorrect: b
 
 /** Стирает всё, что создали тесты этого запуска. */
 export async function cleanup() {
-  await db.execute(sql`delete from homeworks where id like ${`th_${RUN}_%`}`);
-  await db.execute(sql`delete from users where id like ${`t_${RUN}_%`}`);
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`delete from homeworks where id like ${`th_${RUN}_%`}`);
+    await tx.execute(sql`delete from student_unlinks where student_id like ${`t_${RUN}_%`}`);
+    await tx.execute(sql`SET LOCAL planimetrika.allow_student_account_delete = 'approved'`);
+    await tx.execute(sql`delete from users where id like ${`t_${RUN}_%`}`);
+  });
   // Закрываем пул соединений, иначе процесс теста ждёт ~10 с до таймаута простоя.
   await (globalThis as { __pgPool?: { end(): Promise<void> } }).__pgPool?.end();
 }

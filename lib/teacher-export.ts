@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getStudentBalances, getStudentsOfTeacher, homeworkStatus, mapHomework } from "@/lib/queries";
@@ -39,15 +39,23 @@ export async function buildTeacherExport(teacher: User): Promise<Buffer> {
     db.select().from(schema.scheduledLessons).where(eq(schema.scheduledLessons.teacherId, tid)).orderBy(desc(schema.scheduledLessons.startsAt)),
     db.select().from(schema.studentPayments).where(eq(schema.studentPayments.teacherId, tid)).orderBy(desc(schema.studentPayments.paidAt)),
     db.select().from(schema.lessonLogs).where(eq(schema.lessonLogs.teacherId, tid)).orderBy(desc(schema.lessonLogs.date)),
-    db.select().from(schema.mockScores).where(eq(schema.mockScores.teacherId, tid)).orderBy(desc(schema.mockScores.takenAt)),
-    db.select().from(schema.homeworks).where(eq(schema.homeworks.teacherId, tid)).orderBy(desc(schema.homeworks.createdAt)).limit(500),
+    db.select({ score: schema.mockScores }).from(schema.mockScores)
+      .innerJoin(schema.users, eq(schema.users.id, schema.mockScores.studentId))
+      .where(and(eq(schema.mockScores.teacherId, tid), eq(schema.users.teacherId, tid)))
+      .orderBy(desc(schema.mockScores.takenAt)).then((rows) => rows.map(({ score }) => score)),
+    db.select({ hw: schema.homeworks }).from(schema.homeworks)
+      .innerJoin(schema.users, eq(schema.users.id, schema.homeworks.studentId))
+      .where(and(eq(schema.homeworks.teacherId, tid), eq(schema.users.teacherId, tid)))
+      .orderBy(desc(schema.homeworks.createdAt)).limit(500).then((rows) => rows.map(({ hw }) => hw)),
   ]);
   const name = new Map(students.map((s) => [s.id, s.name]));
   const bal = new Map(balances.map((b) => [b.studentId, b]));
   const groupName = new Map(groups.map((g) => [g.id, g.name]));
-  const notes = await db.select().from(schema.studentNotes).where(and(eq(schema.studentNotes.teacherId, tid)));
+  const notes = students.length ? await db.select().from(schema.studentNotes).where(and(
+    eq(schema.studentNotes.teacherId, tid), inArray(schema.studentNotes.studentId, students.map((s) => s.id))
+  )) : [];
   const noteOf = new Map(notes.map((n) => [n.studentId, n.notes]));
-  const nm = (id: string | null) => (id ? name.get(id) ?? "(ученик удалён из списка)" : "");
+  const nm = (id: string | null) => (id ? name.get(id) ?? "(бывший ученик)" : "");
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Планиметрика";

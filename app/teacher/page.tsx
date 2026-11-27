@@ -29,8 +29,9 @@ export default async function TeacherDashboard(props: { searchParams: Promise<{ 
   const user = (await getSessionUser())!;
   // ?done=<id> — только что нажали «Было» в карточке «Сегодня»: предлагаем отчёт.
   const doneLesson = searchParams.done ? await getScheduledLessonById(searchParams.done) : undefined;
-  const showDone = doneLesson && doneLesson.teacherId === user.id && doneLesson.status === "done";
   const students = await getStudentsOfTeacher(user.id);
+  const showDone = doneLesson && doneLesson.teacherId === user.id && !doneLesson.archivedAt &&
+    doneLesson.status === "done" && students.some((student) => student.id === doneLesson.studentId);
   const isOwner = !!user.isPlatformOwner;
   const isPro = isTeacherEffectivelyPro(user);
   const plan = teacherPlanState(user);

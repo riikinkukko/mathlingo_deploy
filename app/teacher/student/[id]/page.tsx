@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 import StudentLoginCard from "@/components/StudentLoginCard";
 import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
 import SaveTemplateButton from "@/components/SaveTemplateButton";
@@ -56,7 +57,7 @@ import { buildReportDraft, getUnreportedLessons } from "@/lib/lesson-report";
 import PendingReviewCard from "./PendingReviewCard";
 import { toReviewItem } from "@/lib/review-item";
 import ScrollIntoViewOnMount from "@/components/teacher/ScrollIntoViewOnMount";
-import DeleteStudentButton from "./DeleteStudentButton";
+import UnlinkStudentButton from "./UnlinkStudentButton";
 import { listMockAttempts } from "@/lib/mock-queries";
 import { MOCK_MODES, isMockMode } from "@/lib/mock-exam";
 
@@ -85,6 +86,10 @@ export default async function StudentDetailPage(
 ) {
   const searchParams = await props.searchParams;
   const params = await props.params;
+  return withReadSnapshot(() => readStudentCard(searchParams, params));
+}
+
+async function readStudentCard(searchParams: Awaited<Parameters<typeof StudentDetailPage>[0]["searchParams"]>, params: Awaited<Parameters<typeof StudentDetailPage>[0]["params"]>) {
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
   if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
@@ -181,7 +186,7 @@ export default async function StudentDetailPage(
   const reviewItems = pendingReviews.map((r) => toReviewItem(r));
   const assignedCount = Number(searchParams.quick) > 0 ? Number(searchParams.quick) : Number(searchParams.assigned) || 0;
 
-  const parentsAndDelete = (
+  const parentsAndUnlink = (
     <>
         <section id="parents" className="scroll-mt-24">
           <h2 className="mb-3 font-display text-lg font-black text-ink">Родители</h2>
@@ -205,12 +210,14 @@ export default async function StudentDetailPage(
         <section className="mt-8 border-t border-line-soft pt-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-bold text-ink">Удаление ученика</p>
+              <p className="text-sm font-bold text-ink">Связь с учеником</p>
               <p className="mt-0.5 text-xs text-ink-soft">
-                Если ученик перестал заниматься — удалите его, чтобы освободить место. Действие необратимо.
+                Отвязка освобождает место в списке. Аккаунт, прогресс и задания останутся у ученика.
               </p>
             </div>
-            <DeleteStudentButton studentId={student.id} studentName={student.name} />
+            {student.teacherLinkVersion && (
+              <UnlinkStudentButton studentId={student.id} studentName={student.name} linkVersion={student.teacherLinkVersion} />
+            )}
           </div>
         </section>
     </>
@@ -306,7 +313,9 @@ export default async function StudentDetailPage(
         )}
 
         {tab === "overview" && (
-          <StudentLoginCard studentId={student.id} name={student.name} login={displayLogin(student.email)} loginOnly={isLoginOnlyEmail(student.email)} />
+          <StudentLoginCard studentId={student.id} name={student.name} login={displayLogin(student.email)}
+            loginOnly={isLoginOnlyEmail(student.email)}
+            studentManagesPassword={student.independentCredentials || student.credentialHandoffPending} />
         )}
 
         {tab === "lessons" && (<>
@@ -383,7 +392,7 @@ export default async function StudentDetailPage(
               </CollapsibleSection>
             </div>
             <div className="order-7 lg:order-none">
-              {parentsAndDelete}
+              {parentsAndUnlink}
             </div>
           </div>
           <div className="contents lg:block">

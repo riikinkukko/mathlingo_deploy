@@ -25,13 +25,12 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     .limit(1);
   // Эксперт платформы видит фото только у оплаченных платных проверок.
   const allowed =
-    !!row && (row.studentId === user.id || row.teacherId === user.id || (isReviewer(user) && !!(await getPaidOrderForAttempt(params.id))));
+    !!row && (row.studentId === user.id || (user.role === "TEACHER" && row.teacherId === user.id) || (isReviewer(user) && !!(await getPaidOrderForAttempt(params.id))));
   if (!row || !allowed) return new NextResponse("Не найдено", { status: 404 });
   const src = markup ? row.annotated : row.data;
   const m = src ? /^data:(image\/(?:jpeg|png));base64,(.+)$/.exec(src) : null;
   if (!m) return new NextResponse("Не найдено", { status: 404 });
   return new NextResponse(Buffer.from(m[2], "base64"), {
-    // Разметку репетитор может переделать при повторной проверке — не кэшируем надолго.
-    headers: { "Content-Type": m[1], "Cache-Control": markup ? "private, no-cache" : "private, max-age=86400" },
+    headers: { "Content-Type": m[1], "Cache-Control": "private, no-store" },
   });
 }

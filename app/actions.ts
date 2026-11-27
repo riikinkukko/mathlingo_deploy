@@ -1,15 +1,17 @@
 "use server";
 
+
 import { getTemplate, saveTemplate } from "@/lib/templates";
 import { onAttemptReviewed } from "@/lib/mock-queries";
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
-import { eq, and, inArray, isNotNull } from "drizzle-orm";
+import { eq, and, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import {
+  passwordCredentialVersion,
   createSessionToken,
   setSessionCookie,
   clearSessionCookie,
@@ -40,12 +42,14 @@ import {
   clearLoginFailures,
   isAuthEmailRateLimited,
 } from "@/lib/queries";
+import { confirmParentAccess } from "@/lib/parent-access";
+import { completeStudentSignup, redeemStudentHandoff } from "@/lib/student-credential-handoff";
 import { performSubmitAttempt, performRevealSolution } from "@/lib/actions-core";
 import { checkRegistrationEmail, clientIpFromHeaders, passwordLogin, registerStudent } from "@/lib/auth-flows";
 import { sendVerificationEmail, sendPasswordResetEmail } from "@/lib/email";
 import { isDisposableEmail, isValidEmailFormat } from "@/lib/email-rules";
 import { isYooKassaConfigured } from "@/lib/yookassa";
-import { generatePassword } from "@/lib/secure-random";
+import { generatePassword, secureToken } from "@/lib/secure-random";
 
 /** Реальный IP клиента (заголовки nginx) — см. lib/auth-flows.ts. */
 async function getClientIp(): Promise<string> {
@@ -58,7 +62,7 @@ import { mskEndOfDay } from "@/lib/lesson-time";
 import { createLessonReport } from "@/lib/lesson-report";
 import { recordSignupSource } from "@/lib/signup-source";
 import { ownTaskPhotoIds } from "@/lib/task-photos";
-import { displayLogin } from "@/lib/email";
+import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
 import { createStudentForTeacher, parseGrade, parsePrice } from "@/lib/student-accounts";
 import { getPaidOrderForAttempt, isReviewer, markReviewOrderDone } from "@/lib/paid-review";
 import { TOPIC_COOKIE } from "@/lib/topic-cookie";
@@ -67,6 +71,7 @@ import { checkPromo, findTeacherByReferral, redeemDaysPromo, PROMO_COOKIE } from
 import { isTeacherPaidActive, teacherPlanState, TEACHER_TRIAL_DAYS } from "@/lib/teacher-plan";
 import { maxPointsForTask, parseReviewScore, resolveDecision, scoreLabel } from "@/lib/ege-points";
 import { createTeacherInvite, cancelTeacherInvite, respondToTeacherInvite, studentLimitError, needsEmailForMoreStudents, EMAIL_FOR_MORE_STUDENTS_TEXT } from "@/lib/teacher-invites";
+import { lockStudent, lockTeacherStudents, teacherLinkFor, unlinkStudent } from "@/lib/student-links";
 
 /** Принадлежит ли ученик этому репетитору. Все экшены репетитора, которые
  * принимают studentId из формы, обязаны это проверять сами: серверный экшен
@@ -82,7 +87,7 @@ async function isOwnStudent(teacherId: string, studentId: string): Promise<boole
 export async function loginAction(_prevState: unknown, formData: FormData) {
   const res = await passwordLogin(formData.get("email"), formData.get("password"), await getClientIp());
   if ("error" in res) return { error: res.error };
-  const token = await createSessionToken(res.user.id, res.user.role);
+  const token = await createSessionToken(res.user.id, res.user.role, res.authenticatedAt, passwordCredentialVersion(res.user.passwordHash));
   await setSessionCookie(token);
   redirect(`/${res.user.role.toLowerCase()}`);
 }
@@ -189,30 +194,32 @@ export async function reviewAttemptAction(
   // Пометки сохраняем только к уже приложенному фото (своё фото репетитор не подставит).
   const marked = cleanImageDataUrl(markup);
   if (markup && !marked) return { error: "Пометки не сохранились: слишком большое фото. Попробуйте ещё раз." };
-  await db
-    .update(schema.attempts)
-    .set({
-      reviewStatus: decision,
-      isCorrect: decision === "approved",
-      teacherFeedback: feedback || null,
-      reviewScore,
-    })
-    .where(eq(schema.attempts.id, attemptId));
+  const saved = await db.transaction(async (tx) => {
+    if (!paidOrder && !(await lockTeacherStudents(tx, teacher.id, [attempt.studentId])).length) return false;
+    const [updated] = await tx.update(schema.attempts)
+      .set({
+        reviewStatus: decision,
+        isCorrect: decision === "approved",
+        teacherFeedback: feedback || null,
+        reviewScore,
+      })
+      .where(eq(schema.attempts.id, attemptId)).returning({ id: schema.attempts.id });
+    if (!updated) return false;
 
-  if (marked) {
-    await db
-      .update(schema.attemptImages)
-      .set({ annotated: marked })
-      .where(eq(schema.attemptImages.attemptId, attemptId));
-  }
+    if (marked) {
+      await tx
+        .update(schema.attemptImages)
+        .set({ annotated: marked })
+        .where(eq(schema.attemptImages.attemptId, attemptId));
+    }
 
-  if (paidOrder) await markReviewOrderDone(paidOrder.id);
-  // Решение из пробника: пересчитать баллы варианта, ссылка — на его разбор.
-  const mockId = attempt.source === "mock" ? await onAttemptReviewed(attemptId) : null;
+    if (paidOrder) await markReviewOrderDone(paidOrder.id, tx);
+    // Решение из пробника: пересчитать баллы варианта, ссылка — на его разбор.
+    const mockId = attempt.source === "mock" ? await onAttemptReviewed(attemptId, tx) : null;
 
-  await db.transaction(async (tx) => {
     await pushNotification(tx, {
       userId: attempt.studentId,
+      teacherLink: paidOrder ? undefined : await teacherLinkFor(tx, attempt.studentId, teacher.id),
       type: "review_decided",
       title: paidOrder
         ? decision === "approved"
@@ -230,7 +237,7 @@ export async function reviewAttemptAction(
     if (decision === "approved" && attempt.source === "lesson" && problem?.skillId) {
       const skillProblems = await getProblemsForSkill(problem.skillId);
       const skillProblemIds = new Set(skillProblems.map((p) => p.id));
-      const lessonCorrect = await db
+      const lessonCorrect = await tx
         .select({ problemId: schema.attempts.problemId })
         .from(schema.attempts)
         .where(
@@ -244,7 +251,7 @@ export async function reviewAttemptAction(
         lessonCorrect.filter((a) => skillProblemIds.has(a.problemId)).map((a) => a.problemId)
       );
       if (solvedIds.size === skillProblems.length && skillProblems.length > 0) {
-        const parentLinks = await db
+        const parentLinks = await tx
           .select()
           .from(schema.parentLinks)
           .where(eq(schema.parentLinks.studentId, attempt.studentId));
@@ -260,7 +267,9 @@ export async function reviewAttemptAction(
         }
       }
     }
+    return true;
   });
+  if (!saved) return { error: "Доступ запрещён" };
 
   revalidatePath("/teacher");
   revalidatePath("/teacher/reviews");
@@ -378,26 +387,25 @@ export async function cancelTeacherInviteAction(formData: FormData) {
   revalidatePath("/teacher");
 }
 
-export async function deleteStudentAction(formData: FormData) {
+async function unlinkStudentFromForm(formData: FormData, legacy: boolean) {
   const teacher = await getSessionUser();
   const studentId = String(formData.get("studentId") || "");
-
-  if (!teacher || teacher.role !== "TEACHER") {
-    redirect(`/teacher/student/${studentId}?error=1`);
+  const result = await unlinkStudent(teacher ?? null, studentId, String(formData.get("linkVersion") || ""), legacy);
+  if (!result.ok) return { error: result.error };
+  if (result.changed) {
+    revalidatePath("/teacher", "layout");
+    revalidatePath("/student", "layout");
+    revalidatePath("/parent", "layout");
   }
-  // Удалять можно только СВОЕГО ученика.
-  if (!(await isOwnStudent(teacher.id, studentId))) {
-    redirect(`/teacher/student/${studentId}?error=1`);
-  }
+  redirect(legacy ? "/teacher?ok=student_deleted" : "/teacher?ok=student_unlinked");
+}
 
-  // Все связанные данные (попытки, ДЗ, журнал, расписание, SRS, уведомления,
-  // привязки родителей, платежи) удаляются каскадно по внешним ключам
-  // (onDelete: "cascade"). Аккаунты родителей при этом остаются — они могут
-  // быть привязаны и к другим ученикам.
-  await db.delete(schema.users).where(eq(schema.users.id, studentId));
+export async function unlinkStudentAction(_state: { error?: string }, formData: FormData) {
+  return unlinkStudentFromForm(formData, false);
+}
 
-  revalidatePath("/teacher");
-  redirect("/teacher?ok=student_deleted");
+export async function legacyMobileUnlinkStudentAction(formData: FormData) {
+  return unlinkStudentFromForm(formData, true);
 }
 
 export async function addParentLinkAction(_prevState: unknown, formData: FormData) {
@@ -407,7 +415,6 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   const studentId = String(formData.get("studentId") || "");
   const name = String(formData.get("name") || "").trim().slice(0, 80);
   const email = String(formData.get("email") || "").trim().toLowerCase().slice(0, 254);
-  const password = String(formData.get("password") || "").trim().slice(0, 100) || generatePassword();
   const consent = formData.get("consent");
 
   if (!name || !email || !studentId) return { error: "Заполните все поля" };
@@ -418,56 +425,55 @@ export async function addParentLinkAction(_prevState: unknown, formData: FormDat
   // Родителя можно привязать только к СВОЕМУ ученику. Без этой проверки любой
   // репетитор мог создать "родителя" для чужого ученика и через его кабинет
   // видеть все данные этого ученика.
-  const student = await getUserById(studentId);
-  if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
-    return { error: "Ученик не найден" };
-  }
+  const passwordHash = await hashPassword(secureToken());
+  const result = await db.transaction(async (tx) => {
+    const student = await lockStudent(tx, studentId);
+    if (student?.teacherId !== teacher.id) return { error: "Ученик не найден" };
 
-  let parent = await getUserByEmail(email);
-  let existingParent = false;
-  if (parent) {
-    // Существующий кабинет родителя можно привязать, только если этот родитель
-    // уже привязан к другому ВАШЕМУ ученику (брат/сестра у того же репетитора).
-    // Иначе любой репетитор мог бы «присвоить» чужого родителя и слать ему
-    // сообщения от имени сервиса.
-    const sibling =
-      parent.role === "PARENT"
-        ? await db
-            .select({ id: schema.users.id })
-            .from(schema.parentLinks)
-            .innerJoin(schema.users, eq(schema.users.id, schema.parentLinks.studentId))
-            .where(and(eq(schema.parentLinks.parentId, parent.id), eq(schema.users.teacherId, teacher.id)))
-            .limit(1)
-        : [];
-    if (sibling.length === 0) {
-      return { error: "Этот email уже используется в сервисе. Укажите другой email родителя." };
+    let [parent] = await tx.select({ id: schema.users.id, role: schema.users.role })
+      .from(schema.users).where(eq(schema.users.email, email));
+    if (parent) {
+      // Существующий кабинет родителя можно привязать, только если этот родитель
+      // уже привязан к другому ВАШЕМУ ученику (брат/сестра у того же репетитора).
+      // Иначе любой репетитор мог бы «присвоить» чужого родителя и слать ему
+      // сообщения от имени сервиса.
+      const sibling =
+        parent.role === "PARENT"
+          ? await tx
+              .select({ id: schema.users.id })
+              .from(schema.parentLinkRequests)
+              .innerJoin(schema.users, eq(schema.users.id, schema.parentLinkRequests.studentId))
+              .where(and(eq(schema.parentLinkRequests.parentId, parent.id), eq(schema.users.teacherId, teacher.id)))
+              .limit(1)
+          : [];
+      if (sibling.length === 0) {
+        return { error: "Этот email уже используется в сервисе. Укажите другой email родителя." };
+      }
     }
-    existingParent = true;
-  }
-  if (!parent) {
-    const id = genId("u");
-    await db.insert(schema.users).values({
-      id,
-      name,
-      email,
-      passwordHash: await hashPassword(password),
-      role: "PARENT",
-      consentGivenAt: new Date(),
-    });
-    parent = { id, name, email, passwordHash: "", role: "PARENT", isAdmin: false, createdAt: new Date().toISOString() };
-  }
+    if (!parent) {
+      const id = genId("u");
+      await tx.insert(schema.users).values({
+        id,
+        name,
+        email,
+        passwordHash,
+        role: "PARENT",
+      });
+      parent = { id, role: "PARENT" };
+    }
 
-  const alreadyLinked = await db
-    .select()
-    .from(schema.parentLinks)
-    .where(and(eq(schema.parentLinks.parentId, parent.id), eq(schema.parentLinks.studentId, studentId)))
-    .limit(1);
-  if (alreadyLinked.length === 0) {
-    await db.insert(schema.parentLinks).values({ parentId: parent.id, studentId });
-  }
-  revalidatePath(`/teacher/student/${studentId}`);
-  // У уже существующего родителя пароль прежний — новый не показываем.
-  return { success: true, password: existingParent ? undefined : password };
+    const alreadyLinked = await tx
+      .select()
+      .from(schema.parentLinkRequests)
+      .where(and(eq(schema.parentLinkRequests.parentId, parent.id), eq(schema.parentLinkRequests.studentId, studentId)))
+      .limit(1);
+    if (alreadyLinked.length === 0) {
+      await tx.insert(schema.parentLinkRequests).values({ parentId: parent.id, studentId }).onConflictDoNothing();
+    }
+    return { success: true };
+  });
+  if (result.success) revalidatePath(`/teacher/student/${studentId}`);
+  return result;
 }
 
 export async function createHomeworkAction(formData: FormData) {
@@ -500,7 +506,7 @@ export async function createHomeworkAction(formData: FormData) {
   if (groupId ? !group || group.members.length === 0 : !(await isOwnStudent(teacher.id, studentId))) {
     redirect(errBack("access"));
   }
-  const targetIds = group ? group.members.map((m) => m.id) : [studentId];
+  const candidates = group ? group.members.map((m) => m.id) : [studentId];
   const batchId = group ? genId("hb") : null;
 
   const title = String(formData.get("title") || "").trim().slice(0, 120);
@@ -579,7 +585,7 @@ export async function createHomeworkAction(formData: FormData) {
   if (problemIds.length === 0) redirect(errBack("noproblems"));
   if (!title) redirect(errBack("notitle"));
   if (!dueAt || isNaN(dueAt.getTime())) redirect(errBack("nodue"));
-  if (targetIds.length === 0) redirect(errBack("access"));
+  if (candidates.length === 0) redirect(errBack("access"));
 
   const KIND_LABEL: Record<string, string> = {
     homework: "Новое домашнее задание",
@@ -587,7 +593,9 @@ export async function createHomeworkAction(formData: FormData) {
     exam: "Назначен пробный экзамен",
   };
 
-  await db.transaction(async (tx) => {
+  const targetIds = await db.transaction(async (tx) => {
+    const active = await lockTeacherStudents(tx, teacher.id, candidates, group?.id);
+    if (!active.length) redirect(errBack("access"));
     for (let i = 0; i < drafts.length; i++) {
       const d = drafts[i];
       await tx.insert(schema.problems).values({
@@ -603,7 +611,7 @@ export async function createHomeworkAction(formData: FormData) {
       });
     }
 
-    for (const sid of targetIds) {
+    for (const sid of active) {
       await tx.insert(schema.homeworks).values({
         id: genId("h"),
         teacherId: teacher.id,
@@ -621,12 +629,14 @@ export async function createHomeworkAction(formData: FormData) {
 
       await pushNotification(tx, {
         userId: sid,
+        teacherLink: await teacherLinkFor(tx, sid, teacher.id),
         type: "assignment_created",
         title: KIND_LABEL[kind] ?? "Новое задание",
         body: title,
         link: `/student/homework`,
       });
     }
+    return active;
   });
 
   // «Сохранить как шаблон» — чтобы потом выдать то же задание другим в два клика.
@@ -897,14 +907,36 @@ export async function verifyEmailAction(token: string): Promise<{ success: boole
   return { success: true };
 }
 
+export async function confirmParentAccessAction(_state: { error?: string }, form: FormData) {
+  if (form.get("consent") !== "on" ||
+      !(await confirmParentAccess(String(form.get("token") ?? ""), String(form.get("password") ?? "")))) {
+    return { error: "Проверьте ссылку, согласие и выберите новый пароль от 8 символов." };
+  }
+  await clearSessionCookie();
+  redirect("/login");
+}
+
+export async function completeStudentSignupAction(_state: { error?: string }, formData: FormData) {
+  const code = String(formData.get("token") || "");
+  const password = String(formData.get("password") || "");
+  if (!(await completeStudentSignup(code, password))) {
+    return { error: "Ссылка недействительна или пароль не подходит. Задайте новый пароль от 8 символов, не длиннее 72 байт." };
+  }
+  await clearSessionCookie();
+  redirect("/login");
+}
+
 /** Для уже залогиненного пользователя, у которого email ещё не
  * подтверждён (например, письмо не дошло с первого раза) — кнопка
  * "отправить письмо ещё раз" в профиле. */
 export async function resendVerificationEmailAction() {
   const user = await getSessionUser();
   if (!user || user.emailVerifiedAt) return;
-  if (await isAuthEmailRateLimited(user.id, "email_verification")) return;
-  const token = await createAuthToken(user.id, "email_verification", 24 * 3600 * 1000);
+  const [signup] = user.role === "STUDENT" ? await db.select({ id: schema.authTokens.id }).from(schema.authTokens)
+    .where(and(eq(schema.authTokens.userId, user.id), eq(schema.authTokens.type, "student_signup_verification"))).limit(1) : [];
+  const kind = signup ? "student_signup_verification" : "email_verification";
+  if (await isAuthEmailRateLimited(user.id, kind)) return;
+  const token = await createAuthToken(user.id, kind, 24 * 3600 * 1000);
   await sendVerificationEmail(user.email, token).catch((e) =>
     console.error("Не удалось повторно отправить письмо верификации:", e)
   );
@@ -940,17 +972,43 @@ export async function resetPasswordAction(_prevState: unknown, formData: FormDat
     return { error: "Пароль должен быть не короче 6 символов" };
   }
 
-  const userId = await consumeAuthToken(token, "password_reset");
-  if (!userId) {
-    return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
-  }
+  const resetTokens = schema.authTokens;
+  const [candidate] = await db.select({ userId: resetTokens.userId }).from(resetTokens)
+    .where(and(eq(resetTokens.token, token), eq(resetTokens.type, "password_reset")));
+  if (!candidate) return { error: "Ссылка недействительна или уже была использована. Запросите сброс пароля ещё раз." };
+  const passwordHash = await hashPassword(password);
+  const changed = await db.transaction(async (tx) => {
+    const [account] = await tx.select().from(schema.users)
+      .where(eq(schema.users.id, candidate.userId)).for("update");
+    if (!account) return null;
+    if (account.role === "STUDENT" && !account.independentCredentials &&
+      (Buffer.byteLength(password, "utf8") > 72 || await verifyPassword(password, account.passwordHash))) {
+      return null;
+    }
+    const [claimed] = await tx.update(resetTokens).set({ usedAt: sql`clock_timestamp()` }).where(and(
+      eq(resetTokens.token, token), eq(resetTokens.type, "password_reset"), eq(resetTokens.userId, account.id),
+      isNull(resetTokens.usedAt), gt(resetTokens.expiresAt, sql`clock_timestamp()`),
+    )).returning({ id: resetTokens.id });
+    if (!claimed) return null;
+    await tx.update(schema.users).set({
+      passwordHash, passwordChangedAt: sql`clock_timestamp()`, credentialHandoffPending: false,
+    }).where(eq(schema.users.id, account.id));
+    return account.email;
+  });
+  if (!changed) return { error: "Не удалось сменить пароль. Запросите новую ссылку и выберите новый пароль." };
+  await clearLoginFailures(changed);
+  redirect("/login");
+}
 
-  // passwordChangedAt — все сессии, открытые до сброса, перестают работать.
-  await db
-    .update(schema.users)
-    .set({ passwordHash: await hashPassword(password), passwordChangedAt: new Date() })
-    .where(eq(schema.users.id, userId));
-  const resetUser = await getUserById(userId);
-  if (resetUser) await clearLoginFailures(resetUser.email);
+export async function takeStudentCredentialsAction(_state: { error?: string }, formData: FormData) {
+  const user = await getSessionUser();
+  if (!user || user.role !== "STUDENT" || user.independentCredentials) return { error: "Передача доступа недоступна." };
+  const code = String(formData.get("handoffCode") || "").trim();
+  const password = String(formData.get("password") || "");
+  if (!(await redeemStudentHandoff(user.id, code, password))) {
+    return { error: "Проверьте одноразовый код и придумайте новый пароль от 8 символов, не длиннее 72 байт." };
+  }
+  await clearLoginFailures(user.email);
+  await clearSessionCookie();
   redirect("/login");
 }

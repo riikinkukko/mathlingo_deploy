@@ -5,7 +5,8 @@
 import { and, eq, isNull, ne, desc, sql } from "drizzle-orm";
 import { db } from "./db/client";
 import * as schema from "./db/schema";
-import { genId, getStudentsOfTeacher, getUserById, pushNotification } from "./queries";
+import { genId, mapUserRow, pushNotification } from "./queries";
+import { archiveTeacherStudentState, lockStudent } from "./student-links";
 import { teacherPlanState, TEACHER_TIERS } from "./teacher-plan";
 import { isEmailConfigured, sendTeacherInviteEmail } from "./email";
 import type { User } from "./types";
@@ -128,155 +129,113 @@ export async function getPendingInvitesForStudent(studentId: string): Promise<St
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
 }
 
-async function hasPendingInvite(teacherId: string, studentId: string): Promise<boolean> {
-  const rows = await db
-    .select({ id: schema.teacherInvites.id })
-    .from(schema.teacherInvites)
-    .where(
-      and(
-        eq(schema.teacherInvites.teacherId, teacherId),
-        eq(schema.teacherInvites.studentId, studentId),
-        eq(schema.teacherInvites.status, "pending")
-      )
-    )
-    .limit(1);
-  return rows.length > 0;
-}
-
-/**
- * Приглашает существующего самостоятельного ученика. Лимит тарифа и
- * подтверждение email репетитора проверяет вызывающий (addStudentAction).
- */
+/** Лимит тарифа и подтверждение email проверяет вызывающий. */
 export async function createTeacherInvite(
   teacher: User,
   student: User
 ): Promise<{ ok: true; inviteId: string } | { ok: false; code: string; message: string }> {
-  const check = inviteEligibility(student, teacher.id, await hasPendingInvite(teacher.id, student.id));
-  if (!check.ok) return check;
   const inviteId = genId("ti");
-  try {
-    await db.transaction(async (tx) => {
-      await tx.insert(schema.teacherInvites).values({ id: inviteId, teacherId: teacher.id, studentId: student.id });
-      await pushNotification(tx, {
-        userId: student.id,
-        type: "teacher_invite",
-        title: `Репетитор ${teacher.name} приглашает тебя заниматься вместе`,
-        body: "Прими приглашение на главной — весь твой прогресс сохранится.",
-        link: "/student",
-      });
+  const result = await db.transaction(async (tx) => {
+    const current = await lockStudent(tx, student.id);
+    if (!current) return { ok: false as const, code: "not_student", message: "Ученик не найден." };
+    const [pending] = await tx.select({ id: schema.teacherInvites.id }).from(schema.teacherInvites)
+      .where(and(eq(schema.teacherInvites.studentId, student.id), eq(schema.teacherInvites.teacherId, teacher.id),
+        eq(schema.teacherInvites.status, "pending"))).limit(1);
+    const check = inviteEligibility({ ...current, teacherId: current.teacherId ?? undefined }, teacher.id, !!pending);
+    if (!check.ok) return check;
+    await tx.insert(schema.teacherInvites).values({ id: inviteId, teacherId: teacher.id, studentId: student.id });
+    await pushNotification(tx, {
+      userId: student.id,
+      type: "teacher_invite",
+      title: `Репетитор ${teacher.name} приглашает тебя заниматься вместе`,
+      body: "Прими приглашение на главной — весь твой прогресс сохранится.",
+      link: "/student",
     });
-  } catch (e) {
-    // Гонка двух одинаковых запросов: уникальный индекс на ожидающее приглашение.
-    const err = e as { code?: string; cause?: { code?: string } };
-    if ((err?.code ?? err?.cause?.code) === "23505") {
-      const dup = inviteEligibility(student, teacher.id, true);
-      if (!dup.ok) return dup;
-    }
-    throw e;
-  }
+    return { ok: true as const };
+  });
+  if (!result.ok) return result;
   if (isEmailConfigured()) {
-    // Письмо — не повод ронять приглашение: ошибку SMTP только логируем.
     sendTeacherInviteEmail(student.email, teacher.name).catch((err) => console.error("teacher invite email:", err));
   }
   return { ok: true, inviteId };
 }
 
-/** Репетитор отзывает своё ожидающее приглашение. */
 export async function cancelTeacherInvite(teacherId: string, inviteId: string): Promise<boolean> {
-  const res = await db
-    .update(schema.teacherInvites)
-    .set({ status: "declined" })
-    .where(
-      and(
-        eq(schema.teacherInvites.id, inviteId),
-        eq(schema.teacherInvites.teacherId, teacherId),
-        eq(schema.teacherInvites.status, "pending")
-      )
-    )
-    .returning({ id: schema.teacherInvites.id });
-  return res.length > 0;
+  return db.transaction(async (tx) => {
+    const [invite] = await tx.select({ studentId: schema.teacherInvites.studentId }).from(schema.teacherInvites)
+      .where(and(eq(schema.teacherInvites.id, inviteId), eq(schema.teacherInvites.teacherId, teacherId)));
+    if (!invite || !(await lockStudent(tx, invite.studentId))) return false;
+    const updated = await tx.update(schema.teacherInvites).set({ status: "declined" }).where(and(
+      eq(schema.teacherInvites.id, inviteId), eq(schema.teacherInvites.teacherId, teacherId),
+      eq(schema.teacherInvites.status, "pending")
+    )).returning({ id: schema.teacherInvites.id });
+    return updated.length > 0;
+  });
 }
 
-/**
- * Ученик принимает или отклоняет приглашение. Только своё и только ожидающее.
- * Принятие: ученик без репетитора получает teacher_id, остальные его
- * ожидающие приглашения закрываются. Лимит тарифа репетитора проверяется
- * ещё раз — за время ожидания места могли закончиться.
- */
 export async function respondToTeacherInvite(
   studentId: string,
   inviteId: string,
   accept: boolean
 ): Promise<{ ok: true; teacherId: string } | { ok: false; message: string }> {
-  const [invite] = await db.select().from(schema.teacherInvites).where(eq(schema.teacherInvites.id, inviteId)).limit(1);
-  if (!invite || invite.studentId !== studentId || invite.status !== "pending") {
-    return { ok: false, message: "Приглашение не найдено или уже неактуально." };
-  }
-  const [student, teacher] = await Promise.all([getUserById(studentId), getUserById(invite.teacherId)]);
-  if (!student || student.role !== "STUDENT") return { ok: false, message: "Приглашение не найдено или уже неактуально." };
+  return db.transaction(async (tx) => {
+    const student = await lockStudent(tx, studentId);
+    const pending = and(eq(schema.teacherInvites.id, inviteId), eq(schema.teacherInvites.studentId, studentId),
+      eq(schema.teacherInvites.status, "pending"));
+    const [invite] = await tx.select().from(schema.teacherInvites).where(pending);
+    if (!student || !invite) return { ok: false, message: "Приглашение не найдено или уже неактуально." };
 
-  if (!accept) {
-    await db.transaction(async (tx) => {
-      await tx
-        .update(schema.teacherInvites)
-        .set({ status: "declined" })
-        .where(and(eq(schema.teacherInvites.id, inviteId), eq(schema.teacherInvites.status, "pending")));
-      if (teacher) {
-        await pushNotification(tx, {
-          userId: teacher.id,
-          type: "teacher_invite",
-          title: `${student.name} отклонил(а) приглашение`,
-          body: "Ученик решил пока заниматься самостоятельно.",
-          link: "/teacher",
-          telegram: false,
-        });
-      }
-    });
-    return { ok: true, teacherId: invite.teacherId };
-  }
-
-  if (!teacher || teacher.role !== "TEACHER") return { ok: false, message: "Репетитор больше не пользуется Планиметрикой." };
-  if (student.teacherId) return { ok: false, message: "У тебя уже есть репетитор в Планиметрике." };
-  if (!teacher.isPlatformOwner) {
-    const limitErr = studentLimitError(teacher, (await getStudentsOfTeacher(teacher.id)).length);
-    if (limitErr) {
-      return {
-        ok: false,
-        message: `У репетитора ${teacher.name} сейчас нет свободных мест по тарифу. Напиши ему — когда место появится, приглашение можно будет принять.`,
-      };
+    if (!accept) {
+      await tx.update(schema.teacherInvites).set({ status: "declined" }).where(pending);
+      await pushNotification(tx, {
+        userId: invite.teacherId,
+        type: "teacher_invite",
+        title: `${student.name} отклонил(а) приглашение`,
+        body: "Ученик решил пока заниматься самостоятельно.",
+        link: "/teacher",
+        telegram: false,
+      });
+      return { ok: true, teacherId: invite.teacherId };
     }
-  }
 
-  const linked = await db.transaction(async (tx) => {
-    // Условие teacher_id IS NULL — защита от гонки двух принятий подряд.
-    const upd = await tx
-      .update(schema.users)
-      .set({ teacherId: teacher.id })
+    if (student.teacherId) return { ok: false, message: "У тебя уже есть репетитор в Планиметрике." };
+    // Serialize simultaneous acceptances for the teacher's tariff limit.
+    const [teacherRow] = await tx.select().from(schema.users)
+      .where(and(eq(schema.users.id, invite.teacherId), eq(schema.users.role, "TEACHER"))).for("no key update");
+    if (!teacherRow) return { ok: false, message: "Репетитор больше не пользуется Планиметрикой." };
+    const teacher = mapUserRow(teacherRow);
+    if (!teacher.isPlatformOwner) {
+      const [count] = await tx.select({ n: sql<number>`count(*)::int` }).from(schema.users)
+        .where(and(eq(schema.users.teacherId, teacher.id), eq(schema.users.role, "STUDENT")));
+      if (studentLimitError(teacher, count.n)) {
+        return {
+          ok: false,
+          message: `У репетитора ${teacher.name} сейчас нет свободных мест по тарифу. Напиши ему — когда место появится, приглашение можно будет принять.`,
+        };
+      }
+    }
+
+    const [linked] = await tx.update(schema.users).set({ teacherId: teacher.id })
       .where(and(eq(schema.users.id, studentId), isNull(schema.users.teacherId), eq(schema.users.role, "STUDENT")))
-      .returning({ id: schema.users.id });
-    if (upd.length === 0) return false;
-    await tx.update(schema.teacherInvites).set({ status: "accepted" }).where(eq(schema.teacherInvites.id, inviteId));
-    await tx
-      .update(schema.teacherInvites)
-      .set({ status: "declined" })
-      .where(
-        and(
-          eq(schema.teacherInvites.studentId, studentId),
-          eq(schema.teacherInvites.status, "pending"),
-          ne(schema.teacherInvites.id, inviteId)
-        )
-      );
+      .returning({ version: schema.users.teacherLinkVersion });
+    if (!linked) return { ok: false, message: "У тебя уже есть репетитор в Планиметрике." };
+    // Older records for this pair may predate unlink tracking. Never reactivate them.
+    await archiveTeacherStudentState(tx, teacher.id, studentId);
+    await tx.update(schema.teacherInvites).set({ status: "accepted" }).where(pending);
+    await tx.update(schema.teacherInvites).set({ status: "declined" }).where(and(
+      eq(schema.teacherInvites.studentId, studentId), eq(schema.teacherInvites.status, "pending"),
+      ne(schema.teacherInvites.id, inviteId)
+    ));
     await pushNotification(tx, {
       userId: teacher.id,
       type: "teacher_invite",
+      teacherLink: { studentId, teacherId: teacher.id, version: linked.version },
       title: `${student.name} принял(а) приглашение`,
       body: "Ученик теперь в вашем списке — можно задавать домашку и планировать занятия.",
       link: `/teacher/student/${student.id}`,
     });
-    return true;
+    return { ok: true, teacherId: teacher.id };
   });
-  if (!linked) return { ok: false, message: "У тебя уже есть репетитор в Планиметрике." };
-  return { ok: true, teacherId: teacher.id };
 }
 
 /** Число ожидающих приглашений (для тестов и счётчиков). */

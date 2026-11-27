@@ -1,3 +1,4 @@
+import { lockStudent } from "./student-links";
 /**
  * Пробник ЕГЭ: работа с базой. Формат, баллы и сборка варианта — lib/mock-exam.ts.
  *
@@ -80,8 +81,8 @@ export async function getMockAttempt(id: string, studentId: string): Promise<Moc
 }
 
 /** Для репетитора: пробник своего ученика. */
-export async function getMockAttemptById(id: string): Promise<MockAttemptRow | undefined> {
-  const rows = await db.select().from(schema.mockAttempts).where(eq(schema.mockAttempts.id, id)).limit(1);
+export async function getMockAttemptById(id: string, executor: typeof db | import("./student-links").StudentLinkTransaction = db): Promise<MockAttemptRow | undefined> {
+  const rows = await executor.select().from(schema.mockAttempts).where(eq(schema.mockAttempts.id, id)).limit(1);
   return rows[0];
 }
 
@@ -250,13 +251,14 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
     (await Promise.all(m.items.map((it) => getProblem(it.problemId)))).filter((p): p is NonNullable<typeof p> => !!p).map((p) => [p.id, p])
   );
   const images = await getMockImages(id);
-  const teacherId = user.teacherId ?? null;
 
   const part1Correct: Record<string, boolean> = {};
   const part2Attempts: Record<string, string> = {};
   let sentToTeacher = 0;
 
   await db.transaction(async (tx) => {
+    const current = await lockStudent(tx, user.id);
+    const teacherId = current?.teacherLinkVersion === user.teacherLinkVersion ? current?.teacherId : null;
     // Защита от двойной сдачи: помечаем сданным одной условной операцией.
     const claimed = await tx
       .update(schema.mockAttempts)
@@ -310,7 +312,7 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
     await tx.delete(schema.mockImages).where(eq(schema.mockImages.mockAttemptId, id));
 
     // Репетитор узнаёт о каждом сданном пробнике — и сразу видит итог первой части.
-    if (teacherId) {
+    if (teacherId && current) {
       const part1Total = m.items.filter((it) => isPart1(it.n)).length;
       const part1Ok = Object.values(part1Correct).filter(Boolean).length;
       const p2Text =
@@ -319,7 +321,9 @@ export async function finishMock(user: User, id: string): Promise<{ ok: true } |
           : "";
       await pushNotification(tx, {
         userId: teacherId,
+        teacherLink: { studentId: user.id, teacherId, version: current.teacherLinkVersion },
         type: sentToTeacher > 0 ? "review_pending" : "homework_completed",
+        telegramPreference: "tgNotifyHomework",
         title: `${user.name} сдал(а) пробник, вариант ${m.variant}`,
         body: `Часть 1: ${part1Ok} из ${part1Total}.${p2Text}`,
         link: `/teacher/student/${user.id}/mock/${id}`,
@@ -367,14 +371,14 @@ export interface Part2State {
 }
 
 /** Состояние каждого задания второй части по текущим проверкам. */
-export async function part2States(m: MockAttemptRow, studentHasTeacher: boolean): Promise<Part2State[]> {
+export async function part2States(m: MockAttemptRow, studentHasTeacher: boolean, executor: typeof db | import("./student-links").StudentLinkTransaction = db): Promise<Part2State[]> {
   const items = m.items.filter((it) => !isPart1(it.n));
   const attemptIds = Object.values(m.part2Attempts);
   const attempts = attemptIds.length
-    ? await db.select().from(schema.attempts).where(inArray(schema.attempts.id, attemptIds))
+    ? await executor.select().from(schema.attempts).where(inArray(schema.attempts.id, attemptIds))
     : [];
   const imgRows = attemptIds.length
-    ? await db
+    ? await executor
         .select({ id: schema.attemptImages.attemptId })
         .from(schema.attemptImages)
         .where(inArray(schema.attemptImages.attemptId, attemptIds))
@@ -389,6 +393,10 @@ export async function part2States(m: MockAttemptRow, studentHasTeacher: boolean)
     const base = { problemId: it.problemId, n: it.n, max, attemptId: aid, hasImage: aid ? withImage.has(aid) : false };
     // Ученик без репетитора оценивает себя сам — в том числе задания,
     // которые решил на бумаге, но не сфотографировал.
+    if (a?.reviewStatus === "approved" || a?.reviewStatus === "needs_revision") {
+      const score = a.reviewScore ?? (a.reviewStatus === "approved" ? max : 0);
+      return { ...base, score, status: "reviewed", feedback: a.teacherFeedback } as Part2State;
+    }
     if (!studentHasTeacher || a?.reviewStatus === "self_checked") {
       const s = m.selfScores[it.problemId];
       return { ...base, score: s ?? null, status: s == null ? "unscored" : "self" } as Part2State;
@@ -401,22 +409,22 @@ export async function part2States(m: MockAttemptRow, studentHasTeacher: boolean)
 }
 
 /** Пересчитать баллы пробника (после сдачи, самопроверки, проверки репетитором). */
-export async function recomputeMock(id: string): Promise<void> {
-  const m = await getMockAttemptById(id);
+export async function recomputeMock(id: string, executor: typeof db | import("./student-links").StudentLinkTransaction = db): Promise<void> {
+  const m = await getMockAttemptById(id, executor);
   if (!m || !m.finishedAt) return;
-  const userRows = await db
+  const userRows = await executor
     .select({ teacherId: schema.users.teacherId, name: schema.users.name })
     .from(schema.users)
     .where(eq(schema.users.id, m.studentId))
     .limit(1);
   const teacherId = userRows[0]?.teacherId ?? null;
   const part1 = Object.values(m.part1Correct ?? {}).filter(Boolean).length;
-  const p2 = await part2States(m, !!teacherId);
+  const p2 = await part2States(m, !!teacherId, executor);
   const part2 = p2.reduce((s, x) => s + (x.score ?? 0), 0);
   const pending = p2.filter((x) => x.status === "pending").length;
   const primary = part1 + part2;
   const test = primaryToTest(primary);
-  await db
+  await executor
     .update(schema.mockAttempts)
     .set({ primaryScore: primary, testScore: test, part2Pending: pending })
     .where(eq(schema.mockAttempts.id, id));
@@ -425,7 +433,7 @@ export async function recomputeMock(id: string): Promise<void> {
   // «Цель и пробники» — его видят репетитор и родитель, как записанный вручную.
   if (teacherId && pending === 0 && m.mode !== "part1") {
     const takenAt = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Moscow" }).format(new Date(m.finishedAt));
-    await db
+    await executor
       .insert(schema.mockScores)
       .values({
         id: `mks_${m.id}`,
@@ -440,12 +448,12 @@ export async function recomputeMock(id: string): Promise<void> {
 }
 
 /** Репетитор проверил решение: если оно из пробника — пересчитать пробник. */
-export async function onAttemptReviewed(attemptId: string): Promise<string | null> {
-  const rows = await db.execute(sql`
+export async function onAttemptReviewed(attemptId: string, executor: typeof db | import("./student-links").StudentLinkTransaction = db): Promise<string | null> {
+  const rows = await executor.execute(sql`
     select id from mock_attempts
     where exists (select 1 from jsonb_each_text(part2_attempts) e where e.value = ${attemptId})
     limit 1`);
   const mockId = (rows.rows[0] as { id: string } | undefined)?.id ?? null;
-  if (mockId) await recomputeMock(mockId);
+  if (mockId) await recomputeMock(mockId, executor);
   return mockId;
 }

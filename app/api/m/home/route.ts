@@ -99,6 +99,7 @@ export async function GET(req: Request) {
       dueReview,
       mistakes: mistakes.filter((m) => !m.resolved).length,
       // Только задания репетитора (не общие авторские пробники платформы).
+      assignedHomework: homeworks.filter((h) => h.studentId === user.id).length,
       homework: homeworks.filter((h, i) => h.studentId === user.id && !hwStatuses[i].complete).length,
     },
     topics,

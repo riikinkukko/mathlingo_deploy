@@ -1,3 +1,5 @@
+import { providerSignal } from "./student-links";
+
 /**
  * Тонкий клиент Telegram Bot API. Как и с ЮKassa — я не могу протестировать
  * этот файл end-to-end сам: нужен реальный токен бота от @BotFather,
@@ -57,11 +59,21 @@ export function buildTelegramLinkUrl(code: string): string | null {
  * переставая доставлять новые обновления вовсе. */
 export type InlineKeyboard = { inline_keyboard: { text: string; callback_data?: string; url?: string }[][] };
 
-export async function sendTelegramMessage(
+export async function sendTelegramMessage(chatId: string, text: string, opts: { replyMarkup?: InlineKeyboard } = {}): Promise<boolean> {
+  return (await sendMessage(chatId, text, opts, false)) === true;
+}
+
+export async function sendTelegramReportPrompt(chatId: string, text: string): Promise<number | null> {
+  const result = await sendMessage(chatId, text, { replyMarkup: { force_reply: true } }, true);
+  return typeof result === "number" ? result : null;
+}
+
+async function sendMessage(
   chatId: string,
   text: string,
-  opts: { replyMarkup?: InlineKeyboard } = {}
-): Promise<boolean> {
+  opts: { replyMarkup?: InlineKeyboard | { force_reply: true } },
+  getMessageId: boolean,
+): Promise<boolean | number> {
   const token = getBotToken();
   if (!token) return false;
   const controller = new AbortController();
@@ -77,13 +89,16 @@ export async function sendTelegramMessage(
         disable_web_page_preview: true,
         ...(opts.replyMarkup ? { reply_markup: opts.replyMarkup } : {}),
       }),
-      signal: controller.signal,
+      signal: providerSignal(controller.signal),
     });
     if (!res.ok) {
       console.error("Telegram sendMessage вернул ошибку:", res.status, await res.text().catch(() => ""));
       return false;
     }
-    return true;
+    if (!getMessageId) return true;
+    const data = await res.json();
+    const id = data?.result?.message_id;
+    return data?.ok === true && Number.isSafeInteger(id) && id > 0 && id <= 2147483647 ? id : false;
   } catch (e) {
     console.error("Ошибка отправки сообщения в Telegram (сеть или таймаут 8с):", e);
     return false;
@@ -104,7 +119,7 @@ export async function callTelegram(method: string, body: object): Promise<boolea
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: providerSignal(controller.signal),
     });
     if (!res.ok) {
       console.error(`Telegram ${method} вернул ошибку:`, res.status, await res.text().catch(() => ""));

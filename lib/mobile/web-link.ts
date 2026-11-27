@@ -12,15 +12,15 @@ export function safeNext(raw: unknown): string {
   return s;
 }
 
-export async function createWebLink(userId: string, next: string): Promise<string> {
+export async function createWebLink(userId: string, next: string, createdAt = new Date(), credentialVersion?: string): Promise<string> {
   // Токен входа без пароля — криптостойкий (192 бита), а не genId (~48 бит).
-  const id = `al_${secureToken(24)}`;
-  await db.insert(schema.appLoginTokens).values({ id, userId, next: safeNext(next), expiresAt: new Date(Date.now() + TTL_MS) });
+  const id = `al_${secureToken(24)}${credentialVersion ? `.${credentialVersion}` : ""}`;
+  await db.insert(schema.appLoginTokens).values({ id, userId, next: safeNext(next), createdAt, expiresAt: new Date(createdAt.getTime() + TTL_MS) });
   return id;
 }
 
 /** Погасить ссылку: вернёт пользователя и путь, если токен живой и ещё не использован. */
-export async function consumeWebLink(id: string): Promise<{ userId: string; next: string } | null> {
+export async function consumeWebLink(id: string): Promise<{ userId: string; next: string; createdAt: Date } | null> {
   if (typeof id !== "string" || !id) return null;
   const rows = await db
     .update(schema.appLoginTokens)
@@ -28,6 +28,6 @@ export async function consumeWebLink(id: string): Promise<{ userId: string; next
     .where(
       and(eq(schema.appLoginTokens.id, id), isNull(schema.appLoginTokens.usedAt), gt(schema.appLoginTokens.expiresAt, new Date()))
     )
-    .returning({ userId: schema.appLoginTokens.userId, next: schema.appLoginTokens.next });
+    .returning({ userId: schema.appLoginTokens.userId, next: schema.appLoginTokens.next, createdAt: schema.appLoginTokens.createdAt });
   return rows[0] ?? null;
 }

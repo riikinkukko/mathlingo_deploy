@@ -3,9 +3,9 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { getSessionUser } from "@/lib/auth";
+import { withDeliveryLocks } from "@/lib/student-links";
 import { unlinkTelegramAccount } from "@/lib/queries";
 
 // connectTelegramAction (генерация кода + redirect() на t.me из server
@@ -37,14 +37,14 @@ export type TgPrefsState = { ok?: boolean; at?: number; error?: string } | null;
 export async function saveTeacherTelegramPrefsAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
   const user = await getSessionUser();
   if (!user || user.role !== "TEACHER") return { error: "Нет доступа" };
-  await db
+  await withDeliveryLocks([user.id], false, (connection) => connection
     .update(schema.users)
     .set({
       tgNotifyHomework: formData.get("homework") === "on",
       tgNotifyLessons: formData.get("lessons") === "on",
       tgDailyDigest: formData.get("digest") === "on",
     })
-    .where(eq(schema.users.id, user.id));
+    .where(eq(schema.users.id, user.id)));
   revalidatePath("/teacher/settings");
   return { ok: true, at: Date.now() };
 }
@@ -53,10 +53,10 @@ export async function saveTeacherTelegramPrefsAction(_prev: TgPrefsState, formDa
 export async function setParentWeeklyReportAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
   const user = await getSessionUser();
   if (!user || user.role !== "PARENT") return { error: "Нет доступа" };
-  await db
+  await withDeliveryLocks([user.id], false, (connection) => connection
     .update(schema.users)
     .set({ tgWeeklyReport: formData.get("weekly") === "on" })
-    .where(eq(schema.users.id, user.id));
+    .where(eq(schema.users.id, user.id)));
   return { ok: true, at: Date.now() };
 }
 
@@ -65,19 +65,19 @@ export async function setParentWeeklyReportAction(_prev: TgPrefsState, formData:
 export async function setEmailRemindersAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") return { error: "Нет доступа" };
-  await db
+  await withDeliveryLocks([user.id], false, (connection) => connection
     .update(schema.users)
     .set({ emailReminders: formData.get("reminders") === "on" })
-    .where(eq(schema.users.id, user.id));
+    .where(eq(schema.users.id, user.id)));
   return { ok: true, at: Date.now() };
 }
 
 export async function setStudentRemindersAction(_prev: TgPrefsState, formData: FormData): Promise<TgPrefsState> {
   const user = await getSessionUser();
   if (!user || user.role !== "STUDENT") return { error: "Нет доступа" };
-  await db
+  await withDeliveryLocks([user.id], false, (connection) => connection
     .update(schema.users)
     .set({ tgStudentReminders: formData.get("reminders") === "on" })
-    .where(eq(schema.users.id, user.id));
+    .where(eq(schema.users.id, user.id)));
   return { ok: true, at: Date.now() };
 }

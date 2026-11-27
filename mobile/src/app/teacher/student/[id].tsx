@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { say } from "@/lib/alert";
-import { Share, View } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { errorText } from "@/lib/api";
 import { plural } from "@/lib/hooks";
@@ -111,11 +111,12 @@ function Overview({ d }: { d: TStudent }) {
       )}
 
       <Button
-        title="Удалить ученика"
+        title="Отвязать ученика"
         kind="ghost"
+        disabled={!s.linkVersion}
         onPress={() =>
-          confirm("Удалить ученика?", `${s.name}: прогресс, задания, журнал и оплаты удалятся. Действие необратимо.`, "Удалить", async () => {
-            const r = await run("deleteStudent", { studentId: s.id });
+          confirm("Отвязать ученика?", `${s.name}: аккаунт, прогресс и задания сохранятся. Вы потеряете доступ к карточке и прогрессу ученика. Будущие занятия с вами будут отменены.`, "Отвязать", async () => {
+            const r = await run("unlinkStudent", { studentId: s.id, linkVersion: s.linkVersion });
             if (r) router.back();
           })
         }
@@ -147,16 +148,10 @@ function Overview({ d }: { d: TStudent }) {
           loading={busy === "addParent"}
           disabled={!parent.name || !parent.email || !parent.consent}
           onPress={async () => {
-            const r = (await run("addParent", { studentId: s.id, ...parent })) as { result?: { password?: string } } | null;
-            if (!r) return;
+            if (!(await run("addParent", { studentId: s.id, ...parent }))) return;
             setParentOpen(false);
             setParent({ name: "", email: "", consent: false });
-            const pw = r.result?.password;
-            say(
-              "Родитель добавлен",
-              pw ? `Вход: ${parent.email}\nПароль: ${pw}\n\nПередайте эти данные родителю.` : "Родитель уже был зарегистрирован — ученик привязан к его кабинету.",
-              pw ? [{ text: "Отправить", onPress: () => void Share.share({ message: `Вход в Планиметрику: planimetrika.online\nEmail: ${parent.email}\nПароль: ${pw}` }) }, { text: "Готово" }] : undefined
-            );
+            say("Запрос создан", "Поддержка проверит связь и направит ссылку родителю.");
           }}
         />
       </Sheet>

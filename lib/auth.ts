@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
@@ -17,8 +18,15 @@ export async function verifyPassword(password: string, hash: string) {
   return bcrypt.compare(password, hash);
 }
 
-export async function createSessionToken(userId: string, role: Role) {
-  return new SignJWT({ userId, role })
+export function passwordCredentialVersion(passwordHash: string): string {
+  return createHmac("sha256", getSessionSecret()).update("password-version:").update(passwordHash).digest("base64url");
+}
+
+export async function createSessionToken(
+  userId: string, role: Role, authenticatedAt = Date.now(), credentialVersion?: string,
+) {
+  const version = credentialVersion ?? passwordCredentialVersion((await getUserById(userId))?.passwordHash ?? "");
+  return new SignJWT({ userId, role, authenticatedAt, credentialVersion: version })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("30d")
@@ -27,10 +35,16 @@ export async function createSessionToken(userId: string, role: Role) {
 
 export async function verifySessionToken(
   token: string
-): Promise<{ userId: string; role: Role; issuedAt?: number } | null> {
+): Promise<{ userId: string; role: Role; issuedAt?: number; authenticatedAt?: number; credentialVersion?: string } | null> {
   try {
     const { payload } = await jwtVerify(token, getSessionSecret());
-    return { userId: payload.userId as string, role: payload.role as Role, issuedAt: payload.iat };
+    return {
+      userId: payload.userId as string,
+      role: payload.role as Role,
+      issuedAt: payload.iat,
+      credentialVersion: typeof payload.credentialVersion === "string" ? payload.credentialVersion : undefined,
+      authenticatedAt: typeof payload.authenticatedAt === "number" ? payload.authenticatedAt : undefined,
+    };
   } catch {
     return null;
   }
@@ -75,7 +89,7 @@ export async function getSessionUser(): Promise<User | null> {
   // сессия недействительна. Отправляем на вход, а не возвращаем null: страницы
   // кабинетов рассчитывают, что пользователь есть (middleware уже проверил
   // подпись), и с null падали бы с ошибкой вместо понятного экрана входа.
-  if (!user || isSessionRevoked(user, session.issuedAt)) redirect("/login");
+  if (!user || isSessionRevoked(user, session.issuedAt, session.authenticatedAt, session.credentialVersion)) redirect("/login");
   return user;
 }
 
@@ -91,25 +105,32 @@ export async function getSessionUserOrNull(): Promise<User | null> {
   const session = await verifySessionToken(token);
   if (!session) return null;
   const user = await getUserById(session.userId);
-  if (!user || isSessionRevoked(user, session.issuedAt)) return null;
+  if (!user || isSessionRevoked(user, session.issuedAt, session.authenticatedAt, session.credentialVersion)) return null;
   return user;
 }
 
 /** Сессия выдана до последней смены/сброса пароля или до «Выйти на всех
  * устройствах» — недействительна. Так сброс пароля выкидывает все ранее
  * открытые сессии (в т.ч. у того, кто, возможно, узнал старый пароль), а
- * кнопка в профиле — все сессии на других устройствах. Секундная точность у
- * iat — с запасом в 1 с. */
+ * кнопка в профиле — все сессии на других устройствах. Старые токены с iat
+ * в ту же секунду отзываются: их нельзя отличить от выданных до смены пароля. */
 export function isSessionRevoked(
-  user: Pick<User, "passwordChangedAt" | "sessionsRevokedAt">,
-  issuedAtSec?: number
+  user: Pick<User, "passwordChangedAt" | "sessionsRevokedAt"> & Partial<Pick<User, "passwordHash">>,
+  issuedAtSec?: number,
+  authenticatedAt?: number,
+  credentialVersion?: string
 ): boolean {
-  const marks = [user.passwordChangedAt, user.sessionsRevokedAt]
+  if (user.passwordHash) {
+    if (credentialVersion && credentialVersion !== passwordCredentialVersion(user.passwordHash)) return true;
+    if (!credentialVersion && user.passwordChangedAt) return true;
+  }
+  const marks = [credentialVersion ? undefined : user.passwordChangedAt, user.sessionsRevokedAt]
     .filter((d): d is string => !!d)
     .map((d) => new Date(d).getTime());
   if (marks.length === 0) return false;
+  if (authenticatedAt !== undefined) return authenticatedAt < Math.max(...marks);
   if (!issuedAtSec) return true;
-  return (issuedAtSec + 1) * 1000 <= Math.max(...marks);
+  return issuedAtSec <= Math.floor(Math.max(...marks) / 1000);
 }
 
 /** Единая точка проверки доступа к /admin/*. isAdmin не закодирован в JWT

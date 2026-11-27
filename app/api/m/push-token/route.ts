@@ -9,7 +9,9 @@ export async function POST(req: Request) {
   if (user instanceof Response) return user;
   const body = await readJson<{ token?: unknown; platform?: unknown }>(req, 2_000);
   if (!isExpoPushToken(body?.token)) return fail("Некорректный токен");
-  await savePushToken(user.id, body.token, String(body.platform ?? "android"));
+  if (!(await savePushToken(user.id, body.token, String(body.platform ?? "android"), user.passwordHash))) {
+    return fail("Сессия завершена", 401);
+  }
   return json({ ok: true });
 }
 

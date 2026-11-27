@@ -13,6 +13,7 @@ import * as schema from "./db/schema";
 import { computeStreak, getHomeworksForStudent, homeworkStatus } from "./queries";
 import { escapeTelegramHtml, sendTelegramMessage } from "./telegram";
 import { sendPushToUser } from "./push";
+import { withActiveTeacherDeliveries } from "./student-links";
 import { pluralRu } from "./pluralize";
 
 const TZ = "Europe/Moscow";
@@ -92,7 +93,10 @@ export async function buildEveningReminder(
 }
 
 /** Из воркера бота раз в несколько минут. Возвращает число отправленных напоминаний. */
-export async function sendStudentEveningReminders(now: Date = new Date()): Promise<number> {
+export async function sendStudentEveningReminders(
+  now: Date = new Date(),
+  { build = buildEveningReminder, push = sendPushToUser, telegram = sendTelegramMessage } = {},
+): Promise<number> {
   const { day, minutes } = mskDay(now);
   if (minutes < SEND_FROM_MIN || minutes >= SEND_TO_MIN) return 0;
 
@@ -111,23 +115,29 @@ export async function sendStudentEveningReminders(now: Date = new Date()): Promi
         or(isNull(schema.users.eveningRemindedOn), sql`${schema.users.eveningRemindedOn} <> ${day}`)
       )
     )
-    .returning({ id: schema.users.id, name: schema.users.name, chatId: schema.users.telegramChatId });
+    .returning({ id: schema.users.id, name: schema.users.name, passwordHash: schema.users.passwordHash,
+      telegramBindingVersion: schema.users.telegramBindingVersion });
 
   let sent = 0;
   const base = appUrl();
   for (const s of claimed) {
     try {
-      const r = await buildEveningReminder(s, now);
+      const r = await build(s, now);
       if (!r) continue;
-      const pushed = await sendPushToUser(s.id, { title: r.title, body: r.text.replace(/\n\n/g, "\n"), link: r.link });
-      const tg = s.chatId
-        ? await sendTelegramMessage(
-            s.chatId,
-            escapeTelegramHtml(r.text),
-            base ? { replyMarkup: { inline_keyboard: [[{ text: "Открыть Планиметрику", url: base + r.link }]] } } : {}
-          )
-        : false;
-      if (pushed || tg) sent++;
+      const delivered = await withActiveTeacherDeliveries([], async (connection) => {
+        const [recipient] = await connection.select({ chatId: schema.users.telegramChatId, version: schema.users.telegramBindingVersion }).from(schema.users)
+          .where(and(eq(schema.users.id, s.id), eq(schema.users.tgStudentReminders, true)));
+        if (!recipient) return false;
+        const [pushed, tg] = await Promise.all([
+          push(s.id, { title: r.title, body: r.text.replace(/\n\n/g, "\n"), link: r.link }, connection),
+          recipient.chatId && recipient.version === s.telegramBindingVersion ? telegram(
+            recipient.chatId, escapeTelegramHtml(r.text),
+            base ? { replyMarkup: { inline_keyboard: [[{ text: "Открыть Планиметрику", url: base + r.link }]] } } : {},
+          ) : false,
+        ]);
+        return pushed || tg;
+      }, s);
+      if (delivered) sent++;
     } catch (e) {
       console.error("[student-reminders] не удалось отправить", s.id, e);
     }

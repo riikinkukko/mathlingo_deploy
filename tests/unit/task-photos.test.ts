@@ -1,10 +1,11 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
+import { sql } from "drizzle-orm";
 import { db } from "../../lib/db/client";
 import * as schema from "../../lib/db/schema";
 import { ownTaskPhotoIds, readTaskPhoto, saveTaskPhoto } from "../../lib/task-photos";
 import { parseNumbers } from "../../app/teacher/homework/new/BookTasksBuilder";
-import { makeUser, cleanup } from "../helpers";
+import { makeUser, makeHomework, cleanup } from "../helpers";
 
 after(cleanup);
 
@@ -25,7 +26,7 @@ test("фото страницы сборника: видят репетитор,
   const st = await makeUser({ teacherId: t.id });
   const stranger = await makeUser();
   const parent = await makeUser({ role: "PARENT" });
-  await db.insert(schema.parentLinks).values({ parentId: parent.id, studentId: st.id });
+  await db.insert(schema.parentLinkRequests).values({ verifiedAt: new Date(), parentId: parent.id, studentId: st.id });
 
   assert.ok("error" in (await saveTaskPhoto(st, PNG)), "ученик загружать не может");
   assert.ok("error" in (await saveTaskPhoto(t, "data:text/html;base64,PHA+")), "только картинки");
@@ -33,7 +34,20 @@ test("фото страницы сборника: видят репетитор,
   assert.ok("id" in r);
   if (!("id" in r)) return;
 
-  for (const u of [t, st, parent]) assert.ok(await readTaskPhoto(u, r.id), `видит ${u.role}`);
+  assert.ok(await readTaskPhoto(t, r.id));
+  assert.equal(await readTaskPhoto(st, r.id), null);
+  assert.equal(await readTaskPhoto(parent, r.id), null);
+  const problemId = `photo_problem_${t.id}`;
+  await db.insert(schema.problems).values({
+    id: problemId, text: "Фото задачи", answerType: "NUMBER", correctAnswer: "1", photoId: r.id,
+    difficulty: 1, hints: [], explanation: "",
+  });
+  try {
+    await makeHomework({ studentId: st.id, teacherId: t.id, problemIds: [problemId] });
+    for (const u of [st, parent]) assert.ok(await readTaskPhoto(u, r.id), `видит ${u.role}`);
+  } finally {
+    await db.execute(sql`delete from problems where id = ${problemId}`);
+  }
   for (const u of [other, stranger]) assert.equal(await readTaskPhoto(u, r.id), null);
 
   // В задание можно вложить только свои снимки.

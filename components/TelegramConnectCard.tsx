@@ -29,7 +29,7 @@ export default async function TelegramConnectCard({
 }) {
   const linkUrl =
     !user.telegramChatId && isTelegramConfigured()
-      ? buildTelegramLinkUrl(await generateTelegramLinkCode(user.id))
+      ? await generateTelegramLinkCode(user.id, user.passwordHash).then((code) => code ? buildTelegramLinkUrl(code) : null)
       : null;
   const bot = getTelegramBotUsername();
 

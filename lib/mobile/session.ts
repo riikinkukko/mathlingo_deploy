@@ -1,10 +1,10 @@
-import { createSessionToken } from "@/lib/auth";
+import { createSessionToken, passwordCredentialVersion } from "@/lib/auth";
 import type { User } from "@/lib/types";
 import { isEffectivelyPro, isStandaloneStudent } from "@/lib/queries";
 
 /** Ответ на вход: токен (тот же JWT, что cookie на сайте) и краткий профиль. */
-export async function sessionPayload(user: User) {
-  return { token: await createSessionToken(user.id, user.role), user: userSummary(user) };
+export async function sessionPayload(user: User, authenticatedAt?: number) {
+  return { token: await createSessionToken(user.id, user.role, authenticatedAt, passwordCredentialVersion(user.passwordHash)), user: userSummary(user) };
 }
 
 export function userSummary(user: User) {
