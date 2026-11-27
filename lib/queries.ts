@@ -1392,9 +1392,9 @@ export async function computeProblemStates(
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 type NotificationTransport = { push: typeof sendPushToUser; telegram: typeof sendTelegramMessage };
 type NotificationDelivery = (transport?: NotificationTransport) => Promise<boolean>;
-const notificationDelivery = new AsyncLocalStorage<(deliver: NotificationDelivery) => void>();
+const notificationDelivery = new AsyncLocalStorage<(deliver: NotificationDelivery, userId: string) => void>();
 
-export function withNotificationDelivery<T>(schedule: (deliver: NotificationDelivery) => void, work: () => T): T {
+export function withNotificationDelivery<T>(schedule: (deliver: NotificationDelivery, userId: string) => void, work: () => T): T {
   return notificationDelivery.run(schedule, work);
 }
 
@@ -1441,7 +1441,7 @@ export async function pushNotification(
     .where(eq(schema.users.id, params.userId));
   const delivery = { ...params, recipient: params.recipient ?? recipient };
   const schedule = notificationDelivery.getStore();
-  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport));
+  if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport), params.userId);
   else void deliverWhenCommitted(notificationId, delivery).catch(() => {});
 }
 

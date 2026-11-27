@@ -14,7 +14,7 @@ import { savePushToken } from "../../lib/push";
 import { verifyEmailAction } from "../../app/actions";
 import { performSubmitAttempt } from "../../lib/actions-core";
 import { performAskTeacher } from "../../lib/questions-core";
-import { handleCallbackQuery, sendLessonStatusPrompts, sendTeacherDigests } from "../../lib/teacher-telegram";
+import { handleCallbackQuery, notifyHomeworkIfFinished, sendLessonStatusPrompts, sendTeacherDigests } from "../../lib/teacher-telegram";
 import { completeStudentSignup, getStudentSignupLink, issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
 import { getBearerUser } from "../../lib/api-auth";
 import { POST as mobileLogin } from "../../app/api/m/auth/login/route";
@@ -731,7 +731,7 @@ test("Telegram revocation wins before attendance, nudge and report writes", asyn
   assert.equal(row.tgReportAskedAt, null);
 });
 
-test("queued review notification rechecks homework preference without cancelling push", async () => {
+test("queued homework and review notifications recheck teacher preference without cancelling push", async () => {
   const teacher = await makeUser({ role: "TEACHER", telegramChatId: "review-preference", tgNotifyHomework: true });
   const student = await makeUser({ teacherId: teacher.id });
   const [problem] = await db.select().from(s.problems).where(and(eq(s.problems.answerType, "DETAILED"), sql`${s.problems.skillId} is not null`)).limit(1);
@@ -739,13 +739,21 @@ test("queued review notification rechecks homework preference without cancelling
   const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
   await withNotificationDelivery((deliver) => deliveries.push(deliver), async () => {
     assert.deepEqual(await performSubmitAttempt(student, problem.id, "Synthetic solution", "lesson"), { kind: "pending" });
+    await makeHomework({ studentId: student.id, teacherId: teacher.id, problemIds: [problem.id] });
+    await db.insert(s.attempts).values({
+      id: `completed_${student.id}`, studentId: student.id, problemId: problem.id,
+      answer: "Assignment fixture", source: "assignment", isCorrect: true,
+    });
+    await notifyHomeworkIfFinished(student, problem.id);
   });
-  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries.length, 2);
   const form = new FormData();
   await withRequest(() => runAsUser(teacher, () => saveTeacherTelegramPrefsAction(null, form)));
   let pushes = 0;
-  await deliveries[0]({ push: async () => { pushes++; return true; }, telegram: async () => assert.fail("disabled Telegram preference") });
-  assert.equal(pushes, 1);
+  for (const deliver of deliveries) {
+    await deliver({ push: async () => { pushes++; return true; }, telegram: async () => assert.fail("disabled Telegram preference") });
+  }
+  assert.equal(pushes, 2);
 });
 
 test("claimed evening and queued weekly notifications honor a concurrent preference change", async () => {
@@ -766,7 +774,7 @@ test("claimed evening and queued weekly notifications honor a concurrent prefere
   }), 0);
   assert.ok(eveningBuilt);
   const deliveries: Parameters<Parameters<typeof withNotificationDelivery>[0]>[0][] = [];
-  await withNotificationDelivery((deliver) => deliveries.push(deliver), () =>
+  await withNotificationDelivery((deliver, userId) => { if (userId === parent.id) deliveries.push(deliver); }, () =>
     sendParentWeeklyReports(new Date("2027-01-10T20:00:00+03:00"), async (id) => {
       if (id === parent.id) await runAsUser(parent, () => setParentWeeklyReportAction(null, empty));
     }));
