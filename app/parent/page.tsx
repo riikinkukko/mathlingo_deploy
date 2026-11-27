@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 import { getSessionUser } from "@/lib/auth";
 import {
   getChildrenOfParent,
@@ -13,6 +14,10 @@ import TelegramConnectCard from "@/components/TelegramConnectCard";
 
 export default async function ParentDashboard(props: { searchParams: Promise<{ telegram?: string }> }) {
   const searchParams = await props.searchParams;
+  return withReadSnapshot(() => readParentDashboard(searchParams));
+}
+
+async function readParentDashboard(searchParams: Awaited<Parameters<typeof ParentDashboard>[0]["searchParams"]>) {
   const user = (await getSessionUser())!;
   const children = await getChildrenOfParent(user.id, user.passwordHash);
   // Один ребёнок (почти всегда) — сразу открываем его неделю, без лишнего экрана.

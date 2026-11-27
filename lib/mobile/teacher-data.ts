@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 /**
  * Данные экранов репетитора в приложении (/api/m/teacher/*). Те же запросы,
  * что и у страниц /teacher/* на сайте, но в виде JSON и только нужные поля
@@ -204,9 +205,14 @@ export async function teacherHome(user: User) {
 }
 
 /** Карточка ученика. null — не свой ученик. */
-export async function teacherStudent(user: User, studentId: string) {
+export function teacherStudent(user: User, studentId: string, afterAuthorization: () => Promise<void> = async () => {}) {
+  return withReadSnapshot(() => readteacherStudent(user, studentId, afterAuthorization));
+}
+
+async function readteacherStudent(user: User, studentId: string, afterAuthorization: () => Promise<void>) {
   const s = await getUserById(studentId);
   if (!s || s.role !== "STUDENT" || s.teacherId !== user.id) return null;
+  await afterAuthorization();
   const [stats, hwAll, logs, pending, parents, upcoming, unmarked, balance, payments, mocks, notes, weak, unreported] = await Promise.all([
     computeOverallStats(s.id),
     getHomeworksForStudent(s.id),

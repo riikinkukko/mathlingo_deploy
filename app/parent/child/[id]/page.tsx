@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 import { getParentVisibleBalance } from "@/lib/parent-balance";
 import { notFound } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
@@ -46,6 +47,10 @@ export default async function ChildDetailPage(
 ) {
   const searchParams = await props.searchParams;
   const params = await props.params;
+  return withReadSnapshot(() => readChildCard(searchParams, params));
+}
+
+async function readChildCard(searchParams: Awaited<Parameters<typeof ChildDetailPage>[0]["searchParams"]>, params: Awaited<Parameters<typeof ChildDetailPage>[0]["params"]>) {
   const parent = (await getSessionUser())!;
   const isMyChild = await isParentOf(parent.id, params.id, parent.passwordHash);
   const child = await getUserById(params.id);

@@ -1,3 +1,4 @@
+import { teacherStudent } from "../../lib/mobile/teacher-data";
 import { finishMock } from "../../lib/mock-queries";
 import { POST as mobileSettings } from "../../app/api/m/settings/route";
 import { nudgeStudent } from "../../lib/nudge";
@@ -812,4 +813,41 @@ test("both mock completion notifications honor a Telegram opt-out after queueing
     await deliver({ push: async () => { pushes++; return true; }, telegram: async () => assert.fail("disabled mock Telegram delivery") });
   }
   assert.equal(pushes, 2);
+});
+
+
+test("teacher and parent cards keep the snapshot used to authorize the read", async () => {
+  const teacher = await makeUser({ role: "TEACHER" });
+  const [problem] = await problems(1);
+  assert.ok(problem);
+  const writer = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await writer.connect();
+  try {
+    for (const role of ["teacher", "parent"] as const) {
+      const parent = await makeUser({ role: "PARENT" });
+      const student = await makeUser({ teacherId: teacher.id });
+      await db.insert(s.parentLinkRequests).values({ parentId: parent.id, studentId: student.id, verifiedAt: new Date() });
+      let entered!: () => void;
+      let resume!: () => void;
+      const authorized = new Promise<void>((resolve) => { entered = resolve; });
+      const paused = new Promise<void>((resolve) => { resume = resolve; });
+      const afterAuthorization = async () => { entered(); await paused; };
+      const card = role === "teacher" ? teacherStudent(teacher, student.id, afterAuthorization)
+        : parentChild(parent, student.id, afterAuthorization);
+      await Promise.race([authorized, card.then(() => assert.fail("card did not pause after authorization"))]);
+      try {
+        if (role === "teacher") assert.equal((await unlinkStudent(teacher, student.id, version(student))).ok, true);
+        else await writer.query("update users set password_hash = $1 where id = $2", ["new-fixture-credential", parent.id]);
+        await writer.query("insert into attempts(id, student_id, problem_id, answer, is_correct, source) values ($1, $2, $3, '1', true, 'lesson')",
+          ["snapshot-" + student.id, student.id, problem.id]);
+      } finally {
+        resume();
+      }
+      assert.equal((await card)?.stats.solved, 0);
+      assert.equal(role === "teacher" ? await teacherStudent(teacher, student.id) : await parentChild(parent, student.id), null);
+      assert.equal((await computeOverallStats(student.id)).solvedProblems, 1);
+    }
+  } finally {
+    await writer.end();
+  }
 });

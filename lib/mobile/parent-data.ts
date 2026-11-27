@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 /**
  * Кабинет родителя в приложении (/api/m/parent). Те же данные, что на
  * /parent и /parent/child/[id]: комментарии к пробникам родителю не отдаём,
@@ -25,7 +26,11 @@ import { pluralRu } from "@/lib/pluralize";
 import type { User } from "@/lib/types";
 import { collapseLessons } from "./teacher-data";
 
-export async function parentHome(parent: User) {
+export function parentHome(parent: User) {
+  return withReadSnapshot(() => readparentHome(parent));
+}
+
+async function readparentHome(parent: User) {
   const children = await getChildrenOfParent(parent.id, parent.passwordHash);
   const items = await Promise.all(
     children.map(async (c) => {
@@ -55,8 +60,13 @@ export async function parentHome(parent: User) {
   };
 }
 
-export async function parentChild(parent: User, childId: string) {
+export function parentChild(parent: User, childId: string, afterAuthorization: () => Promise<void> = async () => {}) {
+  return withReadSnapshot(() => readparentChild(parent, childId, afterAuthorization));
+}
+
+async function readparentChild(parent: User, childId: string, afterAuthorization: () => Promise<void>) {
   if (!(await isParentOf(parent.id, childId, parent.passwordHash))) return null;
+  await afterAuthorization();
   const child = await getUserById(childId);
   if (!child) return null;
   const [curriculum, progress, stats, homeworks, logs, mocks, weekly, upcoming] = await Promise.all([

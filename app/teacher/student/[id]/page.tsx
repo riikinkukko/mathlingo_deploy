@@ -1,3 +1,4 @@
+import { withReadSnapshot } from "@/lib/db/client";
 import StudentLoginCard from "@/components/StudentLoginCard";
 import { displayLogin, isLoginOnlyEmail } from "@/lib/email";
 import SaveTemplateButton from "@/components/SaveTemplateButton";
@@ -85,6 +86,10 @@ export default async function StudentDetailPage(
 ) {
   const searchParams = await props.searchParams;
   const params = await props.params;
+  return withReadSnapshot(() => readStudentCard(searchParams, params));
+}
+
+async function readStudentCard(searchParams: Awaited<Parameters<typeof StudentDetailPage>[0]["searchParams"]>, params: Awaited<Parameters<typeof StudentDetailPage>[0]["params"]>) {
   const teacher = (await getSessionUser())!;
   const student = await getUserById(params.id);
   if (!student || student.role !== "STUDENT" || student.teacherId !== teacher.id) {
