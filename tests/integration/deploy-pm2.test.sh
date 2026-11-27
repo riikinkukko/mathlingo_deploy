@@ -4,10 +4,22 @@ set -euo pipefail
 script="$(realpath scripts/deploy.sh)"
 sandbox="$(mktemp -d)"
 export APP_DIR="$sandbox/app" PM2_HOME="$sandbox/pm2" FIXTURE="$sandbox"
-export DEPLOY_HEALTH_ATTEMPTS=15 DEPLOY_HEALTH_INTERVAL=0.2
-export DEPLOY_HEALTH_URL=http://127.0.0.1:43172/login
+export DEPLOY_HEALTH_ATTEMPTS=18 DEPLOY_HEALTH_INTERVAL=0.2
+export FIXTURE_WEB_PORT="$(node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close();});')"
+export DEPLOY_HEALTH_URL="http://127.0.0.1:$FIXTURE_WEB_PORT/login"
 real_pm2="$(command -v pm2)"
-trap '"$real_pm2" kill >/dev/null 2>&1 || true; rm -rf -- "$sandbox"' EXIT
+cleanup() {
+  local result=$?
+  if ((result)); then
+    for log in "$PM2_HOME"/logs/*-error*.log; do
+      [[ ! -f "$log" ]] || tail -n 30 "$log"
+    done
+  fi
+  "$real_pm2" kill >/dev/null 2>&1 || true
+  rm -rf -- "$sandbox"
+  exit "$result"
+}
+trap cleanup EXIT
 mkdir -p "$APP_DIR/scripts" "$sandbox/bin"
 export PATH="$sandbox/bin:$PATH"
 cat > "$APP_DIR/scripts/telegram-poller.ts" <<'JS'
@@ -24,7 +36,7 @@ cat > "$APP_DIR/scripts/web.cjs" <<'JS'
 const fs = require("node:fs");
 const fixture = process.env.FIXTURE + "/fail-web";
 if (fs.existsSync(fixture) && process.cwd().endsWith(fs.readFileSync(fixture, "utf8"))) process.exit(1);
-require("node:http").createServer((req, res) => res.end("fixture")).listen(43172, "127.0.0.1");
+require("node:http").createServer((req, res) => res.end("fixture")).listen(Number(process.env.FIXTURE_WEB_PORT), "127.0.0.1");
 JS
 git -C "$APP_DIR" init -q
 git -C "$APP_DIR" add .
