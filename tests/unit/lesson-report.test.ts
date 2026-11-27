@@ -87,7 +87,7 @@ test("Telegram: кнопка «Написать отчёт» → следующ�
   // Бот ничего не ждёт — обычное сообщение не трогаем.
   assert.equal(await handleTelegramReportText(chat, "привет"), false);
 
-  assert.equal(await startTelegramReport(t.id, chat, l), "Жду текст отчёта");
+  assert.equal(await startTelegramReport(t.id, { chatId: chat, version: t.telegramBindingVersion! }, l), "Жду текст отчёта");
   assert.equal(await handleTelegramReportText(chat, "Разобрали формулы приведения, всё понял."), true);
   const logs = await db.select().from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l));
   assert.equal(logs.length, 1);
@@ -96,16 +96,16 @@ test("Telegram: кнопка «Написать отчёт» → следующ�
   assert.equal((await getUserById(t.id)) && (await db.select().from(schema.users).where(eq(schema.users.id, t.id)))[0].tgReportLessonId, null);
 
   // Повторно по тому же занятию — уже есть.
-  assert.equal(await startTelegramReport(t.id, chat, l), "Отчёт об этом занятии уже есть");
+  assert.equal(await startTelegramReport(t.id, { chatId: chat, version: t.telegramBindingVersion! }, l), "Отчёт об этом занятии уже есть");
 
   // Ожидание истекает через 6 часов.
   const l2 = await lesson(t.id, s.id);
-  await startTelegramReport(t.id, chat, l2);
+  await startTelegramReport(t.id, { chatId: chat, version: t.telegramBindingVersion! }, l2);
   assert.equal(await handleTelegramReportText(chat, "поздно", new Date(Date.now() + 7 * 3600_000)), false);
   assert.equal((await db.select().from(schema.lessonLogs).where(eq(schema.lessonLogs.lessonId, l2))).length, 0);
 
   // /cancel — отмена.
-  await startTelegramReport(t.id, chat, l2);
+  await startTelegramReport(t.id, { chatId: chat, version: t.telegramBindingVersion! }, l2);
   assert.equal(await handleTelegramReportText(chat, "/cancel"), true);
   assert.equal(await handleTelegramReportText(chat, "текст"), false);
 });

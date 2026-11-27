@@ -80,6 +80,7 @@ export const users = pgTable("users", {
   // linkCode — одноразовый код на время самой привязки, обнуляется сразу
   // после успешного связывания.
   telegramChatId: text("telegram_chat_id"),
+  telegramBindingVersion: text("telegram_binding_version").notNull().default(sql`gen_random_uuid()::text`),
   telegramLinkCode: text("telegram_link_code"),
   // Момент, когда пользователь принял Пользовательское соглашение и дал
   // согласие на обработку персональных данных (checkbox при регистрации,

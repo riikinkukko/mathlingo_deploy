@@ -1,3 +1,4 @@
+import type { TelegramBinding } from "./telegram-binding";
 // Напоминания об оплате занятий — родителям ученика (если родителей нет — самому
 // ученику), в уведомления приложения и в Telegram (это делает pushNotification).
 //
@@ -8,7 +9,7 @@
 //   • долг (баланс < 0) — после каждого следующего проведённого занятия.
 // Вручную — кнопкой «Напомнить об оплате» (отправляется всегда).
 import { db } from "./db/client";
-import { lockStudent } from "./student-links";
+import { lockStudent, lockTelegramTeacher } from "./student-links";
 import { getUserById, getStudentBalance, getParentsOfStudent, pushNotification } from "./queries";
 import { pluralRu } from "./pluralize";
 import { formatRub } from "./money";
@@ -52,7 +53,7 @@ function messageFor(balance: number, studentName: string, kind: Kind): { title: 
  * Отправляет напоминание об оплате по текущему балансу ученика.
  * Возвращает число получателей (0 — ничего не отправлено).
  */
-export async function sendPaymentReminder(teacherId: string, studentId: string, kind: Kind): Promise<number> {
+export async function sendPaymentReminder(teacherId: string, studentId: string, kind: Kind, telegramBinding?: TelegramBinding): Promise<number> {
   const [student, teacher] = await Promise.all([getUserById(studentId), getUserById(teacherId)]);
   if (!student || !teacher || student.teacherId !== teacherId) return 0;
   if (kind === "auto" && !student.paymentRemindersEnabled) return 0;
@@ -83,10 +84,12 @@ export async function sendPaymentReminder(teacherId: string, studentId: string, 
   return db.transaction(async (tx) => {
     const current = await lockStudent(tx, studentId);
     if (!current || current.teacherId !== teacherId || current.teacherLinkVersion !== student.teacherLinkVersion ||
-      (kind === "auto" && !current.paymentRemindersEnabled)) return 0;
+      (kind === "auto" && !current.paymentRemindersEnabled) ||
+      (telegramBinding && !await lockTelegramTeacher(tx, teacherId, telegramBinding))) return 0;
     for (const r of recipients) {
       await pushNotification(tx, { userId: r.userId, type: "payment_reminder", title, body, link: r.link,
-        teacherLink: { studentId, teacherId, version: current.teacherLinkVersion } });
+        teacherLink: { studentId, teacherId, version: current.teacherLinkVersion },
+        origin: telegramBinding ? { id: teacherId, telegram: telegramBinding } : undefined });
     }
     return recipients.length;
   });

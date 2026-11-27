@@ -26,6 +26,7 @@ export interface User {
   // с оплатой. Не путать с ролью TEACHER — это отдельная, ортогональная вещь.
   isAdmin?: boolean;
   telegramChatId?: string;
+  telegramBindingVersion?: string;
   telegramLinkCode?: string;
   // Момент согласия на обработку персональных данных (152-ФЗ). Опционально
   // — у пользователей, созданных до введения этого поля, будет undefined.

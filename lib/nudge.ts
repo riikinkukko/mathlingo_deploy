@@ -1,3 +1,4 @@
+import type { TelegramBinding } from "./telegram-binding";
 // «Напомнить» — репетитор одним нажатием пинает ученика, который давно не
 // занимался: уведомление в приложении + Telegram (если привязан и сейчас не
 // ночь). Не чаще раза в NUDGE_COOLDOWN_H часов на ученика — users.nudged_at
@@ -23,7 +24,7 @@ export function nudgedRecently(nudgedAt: Date | string | null | undefined, now: 
   return now.getTime() - new Date(nudgedAt).getTime() < NUDGE_COOLDOWN_H * 3600 * 1000;
 }
 
-export async function nudgeStudent(teacherId: string, studentId: string, now: Date = new Date(), telegramChatId?: string): Promise<NudgeResult> {
+export async function nudgeStudent(teacherId: string, studentId: string, now: Date = new Date(), telegramBinding?: TelegramBinding): Promise<NudgeResult> {
   const [st] = await db
     .select({ id: schema.users.id, name: schema.users.name, teacherId: schema.users.teacherId, linkVersion: schema.users.teacherLinkVersion })
     .from(schema.users)
@@ -52,7 +53,7 @@ export async function nudgeStudent(teacherId: string, studentId: string, now: Da
   return db.transaction(async (tx) => {
     const student = await lockStudent(tx, studentId);
     if (student?.teacherId !== teacherId || student.teacherLinkVersion !== st.linkVersion ||
-      (telegramChatId && !await lockTelegramTeacher(tx, teacherId, telegramChatId))) {
+      (telegramBinding && !await lockTelegramTeacher(tx, teacherId, telegramBinding))) {
       return { ok: false, reason: "not_found" };
     }
     const cutoff = new Date(now.getTime() - NUDGE_COOLDOWN_H * 3600 * 1000);
@@ -68,6 +69,7 @@ export async function nudgeStudent(teacherId: string, studentId: string, now: Da
       body,
       link,
       telegram: viaTelegram,
+      origin: telegramBinding ? { id: teacherId, telegram: telegramBinding } : undefined,
       teacherLink: { studentId, teacherId, version: student.teacherLinkVersion },
     });
     return { ok: true, studentName: st.name, viaTelegram };

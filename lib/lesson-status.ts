@@ -1,3 +1,4 @@
+import type { TelegramBinding } from "./telegram-binding";
 // Отметка занятия «Было / Не было» — общая логика для кабинета (server action)
 // и для кнопок в Telegram (воркер бота). Относительные импорты: воркер
 // работает через tsx вне Next.js.
@@ -24,13 +25,13 @@ export async function applyLessonStatus(
   teacherId: string,
   lessonId: string,
   status: LessonMark,
-  { onlyIfPlanned = false, telegramChatId }: { onlyIfPlanned?: boolean; telegramChatId?: string } = {}
+  { onlyIfPlanned = false, telegramBinding }: { onlyIfPlanned?: boolean; telegramBinding?: TelegramBinding } = {}
 ): Promise<ApplyLessonStatusResult> {
   const lesson = await getScheduledLessonById(lessonId);
   if (!lesson || lesson.teacherId !== teacherId) return { ok: false, reason: "not_found" };
   const result = await db.transaction(async (tx): Promise<ApplyLessonStatusResult & { changed?: boolean }> => {
     const student = await lockStudent(tx, lesson.studentId);
-    if (student?.teacherId !== teacherId || (telegramChatId && !await lockTelegramTeacher(tx, teacherId, telegramChatId))) return { ok: false, reason: "not_found" };
+    if (student?.teacherId !== teacherId || (telegramBinding && !await lockTelegramTeacher(tx, teacherId, telegramBinding))) return { ok: false, reason: "not_found" };
     const L = schema.scheduledLessons;
     const condition = and(eq(L.id, lessonId), eq(L.teacherId, teacherId), isNull(L.archivedAt));
     const [current] = await tx.select().from(L).where(condition).for("update");
@@ -54,7 +55,7 @@ export async function applyLessonStatus(
   const charged = status === "done" || (status === "missed" && !!(await getUserById(teacherId))?.chargeMissed);
   if (charged) {
     try {
-      await sendPaymentReminder(teacherId, lesson.studentId, "auto");
+      await sendPaymentReminder(teacherId, lesson.studentId, "auto", telegramBinding);
     } catch (e) {
       console.error("[payment-reminders] не удалось отправить напоминание", e);
     }

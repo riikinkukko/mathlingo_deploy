@@ -16,9 +16,12 @@ async function main() {
         select 1 from pg_class where oid = to_regclass('parent_links') and relkind = 'v'
       ) and exists (
         select 1 from pg_class where oid = to_regclass('notifications') and relkind = 'v'
+      ) and exists (
+        select 1 from pg_trigger where tgrelid = to_regclass('users')
+          and tgname = 'rotate_telegram_binding_version' and tgenabled in ('O', 'A')
       ) as ready
     `);
-    if (!result.rows[0]?.ready) throw new Error("Required deletion guard or compatibility views are missing");
+    if (!result.rows[0]?.ready) throw new Error("Required deletion guard, compatibility views or Telegram binding trigger are missing");
   } finally {
     await getPool().end();
   }

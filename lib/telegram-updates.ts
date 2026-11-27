@@ -46,16 +46,10 @@ export async function handleTelegramUpdate(update: any): Promise<void> {
   const code = text.replace("/start", "").trim();
   let replyText: string;
   if (code) {
-    const linked = await linkTelegramAccountByCode(code, chatId);
-    console.log(
-      "[telegram] Привязка по коду",
-      JSON.stringify(code),
-      "->",
-      linked ? "успех" : "код не найден в БД (устарел/уже использован)"
-    );
-    replyText = linked
-      ? "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда.\n\nРепетиторам: /today — занятия и дела на сегодня."
-      : "Не нашли код привязки. Вернитесь в приложение, обновите страницу профиля и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая.";
+    const linked = await linkTelegramAccountByCode(code, chatId, () =>
+      sendTelegramMessage(chatId, "✅ Готово! Аккаунт привязан — теперь уведомления из Планиметрики будут приходить сюда.\n\nРепетиторам: /today — занятия и дела на сегодня."));
+    if (linked) return;
+    replyText = "Не нашли код привязки. Вернитесь в приложение, обновите страницу профиля и нажмите «Подключить Telegram» ещё раз — ссылка одноразовая.";
   } else {
     replyText =
       "Привет! Чтобы подключить уведомления, перейдите по ссылке из профиля в Планиметрике — не открывайте бота напрямую.";

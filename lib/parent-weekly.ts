@@ -222,7 +222,7 @@ export async function sendParentWeeklyReports(now: Date = new Date(), beforeQueu
         or(isNull(schema.users.weeklyReportSentOn), sql`${schema.users.weeklyReportSentOn} <> ${key}`)
       )
     )
-    .returning({ id: schema.users.id, passwordHash: schema.users.passwordHash });
+    .returning({ id: schema.users.id, passwordHash: schema.users.passwordHash, telegramBindingVersion: schema.users.telegramBindingVersion });
 
   let sent = 0;
   for (const p of claimed) {
@@ -236,6 +236,7 @@ export async function sendParentWeeklyReports(now: Date = new Date(), beforeQueu
           userId: p.id,
           type: "weekly_report",
           deliveryPreference: "tgWeeklyReport",
+          telegramBindingVersion: p.telegramBindingVersion,
           recipient: p,
           title: r.title,
           body: r.body,

@@ -1,3 +1,4 @@
+import type { TelegramBinding } from "./telegram-binding";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { and, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -170,19 +171,21 @@ type TelegramPreference = "tgNotifyLessons" | "tgDailyDigest";
 export type DeliveryRecipient = {
   id: string;
   passwordHash?: string;
-  telegram?: { chatId: string; preference?: TelegramPreference };
+  telegram?: TelegramBinding & { preference?: TelegramPreference };
 };
 
 export async function withActiveTeacherDeliveries<T>(
-  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient,
+  links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient, origin?: DeliveryRecipient,
 ): Promise<T | undefined> {
-  if (!links.length && !recipient) return send(db);
+  const recipients = [recipient, origin].filter((item): item is DeliveryRecipient => !!item);
+  if (!links.length && !recipients.length) return send(db);
   const ids = links.map(({ studentId }) => studentId);
-  return withDeliveryLocks(recipient ? [...ids, recipient.id] : ids, true, async (connection) => {
-    if (recipient) {
+  return withDeliveryLocks([...ids, ...recipients.map(({ id }) => id)], true, async (connection) => {
+    for (const recipient of recipients) {
       const [current] = await connection.select({ id: schema.users.id }).from(schema.users)
         .where(and(eq(schema.users.id, recipient.id), recipient.passwordHash === undefined ? undefined : eq(schema.users.passwordHash, recipient.passwordHash),
           recipient.telegram ? eq(schema.users.telegramChatId, recipient.telegram.chatId) : undefined,
+          recipient.telegram ? eq(schema.users.telegramBindingVersion, recipient.telegram.version) : undefined,
           recipient.telegram?.preference ? eq(schema.users[recipient.telegram.preference], true) : undefined));
       if (!current) return undefined;
     }
@@ -218,9 +221,10 @@ export async function withUnchangedTeacherRoster<T>(
 }
 
 /** Acquire after the student row, in the same transaction as the authorized write. */
-export async function lockTelegramTeacher(tx: StudentLinkTransaction, teacherId: string, chatId: string) {
+export async function lockTelegramTeacher(tx: StudentLinkTransaction, teacherId: string, binding: TelegramBinding) {
   const [teacher] = await tx.select().from(schema.users).where(and(
-    eq(schema.users.id, teacherId), eq(schema.users.role, "TEACHER"), eq(schema.users.telegramChatId, chatId),
+    eq(schema.users.id, teacherId), eq(schema.users.role, "TEACHER"), eq(schema.users.telegramChatId, binding.chatId),
+    eq(schema.users.telegramBindingVersion, binding.version),
   )).for("no key update");
   return teacher;
 }

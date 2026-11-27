@@ -135,7 +135,7 @@ jobs:
           printf '::add-mask::%s\n' "$upgrade_url"
           export UPGRADE_MIGRATIONS="$RUNNER_TEMP/unlink-previous-drizzle"
           cp -a drizzle "$UPGRADE_MIGRATIONS"
-          node -e 'const fs=require("node:fs"); const p=process.env.UPGRADE_MIGRATIONS+"/meta/_journal.json"; const j=JSON.parse(fs.readFileSync(p)); if(j.entries.pop()?.tag!=="0055_rollback_safe_notifications" || j.entries.pop()?.tag!=="0054_verified_parent_links" || j.entries.pop()?.tag!=="0053_student_unlink") process.exit(1); fs.writeFileSync(p,JSON.stringify(j))'
+          node -e 'const fs=require("node:fs"); const p=process.env.UPGRADE_MIGRATIONS+"/meta/_journal.json"; const j=JSON.parse(fs.readFileSync(p)); if(j.entries.pop()?.tag!=="0056_telegram_binding_period" || j.entries.pop()?.tag!=="0055_rollback_safe_notifications" || j.entries.pop()?.tag!=="0054_verified_parent_links" || j.entries.pop()?.tag!=="0053_student_unlink") process.exit(1); fs.writeFileSync(p,JSON.stringify(j))'
           cat > "$RUNNER_TEMP/unlink-upgrade.config.ts" <<'CONFIG'
           export default { out: process.env.UPGRADE_MIGRATIONS, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL } };
           CONFIG

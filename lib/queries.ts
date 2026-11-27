@@ -57,6 +57,7 @@ function mapUser(row: typeof schema.users.$inferSelect): User {
     proUntil: row.proUntil ? row.proUntil.toISOString() : undefined,
     isAdmin: row.isAdmin,
     telegramChatId: row.telegramChatId ?? undefined,
+    telegramBindingVersion: row.telegramBindingVersion,
     consentGivenAt: row.consentGivenAt ? row.consentGivenAt.toISOString() : undefined,
     deletionRequestedAt: row.deletionRequestedAt ? row.deletionRequestedAt.toISOString() : undefined,
     emailVerifiedAt: row.emailVerifiedAt ? row.emailVerifiedAt.toISOString() : undefined,
@@ -1420,6 +1421,8 @@ export async function pushNotification(
     deliveryPreference?: "tgWeeklyReport";
     recipient?: DeliveryRecipient;
     teacherLink?: TeacherLink;
+    origin?: DeliveryRecipient;
+    telegramBindingVersion?: string;
   }
 ) {
   const notificationId = genId("n");
@@ -1437,9 +1440,10 @@ export async function pushNotification(
   // уходили сразу, и при откате транзакции человек получал уведомление о
   // том, чего нет. Запись внутри транзакции не видна другим соединениям до
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
-  const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash }).from(schema.users)
+  const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash,
+    telegramBindingVersion: schema.users.telegramBindingVersion }).from(schema.users)
     .where(eq(schema.users.id, params.userId));
-  const delivery = { ...params, recipient: params.recipient ?? recipient };
+  const delivery = { ...params, recipient: params.recipient ?? recipient, telegramBindingVersion: params.telegramBindingVersion ?? recipient?.telegramBindingVersion };
   const schedule = notificationDelivery.getStore();
   if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport), params.userId);
   else void deliverWhenCommitted(notificationId, delivery).catch(() => {});
@@ -1452,7 +1456,7 @@ export async function deliverWhenCommitted(
   notificationId: string,
   params: { userId: string; title: string; body: string; link: string; telegram?: boolean;
     telegramPreference?: "tgNotifyHomework"; deliveryPreference?: "tgWeeklyReport";
-    teacherLink?: TeacherLink; recipient?: DeliveryRecipient },
+    teacherLink?: TeacherLink; recipient?: DeliveryRecipient; origin?: DeliveryRecipient; telegramBindingVersion?: string },
   transport: NotificationTransport = { push: sendPushToUser, telegram: sendTelegramMessage },
 ): Promise<boolean> {
   let committed = false;
@@ -1475,9 +1479,12 @@ export async function deliverWhenCommitted(
     const payload = { title: params.title, body: params.body, link: params.link };
     const [current] = await connection.select({ telegramChatId: schema.users.telegramChatId,
       tgNotifyHomework: schema.users.tgNotifyHomework, tgWeeklyReport: schema.users.tgWeeklyReport,
+      telegramBindingVersion: schema.users.telegramBindingVersion,
     }).from(schema.users).where(eq(schema.users.id, params.userId)).limit(1);
     if (!current || (params.deliveryPreference && !current[params.deliveryPreference])) return false;
-    const chatId = params.telegram === false || (params.telegramPreference && !current[params.telegramPreference])
+    const chatId = params.telegram === false ||
+      (params.telegramBindingVersion && params.telegramBindingVersion !== current.telegramBindingVersion) ||
+      (params.telegramPreference && !current[params.telegramPreference])
       ? null : current.telegramChatId;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "";
     const telegramText = `<b>${escapeHtml(params.title)}</b>\n${escapeHtml(params.body)}${appUrl
@@ -1489,7 +1496,7 @@ export async function deliverWhenCommitted(
     ]);
     return true;
   }
-  return (await withActiveTeacherDeliveries(params.teacherLink ? [params.teacherLink] : [], send, params.recipient)) ?? false;
+  return (await withActiveTeacherDeliveries(params.teacherLink ? [params.teacherLink] : [], send, params.recipient, params.origin)) ?? false;
 }
 
 function escapeHtml(s: string): string {
@@ -2020,7 +2027,7 @@ export async function generateTelegramLinkCode(userId: string, authenticatedPass
 /** Вызывается из вебхука Telegram при получении "/start код" — находит
  * пользователя по коду, привязывает chatId, код обнуляет (одноразовый).
  * Возвращает true, если код найден и привязка прошла. */
-export async function linkTelegramAccountByCode(code: string, chatId: string): Promise<boolean> {
+export async function linkTelegramAccountByCode(code: string, chatId: string, onLinked?: () => Promise<unknown>): Promise<boolean> {
   // Код живёт сутки: старая ссылка из переписки или скриншота не привяжет чужой чат.
   if (typeof code !== "string" || !isTelegramCodeFresh(code)) return false;
   const [candidate] = await db.select({ id: schema.users.id }).from(schema.users)
@@ -2031,6 +2038,7 @@ export async function linkTelegramAccountByCode(code: string, chatId: string): P
       .set({ telegramChatId: chatId, telegramLinkCode: null, tgReportLessonId: null, tgReportAskedAt: null })
       .where(and(eq(schema.users.id, candidate.id), eq(schema.users.telegramLinkCode, code)))
       .returning({ id: schema.users.id });
+    if (linked && onLinked) await onLinked();
     return !!linked;
   });
 }

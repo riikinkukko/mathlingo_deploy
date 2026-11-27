@@ -115,7 +115,8 @@ export async function sendStudentEveningReminders(
         or(isNull(schema.users.eveningRemindedOn), sql`${schema.users.eveningRemindedOn} <> ${day}`)
       )
     )
-    .returning({ id: schema.users.id, name: schema.users.name, passwordHash: schema.users.passwordHash });
+    .returning({ id: schema.users.id, name: schema.users.name, passwordHash: schema.users.passwordHash,
+      telegramBindingVersion: schema.users.telegramBindingVersion });
 
   let sent = 0;
   const base = appUrl();
@@ -124,12 +125,12 @@ export async function sendStudentEveningReminders(
       const r = await build(s, now);
       if (!r) continue;
       const delivered = await withActiveTeacherDeliveries([], async (connection) => {
-        const [recipient] = await connection.select({ chatId: schema.users.telegramChatId }).from(schema.users)
+        const [recipient] = await connection.select({ chatId: schema.users.telegramChatId, version: schema.users.telegramBindingVersion }).from(schema.users)
           .where(and(eq(schema.users.id, s.id), eq(schema.users.tgStudentReminders, true)));
         if (!recipient) return false;
         const [pushed, tg] = await Promise.all([
           push(s.id, { title: r.title, body: r.text.replace(/\n\n/g, "\n"), link: r.link }, connection),
-          recipient.chatId ? telegram(
+          recipient.chatId && recipient.version === s.telegramBindingVersion ? telegram(
             recipient.chatId, escapeTelegramHtml(r.text),
             base ? { replyMarkup: { inline_keyboard: [[{ text: "Открыть Планиметрику", url: base + r.link }]] } } : {},
           ) : false,
