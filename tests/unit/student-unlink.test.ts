@@ -18,7 +18,7 @@ import { savePushToken } from "../../lib/push";
 import { verifyEmailAction } from "../../app/actions";
 import { performSubmitAttempt } from "../../lib/actions-core";
 import { performAskTeacher } from "../../lib/questions-core";
-import { handleCallbackQuery, notifyHomeworkIfFinished, sendLessonStatusPrompts, sendTeacherDigests } from "../../lib/teacher-telegram";
+import { buildTodayText, handleCallbackQuery, notifyHomeworkIfFinished, sendLessonStatusPrompts, sendTeacherDigests } from "../../lib/teacher-telegram";
 import { completeStudentSignup, getStudentSignupLink, issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
 import { getBearerUser } from "../../lib/api-auth";
 import { POST as mobileLogin } from "../../app/api/m/auth/login/route";
@@ -718,7 +718,7 @@ test("Telegram revocation wins before attendance, nudge and report writes", asyn
   assert.equal(lesson.status, "planned");
 
   await db.update(s.users).set({ telegramChatId: "revoke-nudge" }).where(eq(s.users.id, teacher.id));
-  await handleCallbackQuery(call("revoke-nudge", `nd:${student.id}`, (await readUser(teacher)).telegramBindingVersion!), {
+  await handleCallbackQuery(call("revoke-nudge", `nd:${student.id}`, (await readUser(teacher)).telegramBindingVersion! + ":" + version(student)), {
     telegram,
     nudge: async (...args) => { await unlinkTelegramAccount(teacher.id); return nudgeStudent(...args); },
   });
@@ -875,7 +875,7 @@ test("same chat rebind invalidates in-flight writes, transport and old buttons",
     ["ls:d:" + lessonId, "attendance"], ["lg:d:" + groupLessonId, "attendance"],
     ["nd:" + student.id, "nudge"], ["rp:" + lessonId, "report"],
   ] as const) {
-    const callback = { id: "fixture", data: boundTelegramCallback(payload, teacher.telegramBindingVersion!), message: { chat: { id: chatId }, message_id: 42 } };
+    const callback = { id: "fixture", data: boundTelegramCallback(payload, teacher.telegramBindingVersion! + (operation === "nudge" ? ":" + version(student) : "")), message: { chat: { id: chatId }, message_id: 42 } };
     assert.ok(Buffer.byteLength(callback.data) <= 64);
     let entered = false;
     const revoke = async () => { entered = true; await rebind(); };
@@ -904,4 +904,31 @@ test("same chat rebind invalidates in-flight writes, transport and old buttons",
   assert.equal(teacherRow.tgReportLessonId, null);
   assert.equal(studentRow.nudgedAt, null);
   assert.deepEqual(await db.select().from(s.lessonLogs).where(eq(s.lessonLogs.lessonId, lessonId)), []);
+});
+
+test("reminder buttons from an earlier teacher relationship cannot cross a rebind", async () => {
+  const chatId = "teacher-relationship-reminder";
+  const teacher = await makeUser({ role: "TEACHER", telegramChatId: chatId });
+  const student = await makeUser({ teacherId: teacher.id, independentCredentials: true, createdAt: new Date(Date.now() - 7 * 86400000) });
+  const digest = await buildTodayText(teacher.id, new Date(), { bindingVersion: teacher.telegramBindingVersion });
+  const data = digest?.replyMarkup?.inline_keyboard[0][0].callback_data;
+  assert.ok(data);
+  const callback = { id: "retired-reminder", data, message: { chat: { id: chatId } } };
+  let entered = false;
+  await handleCallbackQuery(callback, {
+    telegram: async () => assert.fail("retired relationship reached Telegram"),
+    nudge: async (...args) => {
+      entered = true;
+      assert.equal((await unlinkStudent(teacher, student.id, version(student))).ok, true);
+      await relink(teacher, student);
+      return nudgeStudent(...args);
+    },
+  });
+  assert.equal(entered, true);
+  await handleCallbackQuery(callback, {
+    telegram: async () => assert.fail("retired reminder reached Telegram"),
+    nudge: async () => assert.fail("retired reminder reached the write"),
+  });
+  const [row] = await db.select().from(s.users).where(eq(s.users.id, student.id));
+  assert.equal(row.nudgedAt, null);
 });

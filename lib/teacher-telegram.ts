@@ -1,4 +1,4 @@
-import { boundTelegramCallback, readBoundTelegramCallback } from "./telegram-binding";
+import { boundTelegramCallback, readBoundTelegramCallback, readTelegramCallbackPayload } from "./telegram-binding";
 // Telegram для РЕПЕТИТОРА: что приходит в бот и что из него можно сделать.
 //
 //  • «Ученик сдал ДЗ» — когда ученик дал ответ на все задачи задания
@@ -302,17 +302,23 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
   if (!chatId) return;
   const t = await findTeacherByChat(chatId);
   if (!t) return;
-  const data = readBoundTelegramCallback(cq?.data, t.version);
+  const payload = readTelegramCallbackPayload(cq?.data);
+  if (!payload) return;
+  const nd = /^nd:(.+)$/.exec(payload);
+  const student = nd ? await getUserById(nd[1]) : undefined;
+  if (nd && (student?.teacherId !== t.id || !student.teacherLinkVersion)) return;
+  const linkVersion = student?.teacherLinkVersion;
+  const data = readBoundTelegramCallback(cq?.data, linkVersion ? t.version + ":" + linkVersion : t.version);
   if (!data) return;
   const binding = { chatId, version: t.version };
   const recipient = { id: t.id, telegram: binding };
   const messageId: number | undefined = cq?.message?.message_id;
-  const answerBound = (text: string) => withActiveTeacherDeliveries([],
+  const answerBound = (text: string) => withActiveTeacherDeliveries(
+    nd && linkVersion ? [{ studentId: nd[1], teacherId: t.id, version: linkVersion }] : [],
     () => telegram("answerCallbackQuery", { callback_query_id: cq.id, text }), recipient);
 
-  const nd = /^nd:(.+)$/.exec(data);
   if (nd) {
-    const r = await nudge(t.id, nd[1], new Date(), binding);
+    const r = await nudge(t.id, nd[1], new Date(), binding, linkVersion);
     await answerBound(
       r.ok
         ? `Напоминание отправлено${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
@@ -494,7 +500,7 @@ export async function buildTodayText(
   // Кнопки «Напомнить» — тем, кому ещё не напоминали за сутки.
   const toNudge = inactive.filter((s) => !s.nudgedRecently).slice(0, 3);
   const replyMarkup: InlineKeyboard | undefined = toNudge.length && bindingVersion
-    ? { inline_keyboard: toNudge.map((s) => [{ text: `👋 Напомнить: ${s.name.split(" ")[0]}`, callback_data: boundTelegramCallback(`nd:${s.id}`, bindingVersion) }]) }
+    ? { inline_keyboard: toNudge.map((s) => [{ text: `👋 Напомнить: ${s.name.split(" ")[0]}`, callback_data: boundTelegramCallback(`nd:${s.id}`, bindingVersion + ":" + s.linkVersion) }]) }
     : undefined;
   return { text: lines.join("\n") + openLink("/teacher", "Открыть кабинет →"), replyMarkup };
 }

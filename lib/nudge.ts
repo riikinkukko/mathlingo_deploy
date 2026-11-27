@@ -24,12 +24,12 @@ export function nudgedRecently(nudgedAt: Date | string | null | undefined, now: 
   return now.getTime() - new Date(nudgedAt).getTime() < NUDGE_COOLDOWN_H * 3600 * 1000;
 }
 
-export async function nudgeStudent(teacherId: string, studentId: string, now: Date = new Date(), telegramBinding?: TelegramBinding): Promise<NudgeResult> {
+export async function nudgeStudent(teacherId: string, studentId: string, now: Date = new Date(), telegramBinding?: TelegramBinding, expectedLinkVersion?: string): Promise<NudgeResult> {
   const [st] = await db
     .select({ id: schema.users.id, name: schema.users.name, teacherId: schema.users.teacherId, linkVersion: schema.users.teacherLinkVersion })
     .from(schema.users)
     .where(eq(schema.users.id, studentId));
-  if (!st || st.teacherId !== teacherId) return { ok: false, reason: "not_found" };
+  if (!st || st.teacherId !== teacherId || (expectedLinkVersion && st.linkVersion !== expectedLinkVersion)) return { ok: false, reason: "not_found" };
 
   const [teacher] = await db
     .select({ name: schema.users.name })
@@ -80,19 +80,20 @@ export async function nudgeStudent(teacherId: string, studentId: string, now: Da
  * или, если попыток нет, по дате регистрации). Для сводки в боте. */
 export async function getInactiveStudents(teacherId: string, minDays = 3, now: Date = new Date()) {
   const rows = await db.execute(sql`
-    select u.id, u.name, u.nudged_at,
+    select u.id, u.name, u.nudged_at, u.teacher_link_version,
            (select max(a.created_at) from ${schema.attempts} a where a.student_id = u.id) as last_at,
            u.created_at
     from ${schema.users} u
     where u.teacher_id = ${teacherId} and u.role = 'STUDENT'
   `);
   const DAY = 24 * 3600 * 1000;
-  return (rows.rows as { id: string; name: string; nudged_at: string | null; last_at: string | null; created_at: string }[])
+  return (rows.rows as { id: string; name: string; nudged_at: string | null; last_at: string | null; created_at: string; teacher_link_version: string }[])
     .map((r) => {
       const ref = new Date(r.last_at ?? r.created_at);
       return {
         id: r.id,
         name: r.name,
+        linkVersion: r.teacher_link_version,
         idleDays: Math.floor((now.getTime() - ref.getTime()) / DAY),
         neverActive: !r.last_at,
         nudgedRecently: nudgedRecently(r.nudged_at, now),
