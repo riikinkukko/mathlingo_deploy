@@ -199,7 +199,8 @@ jobs:
           done
           npm run test:e2e
 
-      - run: node tests/integration/telegram-ready.test.mjs
+      - name: Smoke-test worker launch and restoration with isolated PM2
+        run: npm exec --yes --package=pm2@6.0.8 -- node tests/integration/telegram-ready.test.mjs
 
   expo:
     runs-on: ubuntu-24.04
