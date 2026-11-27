@@ -125,7 +125,10 @@ SH
 cat > "$sandbox/bin/mv" <<'SH'
 #!/usr/bin/env bash
 set -eu
-if [[ "${INTERRUPT_ACTIVATION:-}" == before && "${@: -1}" == */current ]]; then kill -KILL "$PPID"; fi
+if [[ "${INTERRUPT_ACTIVATION:-}" == before && "${@: -1}" == */current ]]; then
+  kill -KILL "$PPID"
+  exit 137
+fi
 /bin/mv "$@"
 if [[ "${INTERRUPT_ACTIVATION:-}" == after && "${@: -1}" == */current ]]; then kill -KILL "$PPID"; fi
 SH
