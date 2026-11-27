@@ -7,6 +7,7 @@ on:
       - 'scripts/seed*.ts'
       - 'scripts/deploy.sh'
       - 'scripts/systemd/**'
+      - 'scripts/nginx/**'
       - 'tests/integration/deploy-pm2.test.sh'
       - 'scripts/check-unlink-release.ts'
       - 'tests/integration/deploy.test.sh'
@@ -184,6 +185,13 @@ jobs:
           echo "Previous-schema upgrade preserved accounts and links without asserting legacy ownership."
 
       - run: bash tests/integration/deploy.test.sh
+      - name: Install nginx for the isolated ingress fixture
+        run: |
+          sudo apt-get update
+          cd "$RUNNER_TEMP"
+          apt-get download nginx
+          dpkg-deb -x ./nginx_*.deb "$RUNNER_TEMP/ingress-nginx"
+          echo "$RUNNER_TEMP/ingress-nginx/usr/sbin" >> "$GITHUB_PATH"
       - name: Recover interrupted release with isolated PM2
         run: npm exec --yes --package=pm2@6.0.8 -- bash tests/integration/deploy-pm2.test.sh
       - run: npm run test:db

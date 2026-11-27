@@ -9,6 +9,7 @@ bot=planimetrika-tg
 releases="$root/.releases"
 journal="$releases/switching"
 current="$releases/current"
+ingress_ready="${DEPLOY_INGRESS_READY_FILE:-/run/planimetrika/ready}"
 health_url="${DEPLOY_HEALTH_URL:-http://127.0.0.1:3000/login}"
 checks="${DEPLOY_HEALTH_ATTEMPTS:-50}"
 interval="${DEPLOY_HEALTH_INTERVAL:-2}"
@@ -23,13 +24,24 @@ publish() {
   printf '%s\n' "$@" > "$file.new"
   sync -f "$file.new"
   mv -f "$file.new" "$file"
-  sync -f "$releases"
+  sync -f "$(dirname -- "$file")"
+}
+
+close_ingress() {
+  rm -f -- "$ingress_ready" && sync -f "$(dirname -- "$ingress_ready")"
+}
+
+open_ingress() {
+  local dir="$1"
+  [[ ! -e "$journal" && -f "$current" && "$(cat "$current")" == "$dir" ]] || return 1
+  publish "$ingress_ready" "$dir"
 }
 
 safe_release() {
   local dir="$1"
   [[ "$dir" == "$releases/"* && -s "$dir/.next/BUILD_ID" && -s "$dir/.rollback-compatible" &&
-     "$(realpath -- "$dir")" == "$dir" ]]
+     "$(realpath -- "$dir")" == "$dir" ]] &&
+    grep -Eq '^telegram-binding-v1 [0-9a-f]{40}$' "$dir/.rollback-compatible"
 }
 
 pm2() { command pm2 "$@" 9>&-; }
@@ -61,7 +73,7 @@ stop_pair() {
 }
 
 start_web() {
-  pm2 start npm --name "$web" --cwd "$1" -- run start 9>&-
+  pm2 start npm --name "$web" --cwd "$1" -- run start -- --hostname 127.0.0.1 9>&-
 }
 
 start_bot() {
@@ -111,6 +123,7 @@ clear_journal() {
 
 recover() {
   local old next committed="" restore="" entry
+  close_ingress || return 1
   {
     IFS= read -r old && IFS= read -r next
   } < "$journal" || return 1
@@ -132,14 +145,14 @@ recover() {
   if [[ -n "$restore" ]] && safe_release "$restore" &&
     (cd "$restore" && npx --no-install tsx scripts/check-unlink-release.ts) &&
     activate "$restore" && pm2 save --force; then
-    publish "$current" "$restore" && clear_journal || return 1
+    publish "$current" "$restore" && clear_journal && open_ingress "$restore" || return 1
     return 0
   fi
   if [[ "$restore" == "$next" && -n "$old" ]] && safe_release "$old" &&
     stop_pair && pm2 save --force &&
     (cd "$old" && npx --no-install tsx scripts/check-unlink-release.ts) &&
     activate "$old" && pm2 save --force; then
-    publish "$current" "$old" && clear_journal || return 1
+    publish "$current" "$old" && clear_journal && open_ingress "$old" || return 1
     return 0
   fi
   stop_pair && pm2 save --force || return 1
@@ -167,6 +180,7 @@ trap 'exit 143' TERM
 # A cold daemon writes its startup banner to stdout of the first command.
 pm2 ping >/dev/null
 if [[ "$target" == --recover-only ]]; then
+  close_ingress
   if [[ ! -f "$journal" ]]; then
     # Treat a normal boot as recovery too. Never trust or resurrect dump.pm2.
     boot_release=""
@@ -185,6 +199,10 @@ if [[ -f "$current" ]]; then
 fi
 candidate="$(mktemp -d "$releases/$target.XXXXXX")"
 git -C "$root" archive "$target" | tar -x -C "$candidate"
+[[ -s "$candidate/drizzle/0056_telegram_binding_period.sql" && -s "$candidate/scripts/nginx/planimetrika-ingress.conf" ]] || {
+  echo "Артефакт не поддерживает текущий протокол Telegram и ingress" >&2
+  exit 1
+}
 for file in .env .env.local .env.production .env.production.local; do
   [[ ! -f "$root/$file" ]] || ln -s "$root/$file" "$candidate/$file"
 done
@@ -192,14 +210,16 @@ cd "$candidate"
 npm ci
 npm run build
 [[ -s .next/BUILD_ID ]]
+close_ingress
 publish "$journal" "$previous" "$candidate"
 stop_pair
 pm2 save --force
 npx --no-install drizzle-kit migrate
 npx --no-install tsx scripts/check-unlink-release.ts
 activate "$candidate"
-publish "$candidate/.rollback-compatible" "$target"
+publish "$candidate/.rollback-compatible" "telegram-binding-v1 $target"
 publish "$current" "$candidate"
 pm2 save --force
 clear_journal
+open_ingress "$candidate"
 echo "Веб и воркер проверены. Предыдущий артефакт: ${previous:-отсутствует}"

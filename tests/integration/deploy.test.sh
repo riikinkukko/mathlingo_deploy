@@ -3,13 +3,17 @@ set -euo pipefail
 script="$(realpath scripts/deploy.sh)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export APP_DIR="$tmp/app" MOCK="$tmp/state"
+export APP_DIR="$tmp/app" MOCK="$tmp/state" DEPLOY_INGRESS_READY_FILE="$tmp/ready"
 export DEPLOY_HEALTH_ATTEMPTS=1 DEPLOY_HEALTH_INTERVAL=0
 mkdir -p "$APP_DIR/.next" "$MOCK" "$tmp/bin"
 export PATH="$tmp/bin:$PATH"
 printf 'bootstrap\n' > "$APP_DIR/.next/BUILD_ID"
+mkdir -p "$APP_DIR/drizzle" "$APP_DIR/scripts/nginx"
+cp drizzle/0056_telegram_binding_period.sql "$APP_DIR/drizzle/"
+cp scripts/nginx/planimetrika-ingress.conf "$APP_DIR/scripts/nginx/"
 git -C "$APP_DIR" init -q
-git -C "$APP_DIR" -c user.name=Fixture -c user.email=fixture@test.local commit --allow-empty -qm fixture
+git -C "$APP_DIR" add drizzle scripts/nginx
+git -C "$APP_DIR" -c user.name=Fixture -c user.email=fixture@test.local commit -qm fixture
 sha="$(git -C "$APP_DIR" rev-parse HEAD)"
 
 cat > "$tmp/bin/npm" <<'MOCK_SCRIPT'
@@ -97,7 +101,7 @@ printf '%s\n' "$APP_DIR" > "$MOCK/planimetrika-tg"
 assert_pair() {
   local release
   release="$(cat "$current")"
-  [[ ! -e "$journal" && "$(cat "$MOCK/planimetrika")" == "$release" && "$(cat "$MOCK/planimetrika-tg")" == "$release" ]]
+  [[ ! -e "$journal" && "$(cat "$DEPLOY_INGRESS_READY_FILE")" == "$release" && "$(cat "$MOCK/planimetrika")" == "$release" && "$(cat "$MOCK/planimetrika-tg")" == "$release" ]]
   [[ "$(cat "$MOCK/dump")" == "$release"$'\n'"$release" ]]
 }
 
