@@ -658,3 +658,31 @@ test("stored reports stay hidden from an existing parent token in current and ro
   assert.equal((await (await mobileNotifications(originalSession)).json()).notifications[0].id, id);
   assert.deepEqual((await legacyRead()).rows, [{ id }]);
 });
+
+test("individual and group Telegram callbacks stop replying after the chat is disconnected", async () => {
+  for (const group of [false, true]) {
+    const teacher = await makeUser({ role: "TEACHER", telegramChatId: "callback-disconnect-" + group });
+    const student = await makeUser({ teacherId: teacher.id });
+    const id = `callback_disconnected_${student.id}`;
+    const groupLessonId = group ? `group_${student.id}` : null;
+    await db.insert(s.scheduledLessons).values({ id, teacherId: teacher.id, studentId: student.id,
+      groupLessonId, startsAt: new Date(Date.now() - 3600000) });
+    const calls: string[] = [];
+    let handled = false;
+    await handleCallbackQuery({
+      id: "fixture", data: group ? `lg:d:${groupLessonId}` : `ls:d:${id}`,
+      message: { chat: { id: teacher.telegramChatId }, message_id: 42 },
+    }, {
+      markLesson: async (...args) => {
+        const result = await applyLessonStatus(...args);
+        assert.ok(result.ok);
+        handled = true;
+        await unlinkTelegramAccount(teacher.id);
+        return result;
+      },
+      telegram: async (method) => { calls.push(method); return true; },
+    });
+    assert.equal(handled, true);
+    assert.deepEqual(calls, []);
+  }
+});
