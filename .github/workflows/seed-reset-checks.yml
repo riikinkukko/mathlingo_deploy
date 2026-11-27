@@ -173,7 +173,7 @@ jobs:
           [[ "$(check_psql -c "select count(*) from notifications where user_id = 'fixture_parent'")" == "0" ]]
           DATABASE_URL="$upgrade_url" node --import tsx tests/integration/rollback-notifications.test.mjs 0
           legacy_api 0
-          [[ "$(check_psql -c \"select count(*) from users where id = 'unlink_upgrade_teacher' and telegram_chat_id = '987321' and tg_report_prompt_id is null and tg_report_lesson_id is null and tg_report_asked_at is null\")" == "1" ]]
+          [[ "$(check_psql -c "select count(*) from users where id = 'unlink_upgrade_teacher' and telegram_chat_id = '987321' and tg_report_prompt_id is null and tg_report_lesson_id is null and tg_report_asked_at is null")" == "1" ]]
           check_psql -c "update parent_link_requests set verified_at = now() where parent_id = 'fixture_parent'"
           [[ "$(check_psql -c "select count(*) from notifications where user_id = 'fixture_parent'")" == "1" ]]
           check_psql -c "update parent_link_requests set verified_at = null where parent_id = 'fixture_parent'"
