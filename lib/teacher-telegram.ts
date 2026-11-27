@@ -210,6 +210,7 @@ function lessonKeyboard(lessonId: string): InlineKeyboard {
 export async function sendLessonStatusPrompts(
   now: Date = new Date(),
   send: (chatId: string, text: string, options: { replyMarkup: InlineKeyboard }, tx: typeof db) => Promise<boolean> = sendTelegramMessage,
+  beforeDispatch: (teacherId: string) => Promise<void> = async () => {},
 ): Promise<number> {
   if (isQuietHours(now)) return 0;
 
@@ -241,6 +242,7 @@ export async function sendLessonStatusPrompts(
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
       const links = rows.flatMap((row) => row.version ? [{ studentId: row.studentId, teacherId: row.teacherId, version: row.version }] : []);
       if (links.length !== rows.length) continue;
+      await beforeDispatch(teacher.id);
       const sentGroup = await withActiveTeacherDeliveries(links, async (tx) => {
         const users = await tx.select({ name: schema.users.name, groupName: schema.studentGroups.name })
           .from(schema.scheduledLessons).innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
@@ -253,7 +255,7 @@ export async function sendLessonStatusPrompts(
           `\n\nЕсли кого-то не было — отметьте в кабинете, ему занятие не засчитается.` +
           openLink(first.groupId ? `/teacher/groups/${first.groupId}` : "/teacher/schedule", "Отметить посещаемость →");
         return send(teacher.telegramChatId!, body, { replyMarkup: groupKeyboard(groupLessonId) }, tx);
-      });
+      }, { id: teacher.id, telegram: { chatId: teacher.telegramChatId, preference: "tgNotifyLessons" } });
       if (sentGroup) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось спросить про групповое занятие", groupLessonId, e);
@@ -265,6 +267,7 @@ export async function sendLessonStatusPrompts(
       const teacher = await getUserById(lesson.teacherId);
       if (!teacher?.telegramChatId || teacher.tgNotifyLessons === false) continue;
       const link = { studentId: lesson.studentId, teacherId: lesson.teacherId, version: lesson.version };
+      await beforeDispatch(teacher.id);
       if (await withActiveTeacherDeliveries([link], async (tx) => {
         const [active] = await tx.select({ name: schema.users.name }).from(schema.scheduledLessons)
           .innerJoin(schema.users, eq(schema.users.id, schema.scheduledLessons.studentId))
@@ -274,7 +277,7 @@ export async function sendLessonStatusPrompts(
         const body = lessonPromptText(active.name, lesson.startsAt, lesson.durationMin, lesson.topic) +
           "\n\nОтметьте, было ли занятие, — от этого зависит баланс оплат.";
         return send(teacher.telegramChatId!, body, { replyMarkup: lessonKeyboard(lesson.id) }, tx);
-      })) sent++;
+      }, { id: teacher.id, telegram: { chatId: teacher.telegramChatId, preference: "tgNotifyLessons" } })) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось спросить про занятие", lesson.id, e);
     }
@@ -299,6 +302,9 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
   const messageId: number | undefined = cq?.message?.message_id;
   const answer = (text: string) => telegram("answerCallbackQuery", { callback_query_id: cq.id, text });
 
+  const answerBound = (id: string, chat: string, body: string) =>
+    withActiveTeacherDeliveries([], () => answer(body), { id, telegram: { chatId: chat } });
+
   const nd = /^nd:(.+)$/.exec(data);
   if (nd && chatId) {
     const t = await findTeacherByChat(chatId);
@@ -307,7 +313,7 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
       return;
     }
     const r = await nudgeStudent(t.id, nd[1]);
-    await answer(
+    await answerBound(t.id, chatId,
       r.ok
         ? `Напоминание отправлено${r.viaTelegram ? " (в Telegram и в приложении)" : " (в приложении)"}`
         : r.reason === "too_soon"
@@ -358,8 +364,8 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
         parse_mode: "HTML",
         disable_web_page_preview: true,
       });
-    });
-    await answer(changed ? mark : "Уже было отмечено раньше");
+    }, { id: t.id, telegram: { chatId } });
+    await answerBound(t.id, chatId, changed ? mark : "Уже было отмечено раньше");
     return;
   }
 
@@ -370,7 +376,7 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
       await answer("Этот Telegram не привязан к кабинету репетитора");
       return;
     }
-    await answer(await startTelegramReport(teacher.id, chatId, rp[1]));
+    await answerBound(teacher.id, chatId, await startTelegramReport(teacher.id, chatId, rp[1]));
     return;
   }
 
@@ -420,8 +426,8 @@ export async function handleCallbackQuery(cq: any, { telegram = callTelegram, ma
       // После «Было» — сразу кнопка отчёта: следующее сообщение станет отчётом.
       ...(res.ok && status === "done" ? { reply_markup: { inline_keyboard: [[reportButton(lesson.id)]] } } : {}),
     });
-  });
-  await answer(res.ok ? mark : `Уже было отмечено раньше`);
+  }, { id: teacher.id, telegram: { chatId } });
+  await answerBound(teacher.id, chatId, res.ok ? mark : `Уже было отмечено раньше`);
 }
 
 // ----------------------------------------------------- Сводка на сегодня
@@ -512,7 +518,9 @@ export async function buildTodayText(
 }
 
 /** Раз в несколько минут из воркера: утренняя сводка, не чаще раза в день. */
-export async function sendTeacherDigests(now: Date = new Date()): Promise<number> {
+export async function sendTeacherDigests(
+  now: Date = new Date(), { send = sendTelegramMessage, beforeDispatch = async (_id: string) => {} } = {},
+): Promise<number> {
   const { day, minutes } = mskParts(now);
   if (minutes < DIGEST_FROM_MIN || minutes >= DIGEST_TO_MIN) return 0;
 
@@ -535,8 +543,11 @@ export async function sendTeacherDigests(now: Date = new Date()): Promise<number
     try {
       const links = await activeTeacherLinks(t.id);
       const r = await buildTodayText(t.id, now, { greeting: true });
-      if (r && t.chatId && (await withUnchangedTeacherRoster(t.id, links, () =>
-        sendTelegramMessage(t.chatId!, r.text, { replyMarkup: r.replyMarkup })))) sent++;
+      if (!r || !t.chatId) continue;
+      await beforeDispatch(t.id);
+      if (await withUnchangedTeacherRoster(t.id, links, () =>
+        send(t.chatId!, r.text, { replyMarkup: r.replyMarkup }),
+        { id: t.id, telegram: { chatId: t.chatId, preference: "tgDailyDigest" } })) sent++;
     } catch (e) {
       console.error("[teacher-telegram] не удалось отправить сводку", t.id, e);
     }
@@ -553,7 +564,7 @@ export async function replyToday(chatId: string): Promise<void> {
   }
   const links = await activeTeacherLinks(teacher.id);
   const r = await buildTodayText(teacher.id);
-  if (r) await withUnchangedTeacherRoster(teacher.id, links, () =>
-    sendTelegramMessage(chatId, r.text, { replyMarkup: r.replyMarkup }));
-  else await sendTelegramMessage(chatId, `<b>Сегодня, ${esc(mskDateLong(new Date()))}</b>\n\nЗанятий нет, проверять нечего 🎉`);
+  await withUnchangedTeacherRoster(teacher.id, links, () => r
+    ? sendTelegramMessage(chatId, r.text, { replyMarkup: r.replyMarkup })
+    : sendTelegramMessage(chatId, `<b>Сегодня, ${esc(mskDateLong(new Date()))}</b>\n\nЗанятий нет, проверять нечего 🎉`), { id: teacher.id, telegram: { chatId } });
 }

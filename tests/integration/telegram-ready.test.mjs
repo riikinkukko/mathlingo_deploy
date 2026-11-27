@@ -31,6 +31,7 @@ const worker = spawn(process.execPath, ["--import", "tsx", "scripts/telegram-pol
     TELEGRAM_BOT_TOKEN: "fixture",
     TELEGRAM_API_BASE: `http://127.0.0.1:${server.address().port}`,
     TELEGRAM_READY_FILE: marker,
+    TELEGRAM_READY_LAUNCH: "fixture-launch",
   },
   stdio: "inherit",
 });
@@ -43,7 +44,9 @@ try {
     });
     if (!ready) await delay(100);
   }
-  assert.equal(ready, String(worker.pid));
+  const { readyAt, ...identity } = JSON.parse(ready);
+  assert.ok(Number.isFinite(readyAt));
+  assert.deepEqual(identity, { pid: worker.pid, release: process.cwd(), launch: "fixture-launch" });
   assert.ok(calls.includes("/botfixture/deleteWebhook"));
   assert.ok(calls.includes("/botfixture/getUpdates"));
   console.log("Telegram worker completed a poll and verified PostgreSQL before publishing readiness.");

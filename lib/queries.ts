@@ -1435,7 +1435,7 @@ export async function pushNotification(
   // том, чего нет. Запись внутри транзакции не видна другим соединениям до
   // COMMIT — ждём, пока она появится (или поймём, что её откатили).
   const [recipient] = await tx.select({ id: schema.users.id, passwordHash: schema.users.passwordHash }).from(schema.users)
-    .where(and(eq(schema.users.id, params.userId), inArray(schema.users.role, ["STUDENT", "PARENT"])));
+    .where(eq(schema.users.id, params.userId));
   const delivery = { ...params, recipient };
   const schedule = notificationDelivery.getStore();
   if (schedule) schedule((transport) => deliverWhenCommitted(notificationId, delivery, transport));

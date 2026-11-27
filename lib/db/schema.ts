@@ -740,7 +740,7 @@ export const studentQuestions = pgTable("student_questions", {
   byStudent: index("student_questions_student_idx").on(t.studentId),
 }));
 
-export const notifications = pgTable("notifications", {
+export const notifications = pgTable("notification_records", {
   id: text("id").primaryKey(),
   userId: text("user_id")
     .notNull()

@@ -41,12 +41,14 @@ cat > "$tmp/bin/pm2" <<'MOCK_SCRIPT'
 set -eu
 case "$1" in
   jlist)
-    node -e 'const f=require("node:fs"); console.log(JSON.stringify(["planimetrika","planimetrika-tg"].filter(n=>f.existsSync(process.env.MOCK+"/"+n)).map(name=>({name,pm2_env:{status:"online"}}))))'
+    node -e 'const f=require("node:fs"); console.log(JSON.stringify(["planimetrika","planimetrika-tg"].filter(n=>f.existsSync(process.env.MOCK+"/"+n)).map(name=>({name,pid:123,pm2_env:{status:"online",pm_uptime:100,pm_cwd:f.readFileSync(process.env.MOCK+"/"+name,"utf8").trim()}}))))'
     ;;
   delete) rm -f "$MOCK/$2" ;;
   start)
-    name="$4"
-    cwd="$6"
+    while (($#)); do
+      case "$1" in --name) name="$2"; shift ;; --cwd) cwd="$2"; shift ;; esac
+      shift
+    done
     [[ -s "$cwd/.next/BUILD_ID" ]]
     if [[ "$name" == planimetrika ]]; then
       [[ ! -e "$MOCK/planimetrika-tg" ]]
@@ -54,39 +56,75 @@ case "$1" in
       [[ "$(cat "$MOCK/planimetrika")" == "$cwd" ]]
       if [[ "${FAIL_BOT:-0}" == 1 && ! -e "$MOCK/failed" ]]; then
         touch "$MOCK/failed"
-        if [[ -n "${TELEGRAM_READY_FILE:-}" ]]; then
-          printf '%s\n' "$cwd" > "$MOCK/$name"
-          exit 0
-        fi
-        exit 1
+        # The marker exists, but was written by an older launch.
+        printf '{"pid":123,"release":"%s","launch":"stale","readyAt":101}\n' "$cwd" > "$TELEGRAM_READY_FILE"
+      else
+        printf '{"pid":123,"release":"%s","launch":"%s","readyAt":101}\n' "$cwd" "$TELEGRAM_READY_LAUNCH" > "$TELEGRAM_READY_FILE"
       fi
-      if [[ -n "${TELEGRAM_READY_FILE:-}" ]]; then printf '123\n' > "$TELEGRAM_READY_FILE"; fi
     fi
     printf '%s\n' "$cwd" > "$MOCK/$name"
     ;;
-  save) ;;
+  save)
+    if [[ -n "${INTERRUPT:-}" && "${POINT:-}" == before-save && -f "$MOCK/planimetrika-tg" && ! -e "$MOCK/interrupted" ]]; then
+      touch "$MOCK/interrupted"; kill "-$INTERRUPT" "$PPID"
+    fi
+    : > "$MOCK/dump"
+    for app in planimetrika planimetrika-tg; do
+      if [[ -f "$MOCK/$app" ]]; then cat "$MOCK/$app" >> "$MOCK/dump"; fi
+    done
+    if [[ -n "${INTERRUPT:-}" && "${POINT:-}" == after-save && -f "$MOCK/planimetrika-tg" && ! -e "$MOCK/interrupted" ]]; then
+      touch "$MOCK/interrupted"; kill "-$INTERRUPT" "$PPID"
+    fi
+    ;;
   *) exit 1 ;;
 esac
 MOCK_SCRIPT
+cat > "$tmp/bin/mv" <<'MOCK_SCRIPT'
+#!/usr/bin/env bash
+set -eu
+/bin/mv "$@"
+if [[ -n "${INTERRUPT:-}" && "${POINT:-}" == after-current && "${@: -1}" == */current && ! -e "$MOCK/interrupted" ]]; then
+  touch "$MOCK/interrupted"; kill "-$INTERRUPT" "$PPID"
+fi
+MOCK_SCRIPT
 chmod +x "$tmp/bin/"*
+current="$APP_DIR/.releases/current"
+journal="$APP_DIR/.releases/switching"
 printf '%s\n' "$APP_DIR" > "$MOCK/planimetrika"
 printf '%s\n' "$APP_DIR" > "$MOCK/planimetrika-tg"
+
+assert_pair() {
+  local release
+  release="$(cat "$current")"
+  [[ ! -e "$journal" && "$(cat "$MOCK/planimetrika")" == "$release" && "$(cat "$MOCK/planimetrika-tg")" == "$release" ]]
+  [[ "$(cat "$MOCK/dump")" == "$release"$'\n'"$release" ]]
+}
 
 if FAIL_BUILD=1 bash "$script" "$sha"; then exit 1; fi
 [[ "$(cat "$MOCK/planimetrika")" == "$APP_DIR" && ! -e "$MOCK/migrations" ]]
 if FAIL_MIGRATION=1 bash "$script" "$sha"; then exit 1; fi
-[[ "$(cat "$MOCK/planimetrika-tg")" == "$APP_DIR" ]]
-if FAIL_BOT=1 bash "$script" "$sha"; then exit 1; fi
-[[ "$(cat "$MOCK/planimetrika")" == "$APP_DIR" && "$(cat "$MOCK/planimetrika-tg")" == "$APP_DIR" ]]
+[[ ! -e "$MOCK/planimetrika" && ! -e "$MOCK/planimetrika-tg" && ! -e "$current" ]]
 bash "$script" "$sha"
-previous="$(cat "$APP_DIR/.releases/current")"
-[[ "$(cat "$MOCK/planimetrika")" == "$previous" && "$(cat "$MOCK/planimetrika-tg")" == "$previous" ]]
-rm "$MOCK/failed"
+assert_pair
+for signal in TERM KILL; do
+  for point in before-save after-save after-current; do
+    rm -f "$MOCK/interrupted" "$MOCK/failed"
+    if INTERRUPT="$signal" POINT="$point" bash "$script" "$sha"; then exit 1; fi
+    [[ -e "$MOCK/interrupted" ]]
+    if [[ "$signal" == TERM ]]; then assert_pair; else [[ -e "$journal" ]]; fi
+    expected="$(cat "$current")"
+    if FAIL_BUILD=1 bash "$script" "$sha"; then exit 1; fi
+    assert_pair
+    [[ "$(cat "$current")" == "$expected" ]]
+  done
+done
+rm -f "$MOCK/failed"
+expected="$(cat "$current")"
 if FAIL_BOT=1 bash "$script" "$sha"; then exit 1; fi
-[[ "$(cat "$APP_DIR/.releases/current")" == "$previous" && "$(cat "$MOCK/planimetrika-tg")" == "$previous" ]]
-bash "$script" "$sha"
-[[ -s "$previous/.next/BUILD_ID" && -s "$APP_DIR/.next/BUILD_ID" ]]
+assert_pair
+[[ "$(cat "$current")" == "$expected" ]]
 if MISSING_GUARD=1 bash "$script" "$sha"; then exit 1; fi
 [[ ! -e "$MOCK/planimetrika" && ! -e "$MOCK/planimetrika-tg" ]]
 bash "$script" "$sha"
-echo "Release rehearsal passed: build, migration and bot failure, rollback and retry."
+assert_pair
+echo "Release recovery passed: TERM and KILL around save/current, stale marker, rollback and retry."

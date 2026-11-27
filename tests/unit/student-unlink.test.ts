@@ -1,3 +1,8 @@
+import { SignJWT } from "jose";
+import { getSessionSecret } from "../../lib/session-secret";
+import { GET as mobileNotifications } from "../../app/api/m/notifications/route";
+import { sendReportReminders } from "../../lib/lesson-report";
+import { unlinkTelegramAccount } from "../../lib/queries";
 import { issueParentAccess, confirmParentAccess } from "../../lib/parent-access";
 import { createAuthToken, consumeAuthToken } from "../../lib/queries";
 import { parentChild } from "../../lib/mobile/parent-data";
@@ -6,7 +11,7 @@ import { savePushToken } from "../../lib/push";
 import { verifyEmailAction } from "../../app/actions";
 import { performSubmitAttempt } from "../../lib/actions-core";
 import { performAskTeacher } from "../../lib/questions-core";
-import { handleCallbackQuery, sendLessonStatusPrompts } from "../../lib/teacher-telegram";
+import { handleCallbackQuery, sendLessonStatusPrompts, sendTeacherDigests } from "../../lib/teacher-telegram";
 import { completeStudentSignup, getStudentSignupLink, issueStudentHandoff, redeemStudentHandoff } from "../../lib/student-credential-handoff";
 import { getBearerUser } from "../../lib/api-auth";
 import { POST as mobileLogin } from "../../app/api/m/auth/login/route";
@@ -604,4 +609,52 @@ test("evening reminders drop a Telegram recipient when account handoff commits b
   assert.equal(built, true);
   assert.equal(sent, 0);
   assert.equal((await readUser(student)).telegramChatId, undefined);
+});
+
+test("teacher Telegram jobs skip the revoked chat before provider handoff", async () => {
+  const day = "2027-01-05";
+  const seen = new Set<string>();
+  const delivered = new Set<string>();
+  const send = async (chat: string) => { delivered.add(chat); return true; };
+  const run = async (job: "prompt" | "digest" | "report") => {
+    const chat = "revoked-notice-" + job;
+    const teacher = await makeUser({ role: "TEACHER", telegramChatId: chat, tgDailyDigest: true, tgNotifyLessons: true });
+    const student = await makeUser({ teacherId: teacher.id });
+    await db.insert(s.scheduledLessons).values({
+      id: `revoked_${student.id}`, teacherId: teacher.id, studentId: student.id,
+      startsAt: new Date(day + "T10:00:00+03:00"), status: job === "report" ? "done" : "planned",
+    });
+    const beforeDispatch = async (id: string) => {
+      if (id !== teacher.id) return;
+      seen.add(job);
+      await unlinkTelegramAccount(id);
+    };
+    if (job === "prompt") await sendLessonStatusPrompts(new Date(day + "T12:00:00+03:00"), send, beforeDispatch);
+    if (job === "digest") await sendTeacherDigests(new Date(day + "T08:30:00+03:00"), { send, beforeDispatch });
+    if (job === "report") await sendReportReminders(new Date(day + "T21:00:00+03:00"), { send, beforeDispatch });
+    assert.ok(seen.has(job), "fixture reached the dispatch boundary");
+    assert.ok(!delivered.has(chat));
+  };
+  await run("prompt");
+  await run("digest");
+  await run("report");
+});
+
+test("stored reports stay hidden from an existing parent token in current and rollback reads", async () => {
+  const parent = await makeUser({ role: "PARENT" });
+  const student = await makeUser();
+  const link = `/parent/child/${student.id}`;
+  const id = `historical_${parent.id}`;
+  const legacyToken = await new SignJWT({ userId: parent.id, role: "PARENT" }).setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt().setExpirationTime("1h").sign(getSessionSecret());
+  const originalSession = new Request("http://x/api/m/notifications", { headers: { authorization: `Bearer ${legacyToken}` } });
+  await db.insert(s.parentLinkRequests).values({ parentId: parent.id, studentId: student.id });
+  await db.insert(s.notifications).values({ id, userId: parent.id, title: "Report", body: "Synthetic history", link, type: "weekly_report" });
+  const legacyRead = () => db.execute(sql`select id from notifications where user_id = ${parent.id} order by created_at desc limit 50`);
+  assert.deepEqual((await (await mobileNotifications(originalSession)).json()).notifications, []);
+  assert.deepEqual((await legacyRead()).rows, []);
+  assert.equal((await db.select().from(s.notifications).where(eq(s.notifications.id, id))).length, 1);
+  await db.update(s.parentLinkRequests).set({ verifiedAt: new Date() }).where(eq(s.parentLinkRequests.parentId, parent.id));
+  assert.equal((await (await mobileNotifications(originalSession)).json()).notifications[0].id, id);
+  assert.deepEqual((await legacyRead()).rows, [{ id }]);
 });

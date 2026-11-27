@@ -166,7 +166,12 @@ export async function withDeliveryLocks<T>(ids: string[], shared: boolean, work:
   }
 }
 
-export type DeliveryRecipient = { id: string; passwordHash: string };
+type TelegramPreference = "tgNotifyLessons" | "tgDailyDigest";
+export type DeliveryRecipient = {
+  id: string;
+  passwordHash?: string;
+  telegram?: { chatId: string; preference?: TelegramPreference };
+};
 
 export async function withActiveTeacherDeliveries<T>(
   links: readonly TeacherLink[], send: (connection: typeof db) => Promise<T>, recipient?: DeliveryRecipient,
@@ -176,7 +181,9 @@ export async function withActiveTeacherDeliveries<T>(
   return withDeliveryLocks(recipient ? [...ids, recipient.id] : ids, true, async (connection) => {
     if (recipient) {
       const [current] = await connection.select({ id: schema.users.id }).from(schema.users)
-        .where(and(eq(schema.users.id, recipient.id), eq(schema.users.passwordHash, recipient.passwordHash)));
+        .where(and(eq(schema.users.id, recipient.id), recipient.passwordHash === undefined ? undefined : eq(schema.users.passwordHash, recipient.passwordHash),
+          recipient.telegram ? eq(schema.users.telegramChatId, recipient.telegram.chatId) : undefined,
+          recipient.telegram?.preference ? eq(schema.users[recipient.telegram.preference], true) : undefined));
       if (!current) return undefined;
     }
     if (!ids.length) return send(connection);
@@ -199,7 +206,7 @@ export async function activeTeacherLinks(teacherId: string, tx: StudentLinkTrans
 }
 
 export async function withUnchangedTeacherRoster<T>(
-  teacherId: string, links: TeacherLink[], send: () => Promise<T>,
+  teacherId: string, links: TeacherLink[], send: () => Promise<T>, recipient?: DeliveryRecipient,
 ): Promise<T | undefined> {
   return withActiveTeacherDeliveries(links, async (tx) => {
     const current = await activeTeacherLinks(teacherId, tx);
@@ -207,5 +214,5 @@ export async function withUnchangedTeacherRoster<T>(
       row.studentId !== links[i].studentId || row.version !== links[i].version
     )) return undefined;
     return send();
-  });
+  }, recipient);
 }

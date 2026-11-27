@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/seed*.ts'
       - 'scripts/deploy.sh'
+      - 'scripts/check-unlink-release.ts'
       - 'tests/integration/deploy.test.sh'
       - 'tests/integration/telegram-ready.test.mjs'
       - 'scripts/seed-reset-permit.sql'
@@ -131,7 +132,7 @@ jobs:
           printf '::add-mask::%s\n' "$upgrade_url"
           export UPGRADE_MIGRATIONS="$RUNNER_TEMP/unlink-previous-drizzle"
           cp -a drizzle "$UPGRADE_MIGRATIONS"
-          node -e 'const fs=require("node:fs"); const p=process.env.UPGRADE_MIGRATIONS+"/meta/_journal.json"; const j=JSON.parse(fs.readFileSync(p)); if(j.entries.pop()?.tag!=="0054_verified_parent_links" || j.entries.pop()?.tag!=="0053_student_unlink") process.exit(1); fs.writeFileSync(p,JSON.stringify(j))'
+          node -e 'const fs=require("node:fs"); const p=process.env.UPGRADE_MIGRATIONS+"/meta/_journal.json"; const j=JSON.parse(fs.readFileSync(p)); if(j.entries.pop()?.tag!=="0055_rollback_safe_notifications" || j.entries.pop()?.tag!=="0054_verified_parent_links" || j.entries.pop()?.tag!=="0053_student_unlink") process.exit(1); fs.writeFileSync(p,JSON.stringify(j))'
           cat > "$RUNNER_TEMP/unlink-upgrade.config.ts" <<'CONFIG'
           export default { out: process.env.UPGRADE_MIGRATIONS, dialect: "postgresql", dbCredentials: { url: process.env.DATABASE_URL } };
           CONFIG
@@ -147,10 +148,18 @@ jobs:
           INSERT INTO users(id, email, name, password_hash, role) VALUES
             ('fixture_parent', 'parent@fixture.invalid', 'Parent', 'dummy', 'PARENT');
           INSERT INTO parent_links(parent_id, student_id) VALUES ('fixture_parent', 'unlink_upgrade_student');
+          INSERT INTO notifications(id, user_id, type, title, body, link) VALUES
+            ('legacy_notice', 'fixture_parent', 'weekly_report', 'Fixture', 'Historical report', '/parent/child/unlink_upgrade_student');
           INSERT INTO teacher_invites(id, teacher_id, student_id, status)
             VALUES ('fixture_invite', 'unlink_upgrade_teacher', 'unlink_upgrade_student', 'accepted');
           SQL
+          [[ "$(check_psql -c "select count(*) from notifications where user_id = 'fixture_parent'")" == "1" ]]
           DATABASE_URL="$upgrade_url" npx --no-install drizzle-kit migrate
+          [[ "$(check_psql -c "select count(*) from notification_records where id = 'legacy_notice'")" == "1" ]]
+          [[ "$(check_psql -c "select count(*) from notifications where user_id = 'fixture_parent'")" == "0" ]]
+          check_psql -c "update parent_link_requests set verified_at = now() where parent_id = 'fixture_parent'"
+          [[ "$(check_psql -c "select count(*) from notifications where user_id = 'fixture_parent'")" == "1" ]]
+          check_psql -c "update parent_link_requests set verified_at = null where parent_id = 'fixture_parent'"
           [[ "$(check_psql -c "select teacher_id || ':' || independent_credentials::text from users where id = 'unlink_upgrade_student'")" == "unlink_upgrade_teacher:false" ]]
           [[ "$(check_psql -c "select teacher_id from users where id = 'unlink_upgrade_orphan'")" == "missing_fixture_teacher" ]]
           [[ "$(check_psql -c "select count(*) from teacher_invites where id = 'fixture_invite' and status = 'accepted'")" == "1" ]]

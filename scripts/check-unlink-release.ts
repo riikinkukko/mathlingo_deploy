@@ -14,9 +14,11 @@ async function main() {
           and tgname = 'require_student_account_deletion_authorization' and tgenabled in ('O', 'A')
       ) and exists (
         select 1 from pg_class where oid = to_regclass('parent_links') and relkind = 'v'
+      ) and exists (
+        select 1 from pg_class where oid = to_regclass('notifications') and relkind = 'v'
       ) as ready
     `);
-    if (!result.rows[0]?.ready) throw new Error("Required deletion guard or verified-parent view is missing");
+    if (!result.rows[0]?.ready) throw new Error("Required deletion guard or compatibility views are missing");
   } finally {
     await getPool().end();
   }

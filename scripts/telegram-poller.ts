@@ -21,7 +21,7 @@
  */
 import { config } from "dotenv";
 import path from "path";
-import { writeFile } from "node:fs/promises";
+import { rename, writeFile } from "node:fs/promises";
 config({ path: path.resolve(__dirname, "../.env.local") });
 
 // TELEGRAM_API_BASE — только для локального теста с фейковым сервером Telegram.
@@ -138,7 +138,14 @@ async function main() {
       }
       if (!ready) {
         await db.execute(sql`select 1`);
-        if (readyFile) await writeFile(readyFile, String(process.pid), { mode: 0o600 });
+        if (readyFile) {
+          const launch = process.env.TELEGRAM_READY_LAUNCH;
+          if (!launch) throw new Error("Missing Telegram worker launch identifier");
+          const marker = JSON.stringify({ pid: process.pid, release: process.cwd(), launch, readyAt: Date.now() });
+          const temporary = `${readyFile}.${process.pid}`;
+          await writeFile(temporary, marker, { mode: 0o600 });
+          await rename(temporary, readyFile);
+        }
         ready = true;
         void reminderLoop();
       }
